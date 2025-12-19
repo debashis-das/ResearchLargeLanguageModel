@@ -1,8 +1,6 @@
-from app.distkernel import execute
-
 
 def main():
-    execute()
+    print("Hello world !!")
 
 if __name__ == "__main__":
     main()
