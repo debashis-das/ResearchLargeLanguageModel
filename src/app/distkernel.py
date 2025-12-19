@@ -115,7 +115,8 @@ def execute():
 
   dist.barrier()
 
-
+if __name__ == "__main__":
+  execute()
 
 
 
