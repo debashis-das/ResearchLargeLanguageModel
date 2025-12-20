@@ -5,7 +5,8 @@ from dataclasses import dataclass
 class Config:
     debug: bool = False
     tokens = 5120
-    hiddens = 2048
+    # hiddens = 2048
+    hiddens = 128
     total_vocab = 200021
     dropout = 0.1
     num_heads = 8
