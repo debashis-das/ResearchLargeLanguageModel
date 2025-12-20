@@ -1,0 +1,435 @@
+torch.Size([8, 12, 8]) torch.Size([8, 12, 8]) torch.Size([8, 12, 8])
+Max tokens : torch.Size([8, 12])
+Grid : (3, 8, 1)
+start_m : 0, off_h : 0
+offset_y : 0
+qo_offset_y : 0
+offs_m : tensor([0, 1, 2, 3])
+offs_n : tensor([0, 1])
+q load : [0, 0]
+start_n : 0 : offset of k [0,0]
+no mask used
+Offset of v [0, 0]
+start_n : 2 : offset of k [2,0]
+no mask used
+Offset of v [0, 2]
+start_m : 0, off_h : 1
+offset_y : 12
+qo_offset_y : 12
+offs_m : tensor([0, 1, 2, 3])
+offs_n : tensor([0, 1])
+q load : [12, 0]
+start_n : 0 : offset of k [12,0]
+no mask used
+Offset of v [0, 12]
+start_n : 2 : offset of k [14,0]
+no mask used
+Offset of v [0, 14]
+start_m : 0, off_h : 2
+offset_y : 24
+qo_offset_y : 24
+offs_m : tensor([0, 1, 2, 3])
+offs_n : tensor([0, 1])
+q load : [24, 0]
+start_n : 0 : offset of k [24,0]
+no mask used
+Offset of v [0, 24]
+start_n : 2 : offset of k [26,0]
+no mask used
+Offset of v [0, 26]
+start_m : 0, off_h : 3
+offset_y : 36
+qo_offset_y : 36
+offs_m : tensor([0, 1, 2, 3])
+offs_n : tensor([0, 1])
+q load : [36, 0]
+start_n : 0 : offset of k [36,0]
+no mask used
+Offset of v [0, 36]
+start_n : 2 : offset of k [38,0]
+no mask used
+Offset of v [0, 38]
+start_m : 0, off_h : 4
+offset_y : 48
+qo_offset_y : 48
+offs_m : tensor([0, 1, 2, 3])
+offs_n : tensor([0, 1])
+q load : [48, 0]
+start_n : 0 : offset of k [48,0]
+no mask used
+Offset of v [0, 48]
+start_n : 2 : offset of k [50,0]
+no mask used
+Offset of v [0, 50]
+start_m : 0, off_h : 5
+offset_y : 60
+qo_offset_y : 60
+offs_m : tensor([0, 1, 2, 3])
+offs_n : tensor([0, 1])
+q load : [60, 0]
+start_n : 0 : offset of k [60,0]
+no mask used
+Offset of v [0, 60]
+start_n : 2 : offset of k [62,0]
+no mask used
+Offset of v [0, 62]
+start_m : 0, off_h : 6
+offset_y : 72
+qo_offset_y : 72
+offs_m : tensor([0, 1, 2, 3])
+offs_n : tensor([0, 1])
+q load : [72, 0]
+start_n : 0 : offset of k [72,0]
+no mask used
+Offset of v [0, 72]
+start_n : 2 : offset of k [74,0]
+no mask used
+Offset of v [0, 74]
+start_m : 0, off_h : 7
+offset_y : 84
+qo_offset_y : 84
+offs_m : tensor([0, 1, 2, 3])
+offs_n : tensor([0, 1])
+q load : [84, 0]
+start_n : 0 : offset of k [84,0]
+no mask used
+Offset of v [0, 84]
+start_n : 2 : offset of k [86,0]
+no mask used
+Offset of v [0, 86]
+start_m : 1, off_h : 0
+offset_y : 0
+qo_offset_y : 4
+offs_m : tensor([4, 5, 6, 7])
+offs_n : tensor([0, 1])
+q load : [4, 0]
+start_n : 0 : offset of k [0,0]
+no mask used
+Offset of v [0, 0]
+start_n : 2 : offset of k [2,0]
+no mask used
+Offset of v [0, 2]
+start_n : 4 : offset of k [4,0]
+no mask used
+Offset of v [0, 4]
+start_n : 6 : offset of k [6,0]
+no mask used
+Offset of v [0, 6]
+start_m : 1, off_h : 1
+offset_y : 12
+qo_offset_y : 16
+offs_m : tensor([4, 5, 6, 7])
+offs_n : tensor([0, 1])
+q load : [16, 0]
+start_n : 0 : offset of k [12,0]
+no mask used
+Offset of v [0, 12]
+start_n : 2 : offset of k [14,0]
+no mask used
+Offset of v [0, 14]
+start_n : 4 : offset of k [16,0]
+no mask used
+Offset of v [0, 16]
+start_n : 6 : offset of k [18,0]
+no mask used
+Offset of v [0, 18]
+start_m : 1, off_h : 2
+offset_y : 24
+qo_offset_y : 28
+offs_m : tensor([4, 5, 6, 7])
+offs_n : tensor([0, 1])
+q load : [28, 0]
+start_n : 0 : offset of k [24,0]
+no mask used
+Offset of v [0, 24]
+start_n : 2 : offset of k [26,0]
+no mask used
+Offset of v [0, 26]
+start_n : 4 : offset of k [28,0]
+no mask used
+Offset of v [0, 28]
+start_n : 6 : offset of k [30,0]
+no mask used
+Offset of v [0, 30]
+start_m : 1, off_h : 3
+offset_y : 36
+qo_offset_y : 40
+offs_m : tensor([4, 5, 6, 7])
+offs_n : tensor([0, 1])
+q load : [40, 0]
+start_n : 0 : offset of k [36,0]
+no mask used
+Offset of v [0, 36]
+start_n : 2 : offset of k [38,0]
+no mask used
+Offset of v [0, 38]
+start_n : 4 : offset of k [40,0]
+no mask used
+Offset of v [0, 40]
+start_n : 6 : offset of k [42,0]
+no mask used
+Offset of v [0, 42]
+start_m : 1, off_h : 4
+offset_y : 48
+qo_offset_y : 52
+offs_m : tensor([4, 5, 6, 7])
+offs_n : tensor([0, 1])
+q load : [52, 0]
+start_n : 0 : offset of k [48,0]
+no mask used
+Offset of v [0, 48]
+start_n : 2 : offset of k [50,0]
+no mask used
+Offset of v [0, 50]
+start_n : 4 : offset of k [52,0]
+no mask used
+Offset of v [0, 52]
+start_n : 6 : offset of k [54,0]
+no mask used
+Offset of v [0, 54]
+start_m : 1, off_h : 5
+offset_y : 60
+qo_offset_y : 64
+offs_m : tensor([4, 5, 6, 7])
+offs_n : tensor([0, 1])
+q load : [64, 0]
+start_n : 0 : offset of k [60,0]
+no mask used
+Offset of v [0, 60]
+start_n : 2 : offset of k [62,0]
+no mask used
+Offset of v [0, 62]
+start_n : 4 : offset of k [64,0]
+no mask used
+Offset of v [0, 64]
+start_n : 6 : offset of k [66,0]
+no mask used
+Offset of v [0, 66]
+start_m : 1, off_h : 6
+offset_y : 72
+qo_offset_y : 76
+offs_m : tensor([4, 5, 6, 7])
+offs_n : tensor([0, 1])
+q load : [76, 0]
+start_n : 0 : offset of k [72,0]
+no mask used
+Offset of v [0, 72]
+start_n : 2 : offset of k [74,0]
+no mask used
+Offset of v [0, 74]
+start_n : 4 : offset of k [76,0]
+no mask used
+Offset of v [0, 76]
+start_n : 6 : offset of k [78,0]
+no mask used
+Offset of v [0, 78]
+start_m : 1, off_h : 7
+offset_y : 84
+qo_offset_y : 88
+offs_m : tensor([4, 5, 6, 7])
+offs_n : tensor([0, 1])
+q load : [88, 0]
+start_n : 0 : offset of k [84,0]
+no mask used
+Offset of v [0, 84]
+start_n : 2 : offset of k [86,0]
+no mask used
+Offset of v [0, 86]
+start_n : 4 : offset of k [88,0]
+no mask used
+Offset of v [0, 88]
+start_n : 6 : offset of k [90,0]
+no mask used
+Offset of v [0, 90]
+start_m : 2, off_h : 0
+offset_y : 0
+qo_offset_y : 8
+offs_m : tensor([ 8,  9, 10, 11])
+offs_n : tensor([0, 1])
+q load : [8, 0]
+start_n : 0 : offset of k [0,0]
+no mask used
+Offset of v [0, 0]
+start_n : 2 : offset of k [2,0]
+no mask used
+Offset of v [0, 2]
+start_n : 4 : offset of k [4,0]
+no mask used
+Offset of v [0, 4]
+start_n : 6 : offset of k [6,0]
+no mask used
+Offset of v [0, 6]
+start_n : 8 : offset of k [8,0]
+no mask used
+Offset of v [0, 8]
+start_n : 10 : offset of k [10,0]
+no mask used
+Offset of v [0, 10]
+start_m : 2, off_h : 1
+offset_y : 12
+qo_offset_y : 20
+offs_m : tensor([ 8,  9, 10, 11])
+offs_n : tensor([0, 1])
+q load : [20, 0]
+start_n : 0 : offset of k [12,0]
+no mask used
+Offset of v [0, 12]
+start_n : 2 : offset of k [14,0]
+no mask used
+Offset of v [0, 14]
+start_n : 4 : offset of k [16,0]
+no mask used
+Offset of v [0, 16]
+start_n : 6 : offset of k [18,0]
+no mask used
+Offset of v [0, 18]
+start_n : 8 : offset of k [20,0]
+no mask used
+Offset of v [0, 20]
+start_n : 10 : offset of k [22,0]
+no mask used
+Offset of v [0, 22]
+start_m : 2, off_h : 2
+offset_y : 24
+qo_offset_y : 32
+offs_m : tensor([ 8,  9, 10, 11])
+offs_n : tensor([0, 1])
+q load : [32, 0]
+start_n : 0 : offset of k [24,0]
+no mask used
+Offset of v [0, 24]
+start_n : 2 : offset of k [26,0]
+no mask used
+Offset of v [0, 26]
+start_n : 4 : offset of k [28,0]
+no mask used
+Offset of v [0, 28]
+start_n : 6 : offset of k [30,0]
+no mask used
+Offset of v [0, 30]
+start_n : 8 : offset of k [32,0]
+no mask used
+Offset of v [0, 32]
+start_n : 10 : offset of k [34,0]
+no mask used
+Offset of v [0, 34]
+start_m : 2, off_h : 3
+offset_y : 36
+qo_offset_y : 44
+offs_m : tensor([ 8,  9, 10, 11])
+offs_n : tensor([0, 1])
+q load : [44, 0]
+start_n : 0 : offset of k [36,0]
+no mask used
+Offset of v [0, 36]
+start_n : 2 : offset of k [38,0]
+no mask used
+Offset of v [0, 38]
+start_n : 4 : offset of k [40,0]
+no mask used
+Offset of v [0, 40]
+start_n : 6 : offset of k [42,0]
+no mask used
+Offset of v [0, 42]
+start_n : 8 : offset of k [44,0]
+no mask used
+Offset of v [0, 44]
+start_n : 10 : offset of k [46,0]
+no mask used
+Offset of v [0, 46]
+start_m : 2, off_h : 4
+offset_y : 48
+qo_offset_y : 56
+offs_m : tensor([ 8,  9, 10, 11])
+offs_n : tensor([0, 1])
+q load : [56, 0]
+start_n : 0 : offset of k [48,0]
+no mask used
+Offset of v [0, 48]
+start_n : 2 : offset of k [50,0]
+no mask used
+Offset of v [0, 50]
+start_n : 4 : offset of k [52,0]
+no mask used
+Offset of v [0, 52]
+start_n : 6 : offset of k [54,0]
+no mask used
+Offset of v [0, 54]
+start_n : 8 : offset of k [56,0]
+no mask used
+Offset of v [0, 56]
+start_n : 10 : offset of k [58,0]
+no mask used
+Offset of v [0, 58]
+start_m : 2, off_h : 5
+offset_y : 60
+qo_offset_y : 68
+offs_m : tensor([ 8,  9, 10, 11])
+offs_n : tensor([0, 1])
+q load : [68, 0]
+start_n : 0 : offset of k [60,0]
+no mask used
+Offset of v [0, 60]
+start_n : 2 : offset of k [62,0]
+no mask used
+Offset of v [0, 62]
+start_n : 4 : offset of k [64,0]
+no mask used
+Offset of v [0, 64]
+start_n : 6 : offset of k [66,0]
+no mask used
+Offset of v [0, 66]
+start_n : 8 : offset of k [68,0]
+no mask used
+Offset of v [0, 68]
+start_n : 10 : offset of k [70,0]
+no mask used
+Offset of v [0, 70]
+start_m : 2, off_h : 6
+offset_y : 72
+qo_offset_y : 80
+offs_m : tensor([ 8,  9, 10, 11])
+offs_n : tensor([0, 1])
+q load : [80, 0]
+start_n : 0 : offset of k [72,0]
+no mask used
+Offset of v [0, 72]
+start_n : 2 : offset of k [74,0]
+no mask used
+Offset of v [0, 74]
+start_n : 4 : offset of k [76,0]
+no mask used
+Offset of v [0, 76]
+start_n : 6 : offset of k [78,0]
+no mask used
+Offset of v [0, 78]
+start_n : 8 : offset of k [80,0]
+no mask used
+Offset of v [0, 80]
+start_n : 10 : offset of k [82,0]
+no mask used
+Offset of v [0, 82]
+start_m : 2, off_h : 7
+offset_y : 84
+qo_offset_y : 92
+offs_m : tensor([ 8,  9, 10, 11])
+offs_n : tensor([0, 1])
+q load : [92, 0]
+start_n : 0 : offset of k [84,0]
+no mask used
+Offset of v [0, 84]
+start_n : 2 : offset of k [86,0]
+no mask used
+Offset of v [0, 86]
+start_n : 4 : offset of k [88,0]
+no mask used
+Offset of v [0, 88]
+start_n : 6 : offset of k [90,0]
+no mask used
+Offset of v [0, 90]
+start_n : 8 : offset of k [92,0]
+no mask used
+Offset of v [0, 92]
+start_n : 10 : offset of k [94,0]
+no mask used
+Offset of v [0, 94]
