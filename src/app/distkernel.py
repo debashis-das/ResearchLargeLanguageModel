@@ -1,10 +1,15 @@
 import torch
 import torch.distributed as dist
 from torch import nn
+import triton
+
 from config import Config
+from transformer.FusedAttention import _attention
 from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
 from partitioner.gpu import identify_nodes_for_qkv, nodes_partion_q_fixed_kv, nodes_partion_vary_qkv
+
+DEVICE = triton.runtime.driver.active.get_active_torch_device()
 
 class MultiGPUExecutor:
 
@@ -19,7 +24,7 @@ class MultiGPUExecutor:
     self.W_k = nn.LazyLinear(Config.hiddens, bias=False)
     self.W_v = nn.LazyLinear(Config.hiddens, bias=False)
     self.rope_embedding = RopeEmbedding(Config.hiddens, Config.dropout, self.tokens_per_gpu, rank)
-    
+    self.attention = _attention
 
   def execute(self):
     exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
@@ -29,13 +34,11 @@ class MultiGPUExecutor:
     X = self.rms(embedded_tensor)
     input_q, input_k, input_v = self.W_q(X), self.W_k(X), self.W_v(X)
     input_q, input_k = self.rope_embedding(input_q, input_k)
-    print(f"Input({rank}) {input_q.shape}, {input_k.shape}, {input_v.shape}")
 
-    # input_q = torch.randn((1280, 2028), dtype=torch.float32)
-    # input_k = torch.randn((1280, 2028), dtype=torch.float32)
-    # input_v = torch.randn((1280, 2028), dtype=torch.float32)
-
-    # attention(Q, K, V, num_heads, sm_scale, rank)
+    output_o = self.attention.forward(input_q, input_k, input_v,
+                                      Config.block_m, Config.block_n, Config.num_heads, self.tokens_per_gpu,
+                                      Config.hiddens, Config.sm_scale, DEVICE, rank, rank)
+    print(f"Output ({rank},{rank}) : {output_o.shape}")
     exe_order_per_rank_v[rank].remove((rank,rank))
     exe_order_per_rank_h[rank].remove((rank,rank))
 
