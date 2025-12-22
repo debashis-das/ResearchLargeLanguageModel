@@ -1,27 +1,31 @@
 import torch
 from torch import nn
-import triton
+# import triton
 
-from transformer.FusedAttention import _attention
+from transformer.FusedAttentionTorch import attention_bwd
 
-DEVICE = triton.runtime.driver.active.get_active_torch_device()
+
+# DEVICE = triton.runtime.driver.active.get_active_torch_device()
 
 def test_attention(device, q_index, kv_index):
     block_m, block_n, tokens, hiddens, total_vocab, world_size, num_heads, sm_scale, embedding = configs()
     tokens_per_gpu = tokens // world_size
     dtype=torch.bfloat16
-    q = torch.randn((num_heads, tokens_per_gpu, hiddens), dtype=dtype, device=DEVICE, requires_grad=True)
-    k = torch.randn((num_heads, tokens_per_gpu, hiddens), dtype=dtype, device=DEVICE, requires_grad=True)
-    v = torch.randn((num_heads, tokens_per_gpu, hiddens), dtype=dtype, device=DEVICE, requires_grad=True)
+    q = torch.randn((num_heads, tokens_per_gpu, hiddens), dtype=dtype, device=device, requires_grad=True)
+    k = torch.randn((num_heads, tokens_per_gpu, hiddens), dtype=dtype, device=device, requires_grad=True)
+    v = torch.randn((num_heads, tokens_per_gpu, hiddens), dtype=dtype, device=device, requires_grad=True)
         
-    attention = _attention
-    output_o = attention.forward(q, k, v, block_m, block_n, num_heads, tokens_per_gpu, hiddens, sm_scale, DEVICE, q_index, kv_index)
-    print(output_o.shape)
+    # attention = _attention
+    # output_o = attention.forward(q, k, v, block_m, block_n, num_heads, tokens_per_gpu, hiddens, sm_scale, DEVICE, q_index, kv_index)
+    # print(output_o.shape)
+    o = torch.randn((num_heads, tokens_per_gpu, hiddens), dtype=dtype, device=device, requires_grad=True)
+    do = torch.randn_like(o)
+    attention_bwd(q, k, v, block_m, block_n, num_heads, sm_scale, device, q_index, kv_index)
 
 def configs():
     num_heads = 8
     world_size = 4
-    tokens = 256*world_size
+    tokens = 1024*world_size
     hiddens = 1024
     total_vocab = 200021
     dropout = 0.1

@@ -96,3 +96,40 @@ def attention(q, k, v, block_m, block_n, num_heads, sm_scale, device, q_index, k
         _attention_forward(sm_scale, M, num_heads, q_with_head.shape[1],
                         q_with_head, k_with_head, v_with_head, o_with_head,
                         q_with_head.shape[-1], BLOCK_M, BLOCK_N, False, wrap_specialize)
+
+
+def attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr, n_ctx, pre_block, head, hidden):
+    for pre_block_per_nctx in range(n_ctx//pre_block):
+        for off_h in range(head):
+            offs_pre_block = pre_block_per_nctx*pre_block + torch.arange(0, pre_block)
+            offs_hid = torch.arange(0, hidden)
+            offset = off_h*n_ctx + offs_pre_block[:,None]*hidden + offs_hid[None,:]
+            print(f"O and do offset({pre_block_per_nctx}, {off_h}) : {offset}")
+            # o = tl.load(o_ptr + offset)
+            # do = tl.load(do_ptr + offset)
+            # o_do = tl.sum(o*do, axis=1)
+            print(f"O_do result offset({pre_block_per_nctx}, {off_h}) : {off_h*n_ctx + offs_pre_block}")
+            # tl.store(delta+off_h*n_ctx + offs_pre_block,o_do)
+
+def attention_bwd(q, k, v, block_m, block_n, num_heads, sm_scale, device, q_index, kv_index, wrap_specialize=True):
+    o = torch.empty_like(q)
+    do = torch.rand_like(o)
+
+    print(q.shape, k.shape, v.shape)
+    BLOCK_M = block_m
+    BLOCK_N = block_n
+    pre_block = 128
+    num_hiddens = q.shape[-1]
+    n_ctx = q.shape[1]
+    grid = (q.shape[1]//pre_block, num_heads, 1)
+    print(f"Grid : {grid}")
+    delta = torch.empty((num_heads, n_ctx), dtype=torch.float32)
+    # Preprocess
+    attention_bwd_pre_process(o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
+    # dq 
+    
+
+
+
+
+
