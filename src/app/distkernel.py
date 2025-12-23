@@ -36,7 +36,7 @@ class MultiGPUExecutor:
     input_q, input_k, input_v = self.W_q(X), self.W_k(X), self.W_v(X)
     input_q, input_k = self.rope_embedding(input_q, input_k)
 
-    output_o = self.attention.forward(input_q, input_k, input_v,
+    output_o = self.attention.apply(input_q, input_k, input_v,
                                       Config.block_m, Config.block_n, Config.num_heads, self.tokens_per_gpu,
                                       Config.hiddens, Config.sm_scale, DEVICE, rank, rank)
     print(f"Output ({rank},{rank}) : {output_o.shape}")
@@ -51,6 +51,7 @@ class MultiGPUExecutor:
       nodes_partion_vary_qkv(exe_order_per_rank_unaligned, self.rank,
                             input_q, input_k, input_v)
       dist.barrier()
+    dist.destroy_process_group()
 
 if __name__ == "__main__":
   # device = 'cuda' if torch.cuda.is_available() else 'cpu'
