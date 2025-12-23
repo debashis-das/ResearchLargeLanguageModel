@@ -99,10 +99,11 @@ def _attention_forward(sm_scale, max_tensor, num_heads, n_ctx, desc_q, desc_k, d
     tl.store(m_ptrs, m_i)
     desc_o.store([qo_offset_y, 0], acc.to(dtype))     
 
-class _attention:
+class _attention(torch.autograd.Function):
+  
   # Assumption that it is used only for causal case
   @staticmethod
-  def forward(q, k, v, block_m, block_n, num_heads, n_ctx, hidden_dim, sm_scale, device, q_index, kv_index, warp_specialize=True):
+  def forward(ctx, q, k, v, block_m, block_n, num_heads, n_ctx, hidden_dim, sm_scale, device, q_index, kv_index, warp_specialize=True):
       # HEAD_DIM_Q, HEAD_DIM_K, HEAD_DIM_V = q.shape[-1], k.shape[-1], v.shape[-1]
       
       # q_with_head = q.unsqueeze(0).expand(num_heads, -1, -1)
@@ -125,4 +126,9 @@ class _attention:
           _attention_forward[grid](sm_scale, M, num_heads, q.shape[1],
                           q, k, v, o,
                           hidden_dim, block_m, block_n, False, warp_specialize)
+      
       return o
+  
+  @staticmethod
+  def backward(ctx, do):
+      return None
