@@ -50,8 +50,10 @@ class _attention(torch.autograd.Function):
       num_hiddens = q.shape[-1]
       n_ctx = q.shape[1]
       grid = (q.shape[1]//pre_block, num_heads, 1)
-      print(f"Grid : {grid}")
-      delta = torch.empty((num_heads, n_ctx), dtype=torch.float32)
+      print(f"Grid : {grid}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
+      delta = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
       # Preprocess
       _attention_bwd_pre_process[grid](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
+      # _attention_bwd_pre_process(o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
+      return delta
     

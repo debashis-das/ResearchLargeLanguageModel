@@ -98,18 +98,23 @@ def attention(q, k, v, block_m, block_n, num_heads, sm_scale, device, q_index, k
                         q_with_head.shape[-1], BLOCK_M, BLOCK_N, False, wrap_specialize)
 
 
-def attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr, n_ctx, pre_block, head, hidden):
+def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr, 
+                               n_ctx,
+                               pre_block,
+                               heads,
+                               hidden):
+  for off_h in range(heads):
     for pre_block_per_nctx in range(n_ctx//pre_block):
-        for off_h in range(head):
-            offs_pre_block = pre_block_per_nctx*pre_block + torch.arange(0, pre_block)
-            offs_hid = torch.arange(0, hidden)
-            offset = off_h*n_ctx + offs_pre_block[:,None]*hidden + offs_hid[None,:]
-            print(f"O and do offset({pre_block_per_nctx}, {off_h}) : {offset}")
-            # o = tl.load(o_ptr + offset)
-            # do = tl.load(do_ptr + offset)
-            # o_do = tl.sum(o*do, axis=1)
-            print(f"O_do result offset({pre_block_per_nctx}, {off_h}) : {off_h*n_ctx + offs_pre_block}")
-            # tl.store(delta+off_h*n_ctx + offs_pre_block,o_do)
+      offs_pre_block = pre_block_per_nctx*pre_block + torch.arange(0, pre_block)
+      offs_hid = torch.arange(0, hidden)
+      offset = off_h*n_ctx*hidden + offs_pre_block[:,None]*hidden + offs_hid[None,:]
+      print(f"O and do offset({off_h}, {pre_block_per_nctx}) : {offset}")
+      # o = tl.load(o_ptr + offset)
+      # do = tl.load(do_ptr + offset)
+      # o_do = tl.sum(o*do, axis=1)
+      print(f"O_do result offset({off_h}, {pre_block_per_nctx}) : {off_h*n_ctx + offs_pre_block}")
+      offset_d = off_h*n_ctx + offs_pre_block
+      # tl.store(delta_ptr+offset_d,o_do)
 
 def attention_bwd(q, k, v, block_m, block_n, num_heads, sm_scale, device, q_index, kv_index, wrap_specialize=True):
     o = torch.empty_like(q)

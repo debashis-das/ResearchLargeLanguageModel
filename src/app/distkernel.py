@@ -27,33 +27,34 @@ class MultiGPUExecutor:
     self.attention = _attention.apply
 
   def execute(self):
-    if world_size != 1:
-      exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
-    sample_input = torch.randint(low=0, high=Config.total_vocab, size=(self.tokens_per_gpu,)).tolist()
-    input = torch.tensor(sample_input, dtype=torch.int32, device=DEVICE)
-    embedded_tensor = self.embedding(input)
-    X = self.rms(embedded_tensor)
-    input_q, input_k, input_v = self.W_q(X), self.W_k(X), self.W_v(X)
-    input_q, input_k = self.rope_embedding(input_q, input_k)
+    try:
+      if world_size != 1:
+        exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
+      sample_input = torch.randint(low=0, high=Config.total_vocab, size=(self.tokens_per_gpu,)).tolist()
+      input = torch.tensor(sample_input, dtype=torch.int32, device=DEVICE)
+      embedded_tensor = self.embedding(input)
+      X = self.rms(embedded_tensor)
+      input_q, input_k, input_v = self.W_q(X), self.W_k(X), self.W_v(X)
+      input_q, input_k = self.rope_embedding(input_q, input_k)
 
-    output_o = self.attention(input_q, input_k, input_v,
-                                      Config.block_m, Config.block_n, Config.num_heads, self.tokens_per_gpu,
-                                      Config.hiddens, Config.sm_scale, DEVICE, rank, rank)
-    print(f"Output ({rank},{rank}) : {output_o.shape}")
-    do = torch.rand_like(output_o)
-    output_o.backward(do, retain_graph=True)
-    if world_size != 1:
-      exe_order_per_rank_v[rank].remove((rank,rank))
-      exe_order_per_rank_h[rank].remove((rank,rank))
+      output_o = self.attention(input_q, input_k, input_v, Config.block_m, Config.block_n, Config.num_heads, self.tokens_per_gpu,
+                                        Config.hiddens, Config.sm_scale, DEVICE, rank, rank)
+      print(f"Output ({rank},{rank}) : {output_o.shape}")
+      do = torch.rand_like(output_o)
+      output_o.backward(do, retain_graph=True)
+      if world_size != 1:
+        exe_order_per_rank_v[rank].remove((rank,rank))
+        exe_order_per_rank_h[rank].remove((rank,rank))
 
-      dist.barrier()
-      nodes_partion_q_fixed_kv(exe_order_per_rank_h, exe_order_per_rank_v,
-                              self.rank, input_q, input_k, input_v)
-      dist.barrier()
-      nodes_partion_vary_qkv(exe_order_per_rank_unaligned, self.rank,
-                            input_q, input_k, input_v)
-      dist.barrier()
-    dist.destroy_process_group()
+        dist.barrier()
+        nodes_partion_q_fixed_kv(exe_order_per_rank_h, exe_order_per_rank_v,
+                                self.rank, input_q, input_k, input_v)
+        dist.barrier()
+        nodes_partion_vary_qkv(exe_order_per_rank_unaligned, self.rank,
+                              input_q, input_k, input_v)
+        dist.barrier()
+    finally:
+      dist.destroy_process_group()
 
 if __name__ == "__main__":
   # device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -63,4 +64,3 @@ if __name__ == "__main__":
   rank = dist.get_rank()
   multi_gpu_executor = MultiGPUExecutor(world_size, rank)
   multi_gpu_executor.execute()
-
