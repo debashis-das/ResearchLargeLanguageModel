@@ -5,6 +5,7 @@ import triton
 
 from config import Config
 from transformer.FusedAttention import _attention
+from kernels.AttentionBackwardKernel import _attention_bwd_pre_process
 from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
 from partitioner.gpu import identify_nodes_for_qkv, nodes_partion_q_fixed_kv, nodes_partion_vary_qkv
@@ -36,12 +37,23 @@ class MultiGPUExecutor:
       X = self.rms(embedded_tensor)
       input_q, input_k, input_v = self.W_q(X), self.W_k(X), self.W_v(X)
       input_q, input_k = self.rope_embedding(input_q, input_k)
-
+      input_q = input_q.unsqueeze(0).expand(Config.num_heads, -1, -1)
+      input_k = input_k.unsqueeze(0).expand(Config.num_heads, -1, -1)
+      input_v = input_v.unsqueeze(0).expand(Config.num_heads, -1, -1)
       output_o = self.attention(input_q, input_k, input_v, Config.block_m, Config.block_n, Config.num_heads, self.tokens_per_gpu,
                                         Config.hiddens, Config.sm_scale, DEVICE, rank, rank)
       print(f"Output ({rank},{rank}) : {output_o.shape}")
       do = torch.rand_like(output_o)
-      output_o.backward(do, retain_graph=True)
+      BLOCK_M = 64
+      BLOCK_N = 32
+      pre_block = 128
+      num_hiddens = input_q.shape[-1]
+      n_ctx = input_q.shape[1]
+      grid = (input_q.shape[1]//pre_block, Config.num_heads, 1)
+      print(f"Grid : {grid}, q: {input_q.shape}, k: {input_k.shape}, v: {input_v.shape} ")
+      delta = torch.empty((input_q.shape[0], input_q.shape[1]), device=input_q.device, dtype=torch.float32)
+      # Preprocess
+      _attention_bwd_pre_process[grid](output_o, do, delta, n_ctx, pre_block, Config.num_heads, num_hiddens)
       if world_size != 1:
         exe_order_per_rank_v[rank].remove((rank,rank))
         exe_order_per_rank_h[rank].remove((rank,rank))

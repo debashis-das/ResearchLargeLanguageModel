@@ -46,7 +46,8 @@ def _attention_forward(sm_scale, max_tensor, num_heads, n_ctx, desc_q, desc_k, d
         for off_h in range(num_heads):
             print(f"start_m : {start_m}, off_h : {off_h}")
             # y_dim = num_heads*n_ctx
-            offset_y = off_h*n_ctx
+            print(f"off_h : {off_h}, n_ctx : {n_ctx}, hidden_dim : {hidden_dim}")
+            offset_y = off_h*n_ctx*hidden_dim
             print(f"offset_y : {offset_y}")
             qo_offset_y = offset_y + start_m*block_m
             print(f"qo_offset_y : {qo_offset_y}")

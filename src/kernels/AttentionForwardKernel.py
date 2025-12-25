@@ -68,7 +68,7 @@ def _attention_forward(sm_scale, max_tensor, num_heads, n_ctx, desc_q, desc_k, d
                                      block_shape=[block_n, hidden_dim])
     desc_o = tl.make_tensor_descriptor(desc_o, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
                                      block_shape=[block_m, hidden_dim])
-    offset_y = off_h*n_ctx
+    offset_y = off_h*n_ctx*hidden_dim
     # print(f"offset_y : {offset_y}")
     qo_offset_y = offset_y + start_m*block_m
     # print(f"qo_offset_y : {qo_offset_y}")
