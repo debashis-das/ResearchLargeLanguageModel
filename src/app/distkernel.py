@@ -24,7 +24,7 @@ class MultiGPUExecutor:
     self.W_k = nn.LazyLinear(Config.hiddens, bias=False, device=DEVICE)
     self.W_v = nn.LazyLinear(Config.hiddens, bias=False, device=DEVICE)
     self.rope_embedding = RopeEmbedding(Config.hiddens, Config.dropout, self.tokens_per_gpu, rank, device=DEVICE)
-    self.attention = _attention
+    self.attention = _attention.apply
 
   def execute(self):
     if world_size != 1:
@@ -36,10 +36,12 @@ class MultiGPUExecutor:
     input_q, input_k, input_v = self.W_q(X), self.W_k(X), self.W_v(X)
     input_q, input_k = self.rope_embedding(input_q, input_k)
 
-    output_o = self.attention.apply(input_q, input_k, input_v,
+    output_o = self.attention(input_q, input_k, input_v,
                                       Config.block_m, Config.block_n, Config.num_heads, self.tokens_per_gpu,
                                       Config.hiddens, Config.sm_scale, DEVICE, rank, rank)
     print(f"Output ({rank},{rank}) : {output_o.shape}")
+    do = torch.rand_like(output_o)
+    output_o.backward(do, retain_graph=True)
     if world_size != 1:
       exe_order_per_rank_v[rank].remove((rank,rank))
       exe_order_per_rank_h[rank].remove((rank,rank))

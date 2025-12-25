@@ -4,7 +4,7 @@ from dataclasses import dataclass
 @dataclass
 class Config:
     debug: bool = False
-    tokens = 5120
+    tokens = 512
     # hiddens = 2048
     hiddens = 128
     total_vocab = 200021

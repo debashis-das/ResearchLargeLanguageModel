@@ -2,7 +2,8 @@ import triton
 import triton.language as tl
 
 @triton.jit
-def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr, n_ctx, pre_block, head, hidden):
+def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr, n_ctx: tl.constexpr,
+                               pre_block: tl.constexpr, head: tl.constexpr, hidden: tl.constexpr):
     pre_block_per_nctx = tl.program_id(0)
     off_h = tl.program_id(1)
     offs_pre_block = pre_block_per_nctx*pre_block + tl.arange(0, pre_block)

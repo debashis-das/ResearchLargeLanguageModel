@@ -10,10 +10,9 @@ class _attention(torch.autograd.Function):
   @staticmethod
   def forward(ctx, q, k, v, block_m, block_n, num_heads, n_ctx, hidden_dim, sm_scale, device, q_index, kv_index, warp_specialize=True):
       # HEAD_DIM_Q, HEAD_DIM_K, HEAD_DIM_V = q.shape[-1], k.shape[-1], v.shape[-1]
-      
-      # q_with_head = q.unsqueeze(0).expand(num_heads, -1, -1)
-      # k_with_head = k.unsqueeze(0).expand(num_heads, -1, -1)
-      # v_with_head = v.unsqueeze(0).expand(num_heads, -1, -1)
+      q = q.unsqueeze(0).expand(num_heads, -1, -1)
+      k = k.unsqueeze(0).expand(num_heads, -1, -1)
+      v = v.unsqueeze(0).expand(num_heads, -1, -1)
       o = torch.empty_like(q)
       # print(q_with_head.shape, k_with_head.shape, v_with_head.shape)
       M = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
@@ -40,13 +39,13 @@ class _attention(torch.autograd.Function):
       return o
   
   @staticmethod
-  def backward(ctx, do, block_m, block_n):
+  def backward(ctx, do):
       q, k, v, o, M = ctx.saved_tensors
       q_index = ctx.q_index
       kv_index = ctx.kv_index
       num_heads = ctx.num_heads
-      BLOCK_M = block_m
-      BLOCK_N = block_n
+      BLOCK_M = 64
+      BLOCK_N = 32
       pre_block = 128
       num_hiddens = q.shape[-1]
       n_ctx = q.shape[1]
