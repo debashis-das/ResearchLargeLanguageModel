@@ -37,9 +37,14 @@ class MultiGPUExecutor:
       X = self.rms(embedded_tensor)
       input_q, input_k, input_v = self.W_q(X), self.W_k(X), self.W_v(X)
       input_q, input_k = self.rope_embedding(input_q, input_k)
-      input_q = input_q.reshape(input_q.shape[0], Config.num_heads, -1)
-      input_k = input_k.reshape(input_k.shape[0], Config.num_heads, -1)
-      input_v = input_v.reshape(input_v.shape[0], Config.num_heads, -1)
+      input_q = input_q.reshape(self.tokens_per_gpu, Config.num_heads, -1).permute(1, 0, 2).contiguous()
+      input_k = input_k.reshape(self.tokens_per_gpu, Config.num_heads, -1).permute(1, 0, 2).contiguous()
+      input_v = input_v.reshape(self.tokens_per_gpu, Config.num_heads, -1).permute(1, 0, 2).contiguous()
+
+      print(f"input_q{input_q.shape} strides : {input_q.stride()}")
+      print(f"input_k{input_k.shape} strides : {input_k.stride()}")
+      print(f"input_v{input_v.shape} strides : {input_v.stride()}")
+
       output_o = self.attention(input_q, input_k, input_v, Config.block_m, Config.block_n, Config.num_heads, self.tokens_per_gpu,
                                         Config.hiddens, Config.sm_scale, DEVICE, rank, rank)
       print(f"Output ({rank},{rank}) : {output_o}")
