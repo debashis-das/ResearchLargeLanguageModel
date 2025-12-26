@@ -37,34 +37,34 @@ class MultiGPUExecutor:
       X = self.rms(embedded_tensor)
       input_q, input_k, input_v = self.W_q(X), self.W_k(X), self.W_v(X)
       input_q, input_k = self.rope_embedding(input_q, input_k)
-      input_q = input_q.unsqueeze(0).expand(Config.num_heads, -1, -1)
-      input_k = input_k.unsqueeze(0).expand(Config.num_heads, -1, -1)
-      input_v = input_v.unsqueeze(0).expand(Config.num_heads, -1, -1)
+      input_q = input_q.reshape(input_q.shape[0], Config.num_heads, -1)
+      input_k = input_k.reshape(input_k.shape[0], Config.num_heads, -1)
+      input_v = input_v.reshape(input_v.shape[0], Config.num_heads, -1)
       output_o = self.attention(input_q, input_k, input_v, Config.block_m, Config.block_n, Config.num_heads, self.tokens_per_gpu,
                                         Config.hiddens, Config.sm_scale, DEVICE, rank, rank)
-      print(f"Output ({rank},{rank}) : {output_o.shape}")
-      do = torch.rand_like(output_o)
-      BLOCK_M = 64
-      BLOCK_N = 32
-      pre_block = 128
-      num_hiddens = input_q.shape[-1]
-      n_ctx = input_q.shape[1]
-      grid = (input_q.shape[1]//pre_block, Config.num_heads, 1)
-      print(f"Grid : {grid}, q: {input_q.shape}, k: {input_k.shape}, v: {input_v.shape} ")
-      delta = torch.empty((input_q.shape[0], input_q.shape[1]), device=input_q.device, dtype=torch.float32)
-      # Preprocess
-      _attention_bwd_pre_process[grid](output_o, do, delta, n_ctx, pre_block, Config.num_heads, num_hiddens)
-      if world_size != 1:
-        exe_order_per_rank_v[rank].remove((rank,rank))
-        exe_order_per_rank_h[rank].remove((rank,rank))
+      print(f"Output ({rank},{rank}) : {output_o}")
+      # do = torch.rand_like(output_o)
+      # BLOCK_M = 64
+      # BLOCK_N = 32
+      # pre_block = 128
+      # num_hiddens = input_q.shape[-1]
+      # n_ctx = input_q.shape[1]
+      # grid = (input_q.shape[1]//pre_block, Config.num_heads, 1)
+      # print(f"Grid : {grid}, q: {input_q.shape}, k: {input_k.shape}, v: {input_v.shape} ")
+      # delta = torch.empty((input_q.shape[0], input_q.shape[1]), device=input_q.device, dtype=torch.float32)
+      # # Preprocess
+      # _attention_bwd_pre_process[grid](output_o, do, delta, n_ctx, pre_block, Config.num_heads, num_hiddens)
+      # if world_size != 1:
+      #   exe_order_per_rank_v[rank].remove((rank,rank))
+      #   exe_order_per_rank_h[rank].remove((rank,rank))
 
-        dist.barrier()
-        nodes_partion_q_fixed_kv(exe_order_per_rank_h, exe_order_per_rank_v,
-                                self.rank, input_q, input_k, input_v)
-        dist.barrier()
-        nodes_partion_vary_qkv(exe_order_per_rank_unaligned, self.rank,
-                              input_q, input_k, input_v)
-        dist.barrier()
+      #   dist.barrier()
+      #   nodes_partion_q_fixed_kv(exe_order_per_rank_h, exe_order_per_rank_v,
+      #                           self.rank, input_q, input_k, input_v)
+      #   dist.barrier()
+      #   nodes_partion_vary_qkv(exe_order_per_rank_unaligned, self.rank,
+      #                         input_q, input_k, input_v)
+      #   dist.barrier()
     finally:
       dist.destroy_process_group()
 

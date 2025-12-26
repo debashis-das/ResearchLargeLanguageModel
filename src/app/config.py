@@ -6,7 +6,7 @@ class Config:
     debug: bool = False
     tokens = 512*4
     # hiddens = 2048
-    hiddens = 128
+    hiddens = 8*128
     total_vocab = 200021
     dropout = 0.1
     num_heads = 8
