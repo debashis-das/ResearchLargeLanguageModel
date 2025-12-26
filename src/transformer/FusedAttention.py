@@ -10,9 +10,9 @@ class _attention(torch.autograd.Function):
   @staticmethod
   def forward(ctx, q, k, v, block_m, block_n, num_heads, n_ctx, hidden_dim, sm_scale, device, q_index, kv_index, warp_specialize=True):
       # HEAD_DIM_Q, HEAD_DIM_K, HEAD_DIM_V = q.shape[-1], k.shape[-1], v.shape[-1]
-      q = q.unsqueeze(0).expand(num_heads, -1, -1)
-      k = k.unsqueeze(0).expand(num_heads, -1, -1)
-      v = v.unsqueeze(0).expand(num_heads, -1, -1)
+      # q = q.unsqueeze(0).expand(num_heads, -1, -1)
+      # k = k.unsqueeze(0).expand(num_heads, -1, -1)
+      # v = v.unsqueeze(0).expand(num_heads, -1, -1)
       o = torch.empty_like(q)
       # print(q_with_head.shape, k_with_head.shape, v_with_head.shape)
       M = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)

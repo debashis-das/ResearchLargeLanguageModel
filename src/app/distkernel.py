@@ -47,18 +47,19 @@ class MultiGPUExecutor:
 
       output_o = self.attention(input_q, input_k, input_v, Config.block_m, Config.block_n, Config.num_heads, self.tokens_per_gpu,
                                         Config.hiddens, Config.sm_scale, DEVICE, rank, rank)
-      print(f"Output ({rank},{rank}) : {output_o}")
-      # do = torch.rand_like(output_o)
-      # BLOCK_M = 64
-      # BLOCK_N = 32
-      # pre_block = 128
-      # num_hiddens = input_q.shape[-1]
-      # n_ctx = input_q.shape[1]
-      # grid = (input_q.shape[1]//pre_block, Config.num_heads, 1)
-      # print(f"Grid : {grid}, q: {input_q.shape}, k: {input_k.shape}, v: {input_v.shape} ")
-      # delta = torch.empty((input_q.shape[0], input_q.shape[1]), device=input_q.device, dtype=torch.float32)
-      # # Preprocess
-      # _attention_bwd_pre_process[grid](output_o, do, delta, n_ctx, pre_block, Config.num_heads, num_hiddens)
+      # print(f"Output ({rank},{rank}) : {output_o}")
+      do = torch.rand_like(output_o)
+      BLOCK_M = 32
+      BLOCK_N = 16
+      pre_block = 64
+      num_hiddens = input_q.shape[-1]
+      n_ctx = input_q.shape[1]
+      grid = (input_q.shape[1]//pre_block, Config.num_heads, 1)
+      print(f"Grid : {grid}, q: {input_q.shape}, k: {input_k.shape}, v: {input_v.shape} ")
+      delta = torch.empty((input_q.shape[0], input_q.shape[1]), device=input_q.device, dtype=torch.float32)
+      # Preprocess
+      _attention_bwd_pre_process[grid](output_o, do, delta, n_ctx, pre_block, Config.num_heads, num_hiddens)
+      print(f"Delta : {delta}")
       # if world_size != 1:
       #   exe_order_per_rank_v[rank].remove((rank,rank))
       #   exe_order_per_rank_h[rank].remove((rank,rank))
