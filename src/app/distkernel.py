@@ -5,7 +5,7 @@ import triton
 
 from config import Config
 from transformer.FusedAttention import _attention
-from kernels.AttentionBackwardKernel import _attention_bwd_pre_process
+from kernels.AttentionBackwardKernel import _attention_bwd_pre_process, _attention_bwd
 from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
 from partitioner.gpu import identify_nodes_for_qkv, nodes_partion_q_fixed_kv, nodes_partion_vary_qkv
@@ -54,12 +54,13 @@ class MultiGPUExecutor:
       pre_block = 64
       num_hiddens = input_q.shape[-1]
       n_ctx = input_q.shape[1]
-      grid = (input_q.shape[1]//pre_block, Config.num_heads, 1)
-      print(f"Grid : {grid}, q: {input_q.shape}, k: {input_k.shape}, v: {input_v.shape} ")
+      grid_preprocess = (input_q.shape[1]//pre_block, Config.num_heads, 1)
+      print(f"Grid : {grid_preprocess}, q: {input_q.shape}, k: {input_k.shape}, v: {input_v.shape} ")
       delta = torch.empty((input_q.shape[0], input_q.shape[1]), device=input_q.device, dtype=torch.float32)
       # Preprocess
-      _attention_bwd_pre_process[grid](output_o, do, delta, n_ctx, pre_block, Config.num_heads, num_hiddens)
+      _attention_bwd_pre_process[grid_preprocess](output_o, do, delta, n_ctx, pre_block, Config.num_heads, num_hiddens)
       print(f"Delta : {delta}")
+      
       # if world_size != 1:
       #   exe_order_per_rank_v[rank].remove((rank,rank))
       #   exe_order_per_rank_h[rank].remove((rank,rank))

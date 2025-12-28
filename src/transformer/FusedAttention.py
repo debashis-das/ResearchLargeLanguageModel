@@ -2,7 +2,7 @@ import torch
 import triton
 
 from kernels.AttentionForwardKernel import _attention_forward
-from kernels.AttentionBackwardKernel import _attention_bwd_pre_process
+from kernels.AttentionBackwardKernel import _attention_bwd_pre_process, _attention_bwd
 
 class _attention(torch.autograd.Function):
   
@@ -41,19 +41,26 @@ class _attention(torch.autograd.Function):
   @staticmethod
   def backward(ctx, do):
       q, k, v, o, M = ctx.saved_tensors
+      sm_scale = ctx.sm_scale
       q_index = ctx.q_index
       kv_index = ctx.kv_index
       num_heads = ctx.num_heads
-      BLOCK_M = 64
-      BLOCK_N = 32
-      pre_block = 128
+      block_m = 32
+      block_n = 16
+      pre_block = 64
       num_hiddens = q.shape[-1]
       n_ctx = q.shape[1]
-      grid = (q.shape[1]//pre_block, num_heads, 1)
-      print(f"Grid : {grid}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
+      grid_preprocess = (n_ctx//pre_block, num_heads, 1)
+      print(f"Grid (bwd_pre_process) : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
       delta = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
       # Preprocess
-      _attention_bwd_pre_process[grid](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
+      _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
       # _attention_bwd_pre_process(o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
-      return delta
+      dq = torch.empty_like(q)
+      dk = torch.empty_like(k)
+      dv = torch.empty_like(v)
+      bulk_slice_factor = 2
+      grid_bwd = (n_ctx//block_m, num_heads, 1)
+      print(f"Grid (bwd) : {grid_bwd}")
+      _attention_bwd[grid_bwd](q, k, v, o, sm_scale, do, dq, dk, dv, M, delta, num_heads, n_ctx, num_hiddens, block_m, block_n, bulk_slice_factor)
     
