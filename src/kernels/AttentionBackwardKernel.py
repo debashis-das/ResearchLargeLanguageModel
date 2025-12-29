@@ -44,9 +44,6 @@ def _attention_bwd(q, k, v, sm_scale, do, dq, dk, dv, m, d, num_heads, n_ctx, hi
   desc_k = tl.make_tensor_descriptor(k, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
                                     block_shape=[block_n, hidden_dim])
   
-  # derivatives
-  desc_dq = tl.make_tensor_descriptor(dq, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
-                                        block_shape=[block_m, hidden_dim])
   
   desc_dv = tl.make_tensor_descriptor(dv, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
                                         block_shape=[block_n, hidden_dim])
@@ -67,24 +64,31 @@ def _attention_bwd(q, k, v, sm_scale, do, dq, dk, dv, m, d, num_heads, n_ctx, hi
                                     block_shape=[mask_block_n1, hidden_dim])
   desc_doT_mask_block_n1 = tl.make_tensor_descriptor(do, shape=[hidden_dim, y_dim], strides=[1, hidden_dim],
                                     block_shape=[hidden_dim, mask_block_n1])
-  start_m = init_offset + tl.arange(0, mask_block_n1)
-  start_n = start_m
-  current_m = start_m
+  start_n = init_offset + tl.arange(0, block_m)
+  current_m = init_offset
 
   # Mask
   for block_m_sub_block_n in tl.range(0, block_m, mask_block_n1):
     offset =  block_m_sub_block_n*mask_block_n1 + init_offset
-    _attention_bwd_dkdv_per_sublock_n(dkey, dvalue, m, d, 
+    start_m = current_m + tl.arange(0, mask_block_n1)
+    dkey_temp, dvalue_temp = _attention_bwd_dkdv_per_sublock_n(dkey, dvalue, m, d, 
                                       key, value, desc_query_mask_block_n1, desc_queryT_mask_block_n1, 
-                                      desc_do_mask_block_n1, desc_doT_mask_block_n1, True, current_m, start_n, offset)
+                                      desc_do_mask_block_n1, desc_doT_mask_block_n1, True, start_m, start_n, offset)
+    dkey += dkey_temp
+    dvalue += dvalue_temp
     current_m += mask_block_n1
 
   # left of Mask  
+  current_m = init_offset + block_m
+  start_n = init_offset + tl.arange(block_m, n_ctx)
   for block_n_idx in tl.range(block_m, n_ctx, block_n):
     offset =  block_m + block_n_idx*block_n + init_offset
-    _attention_bwd_dkdv_per_sublock_n(dkey, dvalue, m, d, 
+    start_m = current_m + tl.arange(0, block_n)
+    dkey_temp, dvalue_temp = _attention_bwd_dkdv_per_sublock_n(dkey, dvalue, m, d, 
                                       key, value, desc_query_mask_block_n1, desc_queryT_mask_block_n1, 
-                                      desc_do_mask_block_n1, desc_doT_mask_block_n1, False, current_m, start_n, offset)
+                                      desc_do_mask_block_n1, desc_doT_mask_block_n1, False, start_m, start_n, offset)
+    dkey += dkey_temp
+    dvalue += dvalue_temp
     current_m += block_n
 
   desc_dv.store([init_offset, 0], dvalue)
@@ -94,23 +98,57 @@ def _attention_bwd(q, k, v, sm_scale, do, dq, dk, dv, m, d, num_heads, n_ctx, hi
                                         block_shape=[hidden_dim, block_n])
   desc_kT = tl.make_tensor_descriptor(k, shape=[hidden_dim, y_dim], strides=[1, hidden_dim],
                                     block_shape=[hidden_dim, block_n])
+  desc_k = tl.make_tensor_descriptor(k, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
+                                    block_shape=[block_n, hidden_dim])
+  desc_query = tl.make_tensor_descriptor(q, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
+                                          block_shape=[mask_block_n1, hidden_dim])
+  desc_do = tl.make_tensor_descriptor(do, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
+                                    block_shape=[block_m, hidden_dim])
+
   dquery = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
-  query = desc_query_mask_block_n1.load([init_offset,0])
+  query = desc_query.load([init_offset,0])
+  d_output = desc_do.load([init_offset,0])
   max_offset = init_offset + tl.arange(0, block_m)
   max_tensor = tl.load(m+max_offset)
+  delta = tl.load(d+max_offset)
+  start_n = init_offset + tl.arange(0, block_m)
   # Mask
+  current_m = init_offset
   for block_m_sub_block_n in tl.range(0, block_m, mask_block_n1):
     offset =  block_m_sub_block_n*mask_block_n1 + init_offset
+    start_m = current_m + tl.arange(0, mask_block_n1)
+    dquery += _attention_bwd_dq_per_sublock_n(query, d_output, desc_vT, desc_kT, desc_k, max_tensor, start_m, start_n, offset, True, delta)
+    current_m += mask_block_n1
+  # left of Mask  
+  current_m = init_offset + block_m
+  start_n = init_offset + tl.arange(block_m, n_ctx)
+  for block_n_idx in tl.range(block_m, n_ctx, block_n):
+    offset =  block_m + block_n_idx*block_n + init_offset
+    start_m = current_m + tl.arange(0, block_n)
+    dquery += _attention_bwd_dq_per_sublock_n(query, d_output, desc_vT, desc_kT, desc_k, max_tensor, start_m, start_n, offset, True, delta)
+    current_m += block_n
 
-def _attention_bwd_dq_per_sublock_n(query, desc_vT, desc_kT, max_tensor, start_m, dquery, offset):
-  vT = tl.load(desc_vT)
-  kT = tl.load(desc_kT)
+  # derivatives
+  desc_dq = tl.make_tensor_descriptor(dq, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
+                                        block_shape=[block_m, hidden_dim])
+  desc_dq.store([init_offset, 0], dquery)
+  
+@triton.jit
+def _attention_bwd_dq_per_sublock_n(query, d_output, desc_vT, desc_kT, desc_k, max_tensor, start_m, start_n, offset, MASK, delta):
+  vT = desc_vT.load([0, offset])
+  kT = desc_kT.load([0, offset])
+  k = desc_k.load([offset, 0])
   qk = tl.dot(query, kT)
-  
   p = tl.math.exp2(qk - max_tensor)
-  
-  
+  if MASK: 
+    mask = (start_m[None, :] >= start_n[:, None])
+    p = tl.where(mask, p, 0.0)
+  dp = tl.dot(d_output, vT).to(tl.float32)
+  ds = p * (dp - delta[:,None])
+  ds = ds.to(tl.bfloat16)
+  return tl.dot(ds, k)
 
+@triton.jit
 def _attention_bwd_dkdv_per_sublock_n(dkey, dvalue, m, d, 
                                       key, value, desc_query_mask_block_n1, desc_queryT_mask_block_n1, desc_do_mask_block_n1,
                                       desc_doT_mask_block_n1, MASK, start_m, start_n, offset):
@@ -120,7 +158,7 @@ def _attention_bwd_dkdv_per_sublock_n(dkey, dvalue, m, d,
   qkT = tl.dot(key, queryT)
   pT = tl.math.exp2(qkT - max_tensor[None, :])
   if MASK:
-    mask = (start_m[None, :] > start_n[:, None])
+    mask = (start_m[None, :] >= start_n[:, None])
     pT = tl.where(mask, pT, 0.0)
   do = desc_do_mask_block_n1.load([offset, 0])
   dvalue += tl.dot(pT.to(tl.bfloat16), do)
@@ -131,6 +169,8 @@ def _attention_bwd_dkdv_per_sublock_n(dkey, dvalue, m, d,
   dsT = dsT.to(tl.bfloat16)
   query = desc_query_mask_block_n1.load([offset, 0])
   dkey += tl.dot(dsT, query)
+  return dkey, dvalue
+
    
 
 
