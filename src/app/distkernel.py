@@ -11,6 +11,7 @@ from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
 from partitioner.gpu import identify_nodes_for_qkv, nodes_partion_q_fixed_kv, nodes_partion_vary_qkv
 
+torch.set_printoptions(profile="full")
 DEVICE = triton.runtime.driver.active.get_active_torch_device()
 
 class MultiGPUExecutor:
@@ -42,9 +43,6 @@ class MultiGPUExecutor:
       k = k.reshape(self.tokens_per_gpu, Config.num_heads, -1).permute(1, 0, 2).contiguous()
       v = v.reshape(self.tokens_per_gpu, Config.num_heads, -1).permute(1, 0, 2).contiguous()
 
-      print(f"input_q{q.shape} strides : {q.stride()}")
-      print(f"input_k{k.shape} strides : {k.stride()}")
-      print(f"input_v{v.shape} strides : {v.stride()}")
       n_ctx = self.tokens_per_gpu
       num_hiddens = Config.hiddens
       o = torch.empty_like(q)
@@ -53,14 +51,16 @@ class MultiGPUExecutor:
       block_n = 16
       pre_block = 64
       grid_fwd = (n_ctx//block_m, Config.num_heads, 1)
+      print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
       _attention_forward[grid_fwd](Config.sm_scale, M, Config.num_heads, n_ctx,
                       q, k, v, o,
                       num_hiddens, block_m, block_n, True, True)
-      # print(f"Output ({rank},{rank}) : {output_o}")
+      print(f"Output ({rank},{rank}) : {o}")
+      print(f"Max tensor ({rank},{rank}) : {M}")
       do = torch.rand_like(o)
       n_ctx = q.shape[1]
       grid_preprocess = (q.shape[1]//pre_block, Config.num_heads, 1)
-      print(f"Grid : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
+      print(f"Grid (Preprocess) : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
       delta = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
       # Preprocess
       _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, Config.num_heads, num_hiddens)
@@ -71,7 +71,7 @@ class MultiGPUExecutor:
       bulk_slice_factor = 2
       grid_bwd = (n_ctx//block_m, Config.num_heads, 1)
       print(f"Grid (bwd) : {grid_bwd}")
-      _attention_bwd[grid_bwd](q, k, v, o, Config.sm_scale, do, dq, dk, dv, M, delta, Config.num_heads, n_ctx, 
+      _attention_bwd[grid_bwd](q, k, v, Config.sm_scale, do, dq, dk, dv, M, delta, Config.num_heads, n_ctx, 
                                num_hiddens, block_m, block_n, bulk_slice_factor)
     
       # if world_size != 1:

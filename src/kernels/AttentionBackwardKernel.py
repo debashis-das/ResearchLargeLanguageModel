@@ -38,7 +38,6 @@ def _attention_bwd(q, k, v, sm_scale, do, dq, dk, dv, m, d, num_heads, n_ctx, hi
   # for mask we take half of the actual block_m value
   y_dim = num_heads * n_ctx
   init_offset = ctxid*block_m + hid*n_ctx
-  
   desc_v = tl.make_tensor_descriptor(v, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
                                         block_shape=[block_n, hidden_dim])
   desc_k = tl.make_tensor_descriptor(k, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
