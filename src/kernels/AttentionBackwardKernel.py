@@ -170,22 +170,3 @@ def _attention_bwd_dkdv_per_sublock_n(dkey, dvalue, m, d,
   query = desc_query_mask_block_n1.load([offset, 0])
   dkey += tl.dot(dsT, query)
   return dkey, dvalue
-
-   
-
-
-    
-
-
-
-
-
-    
-
-
-
-  
-  
-  
-
-  

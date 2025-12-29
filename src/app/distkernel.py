@@ -5,6 +5,7 @@ import triton
 
 from config import Config
 from transformer.FusedAttention import _attention
+from kernels.AttentionForwardKernel import _attention_forward
 from kernels.AttentionBackwardKernel import _attention_bwd_pre_process, _attention_bwd
 from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
@@ -35,32 +36,44 @@ class MultiGPUExecutor:
       input = torch.tensor(sample_input, dtype=torch.int32, device=DEVICE)
       embedded_tensor = self.embedding(input)
       X = self.rms(embedded_tensor)
-      input_q, input_k, input_v = self.W_q(X), self.W_k(X), self.W_v(X)
-      input_q, input_k = self.rope_embedding(input_q, input_k)
-      input_q = input_q.reshape(self.tokens_per_gpu, Config.num_heads, -1).permute(1, 0, 2).contiguous()
-      input_k = input_k.reshape(self.tokens_per_gpu, Config.num_heads, -1).permute(1, 0, 2).contiguous()
-      input_v = input_v.reshape(self.tokens_per_gpu, Config.num_heads, -1).permute(1, 0, 2).contiguous()
+      q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
+      q, k = self.rope_embedding(q, k)
+      q = q.reshape(self.tokens_per_gpu, Config.num_heads, -1).permute(1, 0, 2).contiguous()
+      k = k.reshape(self.tokens_per_gpu, Config.num_heads, -1).permute(1, 0, 2).contiguous()
+      v = v.reshape(self.tokens_per_gpu, Config.num_heads, -1).permute(1, 0, 2).contiguous()
 
-      print(f"input_q{input_q.shape} strides : {input_q.stride()}")
-      print(f"input_k{input_k.shape} strides : {input_k.stride()}")
-      print(f"input_v{input_v.shape} strides : {input_v.stride()}")
-
-      output_o = self.attention(input_q, input_k, input_v, Config.block_m, Config.block_n, Config.num_heads, self.tokens_per_gpu,
-                                        Config.hiddens, Config.sm_scale, DEVICE, rank, rank)
-      # print(f"Output ({rank},{rank}) : {output_o}")
-      do = torch.rand_like(output_o)
-      BLOCK_M = 32
-      BLOCK_N = 16
+      print(f"input_q{q.shape} strides : {q.stride()}")
+      print(f"input_k{k.shape} strides : {k.stride()}")
+      print(f"input_v{v.shape} strides : {v.stride()}")
+      n_ctx = self.tokens_per_gpu
+      num_hiddens = Config.hiddens
+      o = torch.empty_like(q)
+      M = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
+      block_m = 32
+      block_n = 16
       pre_block = 64
-      num_hiddens = input_q.shape[-1]
-      n_ctx = input_q.shape[1]
-      grid_preprocess = (input_q.shape[1]//pre_block, Config.num_heads, 1)
-      print(f"Grid : {grid_preprocess}, q: {input_q.shape}, k: {input_k.shape}, v: {input_v.shape} ")
-      delta = torch.empty((input_q.shape[0], input_q.shape[1]), device=input_q.device, dtype=torch.float32)
+      grid_fwd = (n_ctx//block_m, Config.num_heads, 1)
+      _attention_forward[grid_fwd](Config.sm_scale, M, Config.num_heads, n_ctx,
+                      q, k, v, o,
+                      num_hiddens, block_m, block_n, True, True)
+      # print(f"Output ({rank},{rank}) : {output_o}")
+      do = torch.rand_like(o)
+      n_ctx = q.shape[1]
+      grid_preprocess = (q.shape[1]//pre_block, Config.num_heads, 1)
+      print(f"Grid : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
+      delta = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
       # Preprocess
-      _attention_bwd_pre_process[grid_preprocess](output_o, do, delta, n_ctx, pre_block, Config.num_heads, num_hiddens)
+      _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, Config.num_heads, num_hiddens)
       print(f"Delta : {delta}")
-      
+      dq = torch.empty_like(q)
+      dk = torch.empty_like(k)
+      dv = torch.empty_like(v)
+      bulk_slice_factor = 2
+      grid_bwd = (n_ctx//block_m, Config.num_heads, 1)
+      print(f"Grid (bwd) : {grid_bwd}")
+      _attention_bwd[grid_bwd](q, k, v, o, Config.sm_scale, do, dq, dk, dv, M, delta, Config.num_heads, n_ctx, 
+                               num_hiddens, block_m, block_n, bulk_slice_factor)
+    
       # if world_size != 1:
       #   exe_order_per_rank_v[rank].remove((rank,rank))
       #   exe_order_per_rank_h[rank].remove((rank,rank))
