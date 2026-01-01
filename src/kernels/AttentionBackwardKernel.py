@@ -2,170 +2,124 @@
 import triton
 import triton.language as tl
 
+
+
 @triton.jit
-def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr, 
+def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
                                n_ctx: tl.constexpr,
                                pre_block: tl.constexpr,
                                heads: tl.constexpr,
                                hidden: tl.constexpr):
   pre_block_per_nctx = tl.program_id(0)
   off_h = tl.program_id(1)
-  # for off_h in range(heads):
-  #   for pre_block_per_nctx in range(n_ctx//pre_block):
   offs_pre_block = pre_block_per_nctx*pre_block + tl.arange(0, pre_block)
   offs_hid = tl.arange(0, hidden)
   offset = off_h*n_ctx*hidden + offs_pre_block[:,None]*hidden + offs_hid[None,:]
-  # print(f"O and do offset({off_h}, {pre_block_per_nctx}) : {offset}")
-  # o = torch.randn_like(offset, dtype=tl.bfloat16)
-  # do = torch.rand_like(offset, dtype=tl.bfloat16)
-  # o_od = torch.sum(o*do, 1)
-  # print(f"O_do result offset({off_h}, {pre_block_per_nctx}) : {o_od.shape}")
   o = tl.load(o_ptr + offset)
   do = tl.load(do_ptr + offset)
   o_do = tl.sum(o*do, axis=1)
-  # print(f"O_do result offset({off_h}, {pre_block_per_nctx}) : {off_h*n_ctx + offs_pre_block}")
   delta = delta_ptr + off_h*n_ctx + offs_pre_block
   tl.store(delta, o_do)
 
 
 @triton.jit
-def _attention_bwd(q, k, v, sm_scale, do, dq, dk, dv, m, d, num_heads, n_ctx, hidden_dim, block_m, block_n, bulk_slice_factor):
+def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
+                   sm_scale: tl.constexpr, num_heads: tl.constexpr,
+                   n_ctx: tl.constexpr, hidden_dim: tl.constexpr, block_m: tl.constexpr,
+                   block_n: tl.constexpr, bulk_slice_factor: tl.constexpr):
   LN2 = 0.6931471824645996  # = ln(2)
-  # current context block 
+  # current context block
   ctxid = tl.program_id(0)
   # current head
   hid = tl.program_id(1)
-  # for mask we take half of the actual block_m value
-  y_dim = num_heads * n_ctx
+  # init offset can be used for both dkdv & dq
   init_offset = ctxid*block_m + hid*n_ctx
+  y_dim:tl.constexpr = num_heads * n_ctx
+
   desc_v = tl.make_tensor_descriptor(v, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
-                                        block_shape=[block_n, hidden_dim])
+                                        block_shape=[block_m, hidden_dim])
   desc_k = tl.make_tensor_descriptor(k, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
-                                    block_shape=[block_n, hidden_dim])
+                                    block_shape=[block_m, hidden_dim])
   
-  
+
   desc_dv = tl.make_tensor_descriptor(dv, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
-                                        block_shape=[block_n, hidden_dim])
+                                        block_shape=[block_m, hidden_dim])
   desc_dk = tl.make_tensor_descriptor(dk, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
-                                    block_shape=[block_n, hidden_dim])
+                                    block_shape=[block_m, hidden_dim])
+  desc_dq = tl.make_tensor_descriptor(dq, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
+                                        block_shape=[block_m, hidden_dim])
+  
   dvalue = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
   dkey = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
-  
-  mask_block_n1 = block_n // bulk_slice_factor
+  dquery = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
+
+  mask_block_n:tl.constexpr = block_n // bulk_slice_factor
   key = desc_k.load([init_offset,0])
   value = desc_v.load([init_offset,0])
 
-  desc_query_mask_block_n1 = tl.make_tensor_descriptor(q, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
-                                          block_shape=[mask_block_n1, hidden_dim])
-  desc_queryT_mask_block_n1 = tl.make_tensor_descriptor(q, shape=[hidden_dim, y_dim], strides=[1, hidden_dim],
-                                          block_shape=[hidden_dim, mask_block_n1])
-  desc_do_mask_block_n1 = tl.make_tensor_descriptor(do, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
-                                    block_shape=[mask_block_n1, hidden_dim])
-  desc_doT_mask_block_n1 = tl.make_tensor_descriptor(do, shape=[hidden_dim, y_dim], strides=[1, hidden_dim],
-                                    block_shape=[hidden_dim, mask_block_n1])
-  start_n = init_offset + tl.arange(0, block_m)
-  current_m = init_offset
-
+  desc_query_mask_block_n = tl.make_tensor_descriptor(q, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
+                                          block_shape=[mask_block_n, hidden_dim])
+  desc_do_mask_block_n = tl.make_tensor_descriptor(do, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
+                                    block_shape=[mask_block_n, hidden_dim])
+  desc_key_mask_block_n = tl.make_tensor_descriptor(k, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
+                                    block_shape=[mask_block_n, hidden_dim])
+  offset_m = init_offset + tl.arange(0, block_m)
+  offset = init_offset
   # Mask
-  for block_m_sub_block_n in tl.range(0, block_m, mask_block_n1):
-    offset =  block_m_sub_block_n*mask_block_n1 + init_offset
-    start_m = current_m + tl.arange(0, mask_block_n1)
-    dkey_temp, dvalue_temp = _attention_bwd_dkdv_per_sublock_n(dkey, dvalue, m, d, 
-                                      key, value, desc_query_mask_block_n1, desc_queryT_mask_block_n1, 
-                                      desc_do_mask_block_n1, desc_doT_mask_block_n1, True, start_m, start_n, offset)
+  for sub_block_n in tl.range(0, block_m, mask_block_n):
+    offset += sub_block_n
+    offset_n = offset + tl.arange(0, mask_block_n)
+    dquery_temp, dkey_temp, dvalue_temp = _attention_bwd_dqdkdv_per_sublock_n(dquery, dkey, dvalue, m, d,
+                                      key, value, desc_query_mask_block_n,
+                                      desc_do_mask_block_n, desc_key_mask_block_n, True, offset_m, offset_n, offset)
     dkey += dkey_temp
     dvalue += dvalue_temp
-    current_m += mask_block_n1
+    dquery += dquery_temp
 
-  # left of Mask  
-  current_m = init_offset + block_m
-  start_n = init_offset + tl.arange(block_m, n_ctx)
-  for block_n_idx in tl.range(block_m, n_ctx, block_n):
-    offset =  block_m + block_n_idx*block_n + init_offset
-    start_m = current_m + tl.arange(0, block_n)
-    dkey_temp, dvalue_temp = _attention_bwd_dkdv_per_sublock_n(dkey, dvalue, m, d, 
-                                      key, value, desc_query_mask_block_n1, desc_queryT_mask_block_n1, 
-                                      desc_do_mask_block_n1, desc_doT_mask_block_n1, False, start_m, start_n, offset)
+  # right of mask for non mask regions
+  desc_query_block_n = tl.make_tensor_descriptor(q, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
+                                          block_shape=[block_n, hidden_dim])
+  desc_do_block_n = tl.make_tensor_descriptor(do, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
+                                    block_shape=[block_n, hidden_dim])
+  desc_key_block_n = tl.make_tensor_descriptor(k, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
+                                    block_shape=[block_n, hidden_dim])
+
+  diff: tl.constexpr = n_ctx-(ctxid*block_m + block_m)
+  offset =  init_offset + block_m
+  for sub_block_n in tl.range(0, diff, block_n):
+    offset += sub_block_n
+    offset_n = offset + tl.arange(0, block_n)
+    dquery_temp, dkey_temp, dvalue_temp = _attention_bwd_dqdkdv_per_sublock_n(dquery, dkey, dvalue, m, d,
+                                      key, value, desc_query_block_n,
+                                      desc_do_block_n, desc_key_block_n, False, offset_m, offset_n, offset)
     dkey += dkey_temp
     dvalue += dvalue_temp
-    current_m += block_n
+    dquery += dquery_temp
 
   desc_dv.store([init_offset, 0], dvalue)
   desc_dk.store([init_offset, 0], dkey*sm_scale)
-  
-  desc_vT = tl.make_tensor_descriptor(v, shape=[hidden_dim, y_dim], strides=[1, hidden_dim],
-                                        block_shape=[hidden_dim, block_n])
-  desc_kT = tl.make_tensor_descriptor(k, shape=[hidden_dim, y_dim], strides=[1, hidden_dim],
-                                    block_shape=[hidden_dim, block_n])
-  desc_k = tl.make_tensor_descriptor(k, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
-                                    block_shape=[block_n, hidden_dim])
-  desc_query = tl.make_tensor_descriptor(q, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
-                                          block_shape=[mask_block_n1, hidden_dim])
-  desc_do = tl.make_tensor_descriptor(do, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
-                                    block_shape=[block_m, hidden_dim])
+  desc_dq.store([init_offset, 0], dquery*LN2)
 
-  dquery = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
-  query = desc_query.load([init_offset,0])
-  d_output = desc_do.load([init_offset,0])
-  max_offset = init_offset + tl.arange(0, block_m)
-  max_tensor = tl.load(m+max_offset)
-  delta = tl.load(d+max_offset)
-  start_n = init_offset + tl.arange(0, block_m)
-  # Mask
-  current_m = init_offset
-  for block_m_sub_block_n in tl.range(0, block_m, mask_block_n1):
-    offset =  block_m_sub_block_n*mask_block_n1 + init_offset
-    start_m = current_m + tl.arange(0, mask_block_n1)
-    dquery += _attention_bwd_dq_per_sublock_n(query, d_output, desc_vT, desc_kT, desc_k, max_tensor, start_m, start_n, offset, True, delta)
-    current_m += mask_block_n1
-  # left of Mask  
-  current_m = init_offset + block_m
-  start_n = init_offset + tl.arange(block_m, n_ctx)
-  for block_n_idx in tl.range(block_m, n_ctx, block_n):
-    offset =  block_m + block_n_idx*block_n + init_offset
-    start_m = current_m + tl.arange(0, block_n)
-    dquery += _attention_bwd_dq_per_sublock_n(query, d_output, desc_vT, desc_kT, desc_k, max_tensor, start_m, start_n, offset, True, delta)
-    current_m += block_n
-
-  # derivatives
-  desc_dq = tl.make_tensor_descriptor(dq, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
-                                        block_shape=[block_m, hidden_dim])
-  desc_dq.store([init_offset, 0], dquery)
-  
-@triton.jit
-def _attention_bwd_dq_per_sublock_n(query, d_output, desc_vT, desc_kT, desc_k, max_tensor, start_m, start_n, offset, MASK, delta):
-  vT = desc_vT.load([0, offset])
-  kT = desc_kT.load([0, offset])
-  k = desc_k.load([offset, 0])
-  qk = tl.dot(query, kT)
-  p = tl.math.exp2(qk - max_tensor)
-  if MASK: 
-    mask = (start_m[None, :] >= start_n[:, None])
-    p = tl.where(mask, p, 0.0)
-  dp = tl.dot(d_output, vT).to(tl.float32)
-  ds = p * (dp - delta[:,None])
-  ds = ds.to(tl.bfloat16)
-  return tl.dot(ds, k)
 
 @triton.jit
-def _attention_bwd_dkdv_per_sublock_n(dkey, dvalue, m, d, 
-                                      key, value, desc_query_mask_block_n1, desc_queryT_mask_block_n1, desc_do_mask_block_n1,
-                                      desc_doT_mask_block_n1, MASK, start_m, start_n, offset):
-  queryT = desc_queryT_mask_block_n1.load([0, offset])
-  max_tensor = tl.load(m+start_m)
-
-  qkT = tl.dot(key, queryT)
+def _attention_bwd_dqdkdv_per_sublock_n(dquery, dkey, dvalue, m, d,
+                                      key, value, desc_query_mask_block_n, desc_do_mask_block_n,
+                                      desc_key_mask_block_n, MASK, offset_m, offset_n, offset):
+  query = desc_query_mask_block_n.load([offset,0])
+  key_n = desc_key_mask_block_n.load([offset,0])
+  max_tensor = tl.load(m+offset_n)
+  qkT = tl.dot(key, tl.trans(query))
   pT = tl.math.exp2(qkT - max_tensor[None, :])
   if MASK:
-    mask = (start_m[None, :] >= start_n[:, None])
+    mask = (offset_n[None, :] >= offset_m[:, None])
     pT = tl.where(mask, pT, 0.0)
-  do = desc_do_mask_block_n1.load([offset, 0])
+  do = desc_do_mask_block_n.load([offset, 0]).to(tl.bfloat16)
   dvalue += tl.dot(pT.to(tl.bfloat16), do)
-  delta = tl.load(d+start_m)
-  doT = desc_doT_mask_block_n1.load([0, offset])
-  dpT = tl.dot(value, doT).to(tl.float32)
-  dsT = pT * (dpT - delta[None,:])
+  delta = tl.load(d+offset_n)
+  doT = tl.trans(do)
+  dpT = tl.dot(value.to(tl.bfloat16), doT).to(tl.float32)
+  dsT = pT * (dpT - delta[None, :])
   dsT = dsT.to(tl.bfloat16)
-  query = desc_query_mask_block_n1.load([offset, 0])
-  dkey += tl.dot(dsT, query)
-  return dkey, dvalue
+  dquery += tl.dot(dsT, key_n.to(tl.bfloat16))
+  dkey += tl.dot(dsT, query.to(tl.bfloat16))
+  return dquery, dkey, dvalue

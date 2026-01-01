@@ -2,6 +2,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 import triton
+import gc
 
 from config import Config
 from transformer.FusedAttention import _attention
@@ -13,6 +14,12 @@ from partitioner.gpu import identify_nodes_for_qkv, nodes_partion_q_fixed_kv, no
 
 torch.set_printoptions(profile="full")
 DEVICE = triton.runtime.driver.active.get_active_torch_device()
+
+def alloc_fn(size: int, align: int, _):
+  return torch.empty(size, dtype=torch.int8aaq
+                     , device=DEVICE)
+
+triton.set_allocator(alloc_fn)
 
 class MultiGPUExecutor:
 
@@ -68,9 +75,11 @@ class MultiGPUExecutor:
       dq = torch.empty_like(q)
       dk = torch.empty_like(k)
       dv = torch.empty_like(v)
-      bulk_slice_factor = 2
+      bulk_slice_factor = 1
       grid_bwd = (n_ctx//block_m, Config.num_heads, 1)
       print(f"Grid (bwd) : {grid_bwd}")
+      gc.collect()
+      torch.cuda.empty_cache()
       _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, Config.sm_scale, Config.num_heads, n_ctx, 
                                num_hiddens, block_m, block_n, bulk_slice_factor)
       print(f"dv : {dv}")
