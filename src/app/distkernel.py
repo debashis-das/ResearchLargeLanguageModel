@@ -71,9 +71,11 @@ class MultiGPUExecutor:
       bulk_slice_factor = 2
       grid_bwd = (n_ctx//block_m, Config.num_heads, 1)
       print(f"Grid (bwd) : {grid_bwd}")
-      _attention_bwd[grid_bwd](q, k, v, Config.sm_scale, do, dq, dk, dv, M, delta, Config.num_heads, n_ctx, 
+      _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, Config.sm_scale, Config.num_heads, n_ctx, 
                                num_hiddens, block_m, block_n, bulk_slice_factor)
-    
+      print(f"dv : {dv}")
+      print(f"dk : {dk}")
+      print(f"dq : {dq}")
       # if world_size != 1:
       #   exe_order_per_rank_v[rank].remove((rank,rank))
       #   exe_order_per_rank_h[rank].remove((rank,rank))
