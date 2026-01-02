@@ -36,15 +36,18 @@ class MultiGPUExecutor:
 
     self.rope_embedding = RopeEmbedding(Config.hiddens, Config.dropout, self.tokens_per_gpu, rank, device=DEVICE)
     self.attention = _attention.apply
-    self.loss_fn = nn.CrossEntropyLoss()
+    self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
 
   def execute(self, tokens):
+    loss = None
     try:
       if world_size != 1:
         exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
-      shift_labels, shit_logits = self.transformerPerGPU(tokens)
-      
-
+      shift_labels, shift_logits = self.transformerPerGPU(tokens)
+      loss = self.loss_fn(shift_logits,shift_labels)
+      dist.all_reduce(loss, op=dist.ReduceOp.SUM)
+      loss = loss / Config.tokens
+      print(f"Loss : {loss}")
       # if world_size != 1:
       #   exe_order_per_rank_v[rank].remove((rank,rank))
       #   exe_order_per_rank_h[rank].remove((rank,rank))
@@ -58,6 +61,7 @@ class MultiGPUExecutor:
       #   dist.barrier()
     finally:
       dist.destroy_process_group()
+    return loss
 
   def transformerPerGPU(self, tokens):
       input = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
