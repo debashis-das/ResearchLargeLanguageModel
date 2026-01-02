@@ -2,12 +2,14 @@ import torch
 import torch.distributed as dist
 from torch import nn
 import triton
+import gc
 
 from config import Config
 from transformer.MLP import MLP
 from transformer.FusedAttention import _attention
 from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
+from partitioner.gpu import identify_nodes_for_qkv, nodes_partion_q_fixed_kv, nodes_partion_vary_qkv
 
 # torch.set_printoptions(profile="full")
 DEVICE = triton.runtime.driver.active.get_active_torch_device()
@@ -38,10 +40,23 @@ class MultiGPUExecutor:
 
   def execute(self, tokens):
     try:
+      if world_size != 1:
+        exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
       loss = self.transformerPerGPU(tokens)
       dist.all_reduce(loss, op=dist.ReduceOp.SUM)
       loss = loss / Config.tokens
       print(f"Loss : {loss}")
+      # if world_size != 1:
+      #   exe_order_per_rank_v[rank].remove((rank,rank))
+      #   exe_order_per_rank_h[rank].remove((rank,rank))
+
+      #   dist.barrier()
+      #   nodes_partion_q_fixed_kv(exe_order_per_rank_h, exe_order_per_rank_v,
+      #                           self.rank, input_q, input_k, input_v)
+      #   dist.barrier()
+      #   nodes_partion_vary_qkv(exe_order_per_rank_unaligned, self.rank,
+      #                         input_q, input_k, input_v)
+      #   dist.barrier()
     finally:
       dist.destroy_process_group()
 
@@ -61,8 +76,7 @@ class MultiGPUExecutor:
         block_n = 16
         grid_fwd = (n_ctx//block_m, Config.num_heads, 1)
         # print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
-        output = self.attention(q, k, v, block_m, block_n, Config.num_heads, n_ctx, Config.hiddens, 
-                                Config.sm_scale, world_size, self.rank)
+        output = self.attention(q, k, v, block_m, block_n, Config.num_heads, n_ctx, Config.hiddens, Config.sm_scale, DEVICE, self.rank, self.rank)
         # print(f"Output ({rank},{rank}) : {output.shape}")
         output = output.permute(1,0,2).reshape(self.tokens_per_gpu,-1)
         v = v.permute(1,0,2).reshape(self.tokens_per_gpu, -1)
@@ -80,6 +94,8 @@ class MultiGPUExecutor:
       print(f"shift_logits: {shift_logits.shape}, shift_labels: {shift_labels.shape}")
       loss = self.loss_fn(shift_logits, shift_labels.long())
       return loss
+
+
 
 if __name__ == "__main__":
   # device = 'cuda' if torch.cuda.is_available() else 'cpu'
