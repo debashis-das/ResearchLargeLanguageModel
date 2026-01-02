@@ -1,5 +1,5 @@
 import torch
-import triton
+import gc
 
 from kernels.AttentionForwardKernel import _attention_forward
 from kernels.AttentionBackwardKernel import _attention_bwd_pre_process, _attention_bwd
@@ -55,12 +55,17 @@ class _attention(torch.autograd.Function):
       delta = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
       # Preprocess
       _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
-      # _attention_bwd_pre_process(o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
+      # bwd
       dq = torch.empty_like(q)
       dk = torch.empty_like(k)
       dv = torch.empty_like(v)
-      bulk_slice_factor = 2
+      bulk_slice_factor = 1
       grid_bwd = (n_ctx//block_m, num_heads, 1)
       print(f"Grid (bwd) : {grid_bwd}")
-      _attention_bwd[grid_bwd](q, k, v, o, sm_scale, do, dq, dk, dv, M, delta, num_heads, n_ctx, num_hiddens, block_m, block_n, bulk_slice_factor)
-    
+      gc.collect()
+      torch.cuda.empty_cache()
+      _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, num_heads, n_ctx, 
+                               num_hiddens, block_m, block_n, bulk_slice_factor)
+      print(f"dv : {dv}")
+      print(f"dk : {dk}")
+      print(f"dq : {dq}")
