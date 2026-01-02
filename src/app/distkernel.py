@@ -39,12 +39,10 @@ class MultiGPUExecutor:
     self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
 
   def execute(self, tokens):
-    loss = None
     try:
       if world_size != 1:
         exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
-      shift_labels, shift_logits = self.transformerPerGPU(tokens)
-      loss = self.loss_fn(shift_logits,shift_labels)
+      loss = self.transformerPerGPU(tokens)
       dist.all_reduce(loss, op=dist.ReduceOp.SUM)
       loss = loss / Config.tokens
       print(f"Loss : {loss}")
@@ -61,12 +59,10 @@ class MultiGPUExecutor:
       #   dist.barrier()
     finally:
       dist.destroy_process_group()
-    return loss
 
   def transformerPerGPU(self, tokens):
-      input = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
-      print(f"Input : {input.shape}")
-      X = self.embedding(input)
+      src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
+      X = self.embedding(src_tokens)
       for _ in range(Config.learning_iter):
         X = self.rms1(X)
         q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
@@ -79,24 +75,25 @@ class MultiGPUExecutor:
         block_m = 32
         block_n = 16
         grid_fwd = (n_ctx//block_m, Config.num_heads, 1)
-        print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
+        # print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
         output = self.attention(q, k, v, block_m, block_n, Config.num_heads, n_ctx, Config.hiddens, Config.sm_scale, DEVICE, self.rank, self.rank)
-        print(f"Output ({rank},{rank}) : {output.shape}")
+        # print(f"Output ({rank},{rank}) : {output.shape}")
         output = output.permute(1,0,2).reshape(self.tokens_per_gpu,-1)
         v = v.permute(1,0,2).reshape(self.tokens_per_gpu, -1)
-        print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
+        # print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
         x_residual = output + v
         y_rms = self.rms2(x_residual)
         z = self.mlp(y_rms)
         X = x_residual + self.W_down(z)
       X = self.rms3(X)
       logits = self.dense(X)
-      print(f"Logits : {logits.shape}")
       logits = logits.float()
-      print(f"Logits : {logits}")
-      shift_labels = input[1:].contiguous()
+      print(f"Logits : {logits.shape} : {logits}")
+      shift_labels = src_tokens[1:].contiguous()
       shift_logits = logits[:-1,:].contiguous()
-      return shift_labels, shift_logits
+      print(f"shift_logits: {shift_logits.shape}, shift_labels: {shift_labels.shape}")
+      loss = self.loss_fn(shift_logits, shift_labels.long())
+      return loss
 
 
 
@@ -110,4 +107,4 @@ if __name__ == "__main__":
   rank = dist.get_rank()
   multi_gpu_executor = MultiGPUExecutor(world_size, rank)
   tokens = torch.randint(low=0, high=Config.total_vocab, size=(tokens_per_gpu,)).tolist()
-  logits = multi_gpu_executor.execute(tokens)
+  multi_gpu_executor.execute(tokens)
