@@ -40,13 +40,13 @@ def nodes_partion_q_fixed_kv(exe_order_per_rank_h, exe_order_per_rank_v, rank, q
         if kv_rank == rank:
             req_rec_q = dist.irecv(recv_q, src=q_rank)
             req_rec_q.wait()
-            print(f"Rec1(s:{q_rank},c:{rank}) {recv_q.shape}, {k.shape}, {v.shape}")
+            print(f"Rec1(s:{q_rank},c:{rank}) {recv_q.shape}, {k.shape}, {v.shape} : {recv_q.stride()}, {k.stride()}, {v.stride()}")
             o = torch.empty_like(q)
-            _attention_forward[grid](sm_scale, M, num_heads, n_ctx,
-                        q, k, v, o,
-                        hidden_dim, block_m, block_n, True, warp_specialize)
-            gc.collect()
-            torch.cuda.empty_cache()
+            # _attention_forward[grid](sm_scale, M, num_heads, n_ctx,
+            #             q, k, v, o,
+            #             hidden_dim, block_m, block_n, True, warp_specialize)
+            # gc.collect()
+            # torch.cuda.empty_cache()
 
 def nodes_partion_vary_qkv(exe_order_per_rank_unaligned, rank, q, k, v, grid, 
                            sm_scale, M, num_heads, n_ctx, 
@@ -86,13 +86,13 @@ def nodes_partion_vary_qkv(exe_order_per_rank_unaligned, rank, q, k, v, grid,
             req_rec_q = dist.irecv(recv_q, src=q_rank)
             req_rec_q.wait()
             # print(f"input irecv (src:{q_rank},dest recevied to :{rank})")
-          print(f"R({rank})(s1:{q_rank},s2:{kv_rank}) {recv_q.shape}, {recv_k.shape}, {recv_v.shape}")
+          print(f"R({rank})(s1:{q_rank},s2:{kv_rank}) {recv_q.shape}, {recv_k.shape}, {recv_v.shape}: {recv_q.stride()}, {recv_k.stride()}, {recv_v.stride()}")
           o = torch.empty_like(q)
-          _attention_forward[grid](sm_scale, M, num_heads, n_ctx,
-                        recv_q, recv_k, recv_v, o,
-                        hidden_dim, block_m, block_n, False, warp_specialize)
-          gc.collect()
-          torch.cuda.empty_cache()
+          # _attention_forward[grid](sm_scale, M, num_heads, n_ctx,
+          #               recv_q, recv_k, recv_v, o,
+          #               hidden_dim, block_m, block_n, False, warp_specialize)
+          # gc.collect()
+          # torch.cuda.empty_cache()
  
 
 class _attention(torch.autograd.Function):
@@ -110,11 +110,11 @@ class _attention(torch.autograd.Function):
         
         # Attention forward
         # mask region
-        _attention_forward[grid](sm_scale, M, num_heads, n_ctx,
-                        q, k, v, o,
-                        hidden_dim, block_m, block_n, True, warp_specialize)
-        gc.collect()
-        torch.cuda.empty_cache()
+        # _attention_forward[grid](sm_scale, M, num_heads, n_ctx,
+        #                 q, k, v, o,
+        #                 hidden_dim, block_m, block_n, True, warp_specialize)
+        # gc.collect()
+        # torch.cuda.empty_cache()
         if world_size != 1:
             dist.barrier()
             exe_order_per_rank_v[rank].remove((rank,rank))

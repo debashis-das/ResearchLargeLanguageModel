@@ -10,7 +10,8 @@ from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
 
 # torch.set_printoptions(profile="full")
-DEVICE = triton.runtime.driver.active.get_active_torch_device()
+# DEVICE = triton.runtime.driver.active.get_active_torch_device()
+DEVICE = "cpu"
 
 
 class MultiGPUExecutor:
@@ -61,12 +62,12 @@ class MultiGPUExecutor:
         block_n = 16
         grid_fwd = (n_ctx//block_m, Config.num_heads, 1)
         # print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
-        output = self.attention(q, k, v, block_m, block_n, Config.num_heads, n_ctx, Config.hiddens, 
+        output, max_tensor = self.attention(q, k, v, block_m, block_n, Config.num_heads, n_ctx, Config.hiddens, 
                                 Config.sm_scale, world_size, self.rank)
-        # print(f"Output ({rank},{rank}) : {output.shape}")
+        print(f"Output ({rank},{rank}): {output.shape}, max_tensor: {max_tensor.shape}")
         output = output.permute(1,0,2).reshape(self.tokens_per_gpu,-1)
         v = v.permute(1,0,2).reshape(self.tokens_per_gpu, -1)
-        # print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
+        print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
         x_residual = output + v
         y_rms = self.rms2(x_residual)
         z = self.mlp(y_rms)
@@ -84,7 +85,7 @@ class MultiGPUExecutor:
 if __name__ == "__main__":
   # device = 'cuda' if torch.cuda.is_available() else 'cpu'
   # per gpu code
-  dist.init_process_group("nccl")
+  dist.init_process_group("gloo")
   world_size = dist.get_world_size()
   tokens_per_gpu = Config.tokens//world_size
 
