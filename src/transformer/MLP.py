@@ -3,13 +3,13 @@ from torch import nn
 
 class MLP(nn.Module):
     """The positionwise feed-forward network."""
-    def __init__(self, num_hiddens, num_intermediate):
+    def __init__(self, num_hiddens, num_intermediate, device):
         super().__init__()
         self.num_hiddens = num_hiddens
         self.num_intermediate = num_intermediate
-        self.gate_proj = nn.Linear(self.num_hiddens, self.num_intermediate, bias=False)
-        self.up_proj = nn.Linear(self.num_hiddens, self.num_intermediate, bias=False)
-        self.down_proj = nn.Linear(self.num_intermediate, self.num_hiddens, bias=False)
+        self.gate_proj = nn.Linear(self.num_hiddens, self.num_intermediate, bias=False, device=device)
+        self.up_proj = nn.Linear(self.num_hiddens, self.num_intermediate, bias=False, device=device)
+        self.down_proj = nn.Linear(self.num_intermediate, self.num_hiddens, bias=False, device=device)
         self.act_fn = nn.SiLU()
 
     # @torch.compile(mode="max-autotune")
