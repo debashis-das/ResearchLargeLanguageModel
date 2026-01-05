@@ -110,8 +110,14 @@ def nodes_partion_vary_qkv(exe_order_per_rank_unaligned, rank, q, k, v, grid,
             req_rec_sft_d.wait()
           else:
             print(f"Current : {current_o.shape},{current_m.shape},{current_sft_d.shape}: {o.shape},{M.shape},{sft_dem.shape}")
-          # gc.collect()
-          # torch.cuda.empty_cache()
+            maximum = torch.maximum(current_m, M)
+            scale_current = torch.exp2(current_m-maximum)
+            scale_M = torch.exp2(M-maximum)
+            current_sft_d = current_sft_d*scale_current+sft_dem*scale_M
+            current_o = current_o*scale_current+o*scale_M
+            current_m = maximum
+            # gc.collect()
+            # torch.cuda.empty_cache()
  
 
 class _attention(torch.autograd.Function):
@@ -193,13 +199,19 @@ class _attention(torch.autograd.Function):
             nodes_partion_vary_qkv(exe_order_per_rank_unaligned, rank, q, k, v, 
                                    grid, sm_scale, M, num_heads, n_ctx, 
                                    hidden_dim, block_m, block_n, warp_specialize, o, M, sft_d)
-            for output, work_o, m, work_m, sft_d, work_sft_d in zip(output_list_o, work_list_o, output_list_m, work_list_m, output_list_sft_d, work_list_sft_d):
-               work_o.wait()
-               work_m.wait()
-               work_sft_d.wait()
-               print(f"Output(R:{rank}) : {output.shape}, {m.shape}, {sft_d.shape}")
-
             dist.barrier()
+            for output_recv, work_o, m_recv, work_m, sft_d_recv, work_sft_d in zip(output_list_o, work_list_o, output_list_m, work_list_m, output_list_sft_d, work_list_sft_d):
+              work_o.wait()
+              work_m.wait()
+              work_sft_d.wait()
+              print(f"Output(R:{rank}) : {output_recv.shape}, {m_recv.shape}, {sft_d_recv.shape}")
+              maximum = torch.maximum(M, m_recv)
+              scale_current = torch.exp2(M-maximum)
+              scale_recv = torch.exp2(m_recv-maximum)
+              sft_d = sft_d*scale_current+sft_d_recv*scale_recv
+              o = o*scale_current+output_recv*scale_recv
+              M = maximum
+            o = o / sft_d[:,None]
 
         ctx.save_for_backward(q,k,v,o,M)
         ctx.sm_scale = sm_scale
