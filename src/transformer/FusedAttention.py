@@ -2,8 +2,8 @@ import torch
 import gc
 import torch.distributed as dist
 
-from kernels.AttentionForwardKernel import _attention_forward
-from kernels.AttentionBackwardKernel import _attention_bwd_pre_process, _attention_bwd
+# from kernels.AttentionForwardKernel import _attention_forward
+# from kernels.AttentionBackwardKernel import _attention_bwd_pre_process, _attention_bwd
 
 def identify_nodes_for_qkv(world_size:int):
     assert world_size % 2 == 0
@@ -40,17 +40,25 @@ def nodes_partion_q_fixed_kv(exe_order_per_rank_h, exe_order_per_rank_v, rank, q
         if kv_rank == rank:
             req_rec_q = dist.irecv(recv_q, src=q_rank)
             req_rec_q.wait()
-            print(f"Rec1(s:{q_rank},c:{rank}) {recv_q.shape}, {k.shape}, {v.shape} : {recv_q.stride()}, {k.stride()}, {v.stride()}")
-            o = torch.empty_like(q)
-            # _attention_forward[grid](sm_scale, M, num_heads, n_ctx,
+            # print(f"Rec1(s:{q_rank},c:{rank}) {recv_q.shape}, {k.shape}, {v.shape} : {recv_q.stride()}, {k.stride()}, {v.stride()}")
+            o = torch.ones_like(q)
+            M = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
+            sft_dem = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
+            # _attention_forward[grid](sm_scale, M, sft_dem, num_heads, n_ctx,
             #             q, k, v, o,
             #             hidden_dim, block_m, block_n, True, warp_specialize)
+            req_rec_o = dist.isend(o, dst=q_rank, tag=0)
+            req_rec_m = dist.isend(M, dst=q_rank, tag=1)
+            req_rec_sft_d = dist.isend(sft_dem, dst=q_rank, tag=2)
+            req_rec_o.wait()
+            req_rec_m.wait()
+            req_rec_sft_d.wait()
             # gc.collect()
             # torch.cuda.empty_cache()
 
 def nodes_partion_vary_qkv(exe_order_per_rank_unaligned, rank, q, k, v, grid, 
                            sm_scale, M, num_heads, n_ctx, 
-                           hidden_dim, block_m, block_n, warp_specialize):
+                           hidden_dim, block_m, block_n, warp_specialize, current_o, current_m, current_sft_d):
     recv_k = torch.empty_like(k)
     recv_v = torch.empty_like(v)
 
@@ -86,11 +94,22 @@ def nodes_partion_vary_qkv(exe_order_per_rank_unaligned, rank, q, k, v, grid,
             req_rec_q = dist.irecv(recv_q, src=q_rank)
             req_rec_q.wait()
             # print(f"input irecv (src:{q_rank},dest recevied to :{rank})")
-          print(f"R({rank})(s1:{q_rank},s2:{kv_rank}) {recv_q.shape}, {recv_k.shape}, {recv_v.shape}: {recv_q.stride()}, {recv_k.stride()}, {recv_v.stride()}")
-          o = torch.empty_like(q)
+          print(f"R({rank}:{rank==q_rank})(s1:{q_rank},s2:{kv_rank}) {recv_q.shape}, {recv_k.shape}, {recv_v.shape}: {recv_q.stride()}, {recv_k.stride()}, {recv_v.stride()}")
+          o = torch.ones_like(q)
+          M = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
+          sft_dem = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
           # _attention_forward[grid](sm_scale, M, num_heads, n_ctx,
           #               recv_q, recv_k, recv_v, o,
           #               hidden_dim, block_m, block_n, False, warp_specialize)
+          if rank != q_rank:
+            req_rec_o = dist.isend(o, dst=q_rank, tag=0)
+            req_rec_m = dist.isend(M, dst=q_rank, tag=1)
+            req_rec_sft_d = dist.isend(sft_dem, dst=q_rank, tag=2)
+            req_rec_o.wait()
+            req_rec_m.wait()
+            req_rec_sft_d.wait()
+          else:
+            print(f"Current : {current_o.shape},{current_m.shape},{current_sft_d.shape}: {o.shape},{M.shape},{sft_dem.shape}")
           # gc.collect()
           # torch.cuda.empty_cache()
  
@@ -105,12 +124,14 @@ class _attention(torch.autograd.Function):
         
         o = torch.empty_like(q)
         M = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
+        sft_d = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
+
         grid = (n_ctx//block_m, num_heads, 1)
         # print(f"Grid : {grid}")
         
         # Attention forward
         # mask region
-        # _attention_forward[grid](sm_scale, M, num_heads, n_ctx,
+        # _attention_forward[grid](sm_scale, M, sft_d, num_heads, n_ctx,
         #                 q, k, v, o,
         #                 hidden_dim, block_m, block_n, True, warp_specialize)
         # gc.collect()
@@ -120,13 +141,64 @@ class _attention(torch.autograd.Function):
             exe_order_per_rank_v[rank].remove((rank,rank))
             exe_order_per_rank_h[rank].remove((rank,rank))
             dist.barrier()
+
+            work_list_o = []
+            work_list_m = []
+            work_list_sft_d = []
+
+            output_list_o = []
+            output_list_m = []
+            output_list_sft_d = []
+
+            for _, kv_rank  in exe_order_per_rank_h[rank]:
+              # print(f"Output({rank}) irecv src: {kv_rank}")
+              recv_o = torch.empty_like(q)
+              req_rec_o = dist.irecv(recv_o, src=kv_rank, tag=0)
+              work_list_o.append(req_rec_o)
+              output_list_o.append(recv_o)
+
+              recv_m = torch.empty_like(M)
+              req_rec_m = dist.irecv(recv_m, src=kv_rank, tag=1)
+              work_list_m.append(req_rec_m)
+              output_list_m.append(recv_m)
+
+              recv_sft_d = torch.empty_like(sft_d)
+              req_rec_sft_d = dist.irecv(recv_sft_d, src=kv_rank, tag=2)  
+              work_list_sft_d.append(req_rec_sft_d)
+              output_list_sft_d.append(recv_sft_d)
+
+            for idx in range(world_size):
+              for q_rank, kv_rank in exe_order_per_rank_unaligned[idx]:
+                if rank == q_rank and idx != rank:
+                  # print(f"Output({rank}) irecv src: {q_rank} : {kv_rank} : {idx}")
+                  recv_o = torch.empty_like(q)
+                  req_rec_o = dist.irecv(recv_o, src=q_rank, tag=0) 
+                  work_list_o.append(req_rec_o)
+                  output_list_o.append(recv_o)
+
+                  recv_m = torch.empty_like(M)
+                  req_rec_m = dist.irecv(recv_m, src=kv_rank, tag=1) 
+                  work_list_m.append(req_rec_m)
+                  output_list_m.append(recv_m)
+
+                  recv_sft_d = torch.empty_like(sft_d)
+                  req_rec_sft_d = dist.irecv(recv_sft_d, src=kv_rank, tag=2)  
+                  work_list_sft_d.append(req_rec_sft_d)
+                  output_list_sft_d.append(recv_sft_d)
+
             nodes_partion_q_fixed_kv(exe_order_per_rank_h, exe_order_per_rank_v,
                                      rank, q, k, v, grid, sm_scale, M, num_heads, n_ctx, 
                                      hidden_dim, block_m, block_n, warp_specialize)
             dist.barrier()
             nodes_partion_vary_qkv(exe_order_per_rank_unaligned, rank, q, k, v, 
                                    grid, sm_scale, M, num_heads, n_ctx, 
-                                   hidden_dim, block_m, block_n, warp_specialize)
+                                   hidden_dim, block_m, block_n, warp_specialize, o, M, sft_d)
+            for output, work_o, m, work_m, sft_d, work_sft_d in zip(output_list_o, work_list_o, output_list_m, work_list_m, output_list_sft_d, work_list_sft_d):
+               work_o.wait()
+               work_m.wait()
+               work_sft_d.wait()
+               print(f"Output(R:{rank}) : {output.shape}, {m.shape}, {sft_d.shape}")
+
             dist.barrier()
 
         ctx.save_for_backward(q,k,v,o,M)
@@ -152,7 +224,7 @@ class _attention(torch.autograd.Function):
       print(f"Grid (bwd_pre_process) : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
       delta = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
       # Preprocess
-      _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
+      # _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
       # bwd
       dq = torch.empty_like(q)
       dk = torch.empty_like(k)
@@ -162,8 +234,8 @@ class _attention(torch.autograd.Function):
       print(f"Grid (bwd) : {grid_bwd}")
       gc.collect()
       torch.cuda.empty_cache()
-      _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, num_heads, n_ctx, 
-                               num_hiddens, block_m, block_n, bulk_slice_factor)
+      # _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, num_heads, n_ctx, 
+      #                          num_hiddens, block_m, block_n, bulk_slice_factor)
       print(f"dv : {dv}")
       print(f"dk : {dk}")
       print(f"dq : {dq}")

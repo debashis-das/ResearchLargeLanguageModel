@@ -51,7 +51,7 @@ def _attention_forward_inner_mask(acc, l_i, m_i, q, desc_k, desc_v,
     return acc, l_i, m_i
 
 @triton.jit
-def _attention_forward(sm_scale, max_tensor, num_heads, n_ctx, desc_q, desc_k, desc_v, desc_o,
+def _attention_forward(sm_scale, max_tensor, softmax_dem, num_heads, n_ctx, desc_q, desc_k, desc_v, desc_o,
                        hidden_dim: tl.constexpr, block_m: tl.constexpr, block_n: tl.constexpr, mask_region: tl.constexpr,
                        warp_specialize: tl.constexpr):
     dtype = tl.float32
@@ -93,5 +93,8 @@ def _attention_forward(sm_scale, max_tensor, num_heads, n_ctx, desc_q, desc_k, d
     m_i += tl.math.log2(l_i)
     acc = acc / l_i[:, None]
     m_ptrs = max_tensor + off_h * n_ctx + offs_m
+    sft_dem_ptrs = softmax_dem + off_h * n_ctx + offs_m
     tl.store(m_ptrs, m_i)
+    tl.store(sft_dem_ptrs, l_i)
     desc_o.store([qo_offset_y, 0], acc.to(dtype))     
+
