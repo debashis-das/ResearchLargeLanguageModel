@@ -46,6 +46,7 @@ class MultiGPUExecutor:
       dist.all_reduce(loss, op=dist.ReduceOp.SUM)
       loss = loss / Config.tokens
       print(f"Loss : {loss}")
+      loss.backward()
       # if world_size != 1:
       #   exe_order_per_rank_v[rank].remove((rank,rank))
       #   exe_order_per_rank_h[rank].remove((rank,rank))
@@ -76,8 +77,10 @@ class MultiGPUExecutor:
         block_n = 16
         grid_fwd = (n_ctx//block_m, Config.num_heads, 1)
         # print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
-        output = self.attention(q, k, v, block_m, block_n, Config.num_heads, n_ctx, Config.hiddens, Config.sm_scale, DEVICE, self.rank, self.rank)
-        # print(f"Output ({rank},{rank}) : {output.shape}")
+        # output, max_tensor = self.attention(q, k, v, block_m, block_n, Config.num_heads, n_ctx, Config.hiddens, Config.sm_scale, DEVICE, self.rank, self.rank)
+        # print(f"Rank : {self.rank}")
+        output = self.attention(q, k, v, block_m, block_n, Config.num_heads, n_ctx, Config.hiddens,Config.sm_scale, world_size, self.rank)
+        # print(f"Output ({rank},{rank}) : {output}")
         output = output.permute(1,0,2).reshape(self.tokens_per_gpu,-1)
         v = v.permute(1,0,2).reshape(self.tokens_per_gpu, -1)
         # print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
@@ -91,7 +94,7 @@ class MultiGPUExecutor:
       print(f"Logits : {logits.shape} : {logits}")
       shift_labels = src_tokens[1:].contiguous()
       shift_logits = logits[:-1,:].contiguous()
-      print(f"shift_logits: {shift_logits.shape}, shift_labels: {shift_labels.shape}")
+      # print(f"shift_logits: {shift_logits.shape}, shift_labels: {shift_labels.shape}")
       loss = self.loss_fn(shift_logits, shift_labels.long())
       return loss
 

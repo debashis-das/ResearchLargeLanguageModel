@@ -1,9 +1,12 @@
+import threading
 import torch
 import gc
 import torch.distributed as dist
 
 # from kernels.AttentionForwardKernel import _attention_forward
 # from kernels.AttentionBackwardKernel import _attention_bwd_pre_process, _attention_bwd
+
+semaphore = threading.Semaphore()
 
 def identify_nodes_for_qkv(world_size:int):
     assert world_size % 2 == 0
@@ -30,38 +33,41 @@ def identify_nodes_for_qkv(world_size:int):
 def nodes_partion_q_fixed_kv_forward(exe_order_per_rank_h, exe_order_per_rank_v, rank, q, k, v, grid, 
                              sm_scale, M, num_heads, n_ctx, 
                              hidden_dim, block_m, block_n, warp_specialize):
-    recv_q = torch.empty_like(q)
+    wait_list = []
     for (q_rank, dst_rank) in exe_order_per_rank_h[rank]:
         if q_rank != dst_rank:
             req_rec_q = dist.isend(q, dst=dst_rank)
-            req_rec_q.wait()
+            wait_list.append(req_rec_q)
+
+    for work in wait_list:
+       work.wait() 
             
     for (q_rank, kv_rank) in exe_order_per_rank_v[rank]:
         if kv_rank == rank:
+            recv_q = torch.empty_like(q)
             req_rec_q = dist.irecv(recv_q, src=q_rank)
             req_rec_q.wait()
-            # print(f"Rec1(s:{q_rank},c:{rank}) {recv_q.shape}, {k.shape}, {v.shape} : {recv_q.stride()}, {k.stride()}, {v.stride()}")
-            o = torch.ones_like(q)
-            M = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
-            sft_dem = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
-            # _attention_forward[grid](sm_scale, M, sft_dem, num_heads, n_ctx,
-            #             q, k, v, o,
-            #             hidden_dim, block_m, block_n, True, warp_specialize)
-            req_rec_o = dist.isend(o, dst=q_rank, tag=0)
-            req_rec_m = dist.isend(M, dst=q_rank, tag=1)
-            req_rec_sft_d = dist.isend(sft_dem, dst=q_rank, tag=2)
-            req_rec_o.wait()
-            req_rec_m.wait()
-            req_rec_sft_d.wait()
-            gc.collect()
-            torch.cuda.empty_cache()
+            # print(f"Rec1_forward(s:{q_rank},c:{rank}) {recv_q.shape}, {k.shape}, {v.shape} : {recv_q.stride()}, {k.stride()}, {v.stride()}")
+            with semaphore:
+              o = torch.ones_like(q)
+              M = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
+              sft_dem = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
+
+              # _attention_forward[grid](sm_scale, M, sft_dem, num_heads, n_ctx,
+              #             recv_q, k, v, o,
+              #             hidden_dim, block_m, block_n, True, warp_specialize)
+              req_rec_o = dist.isend(o, dst=q_rank, tag=0)
+              req_rec_m = dist.isend(M, dst=q_rank, tag=1)
+              req_rec_sft_d = dist.isend(sft_dem, dst=q_rank, tag=2)
+              req_rec_o.wait()
+              req_rec_m.wait()
+              req_rec_sft_d.wait()
+              gc.collect()
+              torch.cuda.empty_cache()
 
 def nodes_partion_vary_qkv_forward(exe_order_per_rank_unaligned, rank, q, k, v, grid, 
                            sm_scale, M, num_heads, n_ctx, 
                            hidden_dim, block_m, block_n, current_o, current_m, current_sft_d, warp_specialize):
-    recv_k = torch.empty_like(k)
-    recv_v = torch.empty_like(v)
-
     input_2_send = False
     input_2_recv = False
     for rank_in_list, list_per_rank in enumerate(exe_order_per_rank_unaligned):
@@ -79,6 +85,8 @@ def nodes_partion_vary_qkv_forward(exe_order_per_rank_unaligned, rank, q, k, v, 
           input_2_send = True
       
       if len(list_per_rank) != 0 and rank_in_list == rank :
+        recv_k = torch.empty_like(k)
+        recv_v = torch.empty_like(v)
         if not input_2_recv:
           req_rec_k = dist.irecv(recv_k, src=list_per_rank[0][1])
           req_rec_v = dist.irecv(recv_v, src=list_per_rank[0][1])
@@ -98,64 +106,68 @@ def nodes_partion_vary_qkv_forward(exe_order_per_rank_unaligned, rank, q, k, v, 
           o = torch.ones_like(q)
           M = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
           sft_dem = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
-          # _attention_forward[grid](sm_scale, M, num_heads, n_ctx,
-          #               recv_q, recv_k, recv_v, o,
-          #               hidden_dim, block_m, block_n, False, warp_specialize)
-          if rank != q_rank:
-            req_rec_o = dist.isend(o, dst=q_rank, tag=0)
-            req_rec_m = dist.isend(M, dst=q_rank, tag=1)
-            req_rec_sft_d = dist.isend(sft_dem, dst=q_rank, tag=2)
-            req_rec_o.wait()
-            req_rec_m.wait()
-            req_rec_sft_d.wait()
-          else:
-            print(f"Current : {current_o.shape},{current_m.shape},{current_sft_d.shape}: {o.shape},{M.shape},{sft_dem.shape}")
-            maximum = torch.maximum(current_m, M)
-            scale_current = torch.exp2(current_m-maximum)
-            scale_M = torch.exp2(M-maximum)
-            current_sft_d = current_sft_d*scale_current+sft_dem*scale_M
-            current_o = current_o*scale_current.unsqueeze(-1)+o*scale_M.unsqueeze(-1)
-            current_m = maximum
-            gc.collect()
-            torch.cuda.empty_cache()
+          with semaphore:
+            # _attention_forward[grid](sm_scale, M, num_heads, n_ctx,
+            #               recv_q, recv_k, recv_v, o,
+            #               hidden_dim, block_m, block_n, False, warp_specialize)
+            if rank != q_rank:
+              req_rec_o = dist.isend(o, dst=q_rank, tag=0)
+              req_rec_m = dist.isend(M, dst=q_rank, tag=1)
+              req_rec_sft_d = dist.isend(sft_dem, dst=q_rank, tag=2)
+              req_rec_o.wait()
+              req_rec_m.wait()
+              req_rec_sft_d.wait()
+            else:
+              # print(f"Current : {current_o.shape},{current_m.shape},{current_sft_d.shape}: {o.shape},{M.shape},{sft_dem.shape}")
+              maximum = torch.maximum(current_m, M)
+              scale_current = torch.exp2(current_m-maximum)
+              scale_M = torch.exp2(M-maximum)
+              current_sft_d = current_sft_d*scale_current+sft_dem*scale_M
+              current_o = current_o*scale_current.unsqueeze(-1)+o*scale_M.unsqueeze(-1)
+              current_m = maximum
+              gc.collect()
+              torch.cuda.empty_cache()
 
 
 def nodes_partion_q_fixed_kv_backward(exe_order_per_rank_h, exe_order_per_rank_v, rank, q, k, v, grid_preprocess, grid_bwd,
                                       o, do, M, pre_block, sm_scale, num_heads, n_ctx, num_hiddens, block_m, block_n, 
                                       bulk_slice_factor, warp_specialize):
     recv_q = torch.empty_like(q)
+    wait_list = []
     for (q_rank, dst_rank) in exe_order_per_rank_h[rank]:
         if q_rank != dst_rank:
             req_rec_q = dist.isend(q, dst=dst_rank)
-            req_rec_q.wait()
+            wait_list.append(req_rec_q)
+
+    for work in wait_list:
+       work.wait() 
             
     for (q_rank, kv_rank) in exe_order_per_rank_v[rank]:
         if kv_rank == rank:
             req_rec_q = dist.irecv(recv_q, src=q_rank)
             req_rec_q.wait()
-            # print(f"Rec1(s:{q_rank},c:{rank}) {recv_q.shape}, {k.shape}, {v.shape} : {recv_q.stride()}, {k.stride()}, {v.stride()}")
-            delta = torch.empty((recv_q.shape[0], recv_q.shape[1]), device=recv_q.device, dtype=torch.float32)
-            # _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
-            dq = torch.empty_like(recv_q)
-            dk = torch.empty_like(k)
-            dv = torch.empty_like(v)
-            # _attention_bwd[grid_bwd](recv_q, k, v, do, dq, dk, dv, M, delta, sm_scale, num_heads, n_ctx, 
-            #                                num_hiddens, block_m, block_n, bulk_slice_factor)
-            req_rec_dq = dist.isend(dq, dst=q_rank, tag=0)
-            req_rec_dk = dist.isend(dk, dst=q_rank, tag=1)
-            req_rec_dv = dist.isend(dv, dst=q_rank, tag=2)
-            req_rec_dq.wait()
-            req_rec_dv.wait()
-            req_rec_dv.wait()
-            gc.collect()
-            torch.cuda.empty_cache()
+            # print(f"Rec1_backward(s:{q_rank},c:{rank}) {recv_q.shape}, {k.shape}, {v.shape} : {recv_q.stride()}, {k.stride()}, {v.stride()}")
+            with semaphore:
+              delta = torch.empty((recv_q.shape[0], recv_q.shape[1]), device=recv_q.device, dtype=torch.float32)
+              # _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
+              dq = torch.empty_like(recv_q)
+              dk = torch.empty_like(k)
+              dv = torch.empty_like(v)
+              # _attention_bwd[grid_bwd](recv_q, k, v, do, dq, dk, dv, M, delta, sm_scale, num_heads, n_ctx, 
+              #                                num_hiddens, block_m, block_n, bulk_slice_factor)
+              req_rec_dq = dist.isend(dq, dst=q_rank, tag=0)
+              req_rec_dk = dist.isend(dk, dst=q_rank, tag=1)
+              req_rec_dv = dist.isend(dv, dst=q_rank, tag=2)
+              req_rec_dq.wait()
+              req_rec_dk.wait()
+              req_rec_dv.wait()
+              gc.collect()
+              torch.cuda.empty_cache()
+    
 
 def nodes_partion_vary_qkv_backward(exe_order_per_rank_unaligned, rank, q, k, v, grid_preprocess, grid_bwd,
                                    o, do, M, current_dq, current_dk, current_dv, pre_block, sm_scale, num_heads, n_ctx, num_hiddens, block_m, block_n, 
                                    bulk_slice_factor, warp_specialize):
-    recv_k = torch.empty_like(k)
-    recv_v = torch.empty_like(v)
-
     input_2_send = False
     input_2_recv = False
     for rank_in_list, list_per_rank in enumerate(exe_order_per_rank_unaligned):
@@ -173,6 +185,8 @@ def nodes_partion_vary_qkv_backward(exe_order_per_rank_unaligned, rank, q, k, v,
           input_2_send = True
       
       if len(list_per_rank) != 0 and rank_in_list == rank :
+        recv_k = torch.empty_like(k)
+        recv_v = torch.empty_like(v)
         if not input_2_recv:
           req_rec_k = dist.irecv(recv_k, src=list_per_rank[0][1])
           req_rec_v = dist.irecv(recv_v, src=list_per_rank[0][1])
@@ -189,30 +203,30 @@ def nodes_partion_vary_qkv_backward(exe_order_per_rank_unaligned, rank, q, k, v,
             req_rec_q.wait()
             # print(f"input irecv (src:{q_rank},dest recevied to :{rank})")
           print(f"R({rank}:{rank==q_rank})(s1:{q_rank},s2:{kv_rank}) {recv_q.shape}, {recv_k.shape}, {recv_v.shape}: {recv_q.stride()}, {recv_k.stride()}, {recv_v.stride()}")
-          delta = torch.empty((req_rec_q.shape[0], req_rec_q.shape[1]), device=req_rec_q.device, dtype=torch.float32)
-          # _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
-          dq = torch.empty_like(recv_q)
-          dk = torch.empty_like(recv_k)
-          dv = torch.empty_like(recv_v)
-          # _attention_bwd[grid_bwd](req_rec_q, recv_k, recv_v, do, dq, dk, dv, M, delta, sm_scale, num_heads, n_ctx, 
-          #                                 num_hiddens, block_m, block_n, bulk_slice_factor)
-          if rank != q_rank:
-            req_rec_dq = dist.isend(dq, dst=q_rank, tag=0)
-            req_rec_dk = dist.isend(dk, dst=q_rank, tag=1)
-            req_rec_dv = dist.isend(dv, dst=q_rank, tag=2)
-            req_rec_dq.wait()
-            req_rec_dv.wait()
-            req_rec_dv.wait()
-            gc.collect()
-            torch.cuda.empty_cache()
-          else:
-            print(f"Current : {current_dq.shape},{current_dk.shape},{current_dv.shape}: {dq.shape},{dv.shape},{dv.shape}")
-            current_dq += dq
-            current_dk += dk
-            current_dv += dv
-            gc.collect()
-            torch.cuda.empty_cache()
-
+          with semaphore:
+            delta = torch.empty((recv_q.shape[0], recv_q.shape[1]), device=recv_q.device, dtype=torch.float32)
+            # _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
+            dq = torch.empty_like(recv_q)
+            dk = torch.empty_like(recv_k)
+            dv = torch.empty_like(recv_v)
+            # _attention_bwd[grid_bwd](req_rec_q, recv_k, recv_v, do, dq, dk, dv, M, delta, sm_scale, num_heads, n_ctx, 
+            #                                 num_hiddens, block_m, block_n, bulk_slice_factor)
+            if rank != q_rank:
+              req_rec_dq = dist.isend(dq, dst=q_rank, tag=0)
+              req_rec_dk = dist.isend(dk, dst=q_rank, tag=1)
+              req_rec_dv = dist.isend(dv, dst=q_rank, tag=2)
+              req_rec_dq.wait()
+              req_rec_dv.wait()
+              req_rec_dv.wait()
+              gc.collect()
+              torch.cuda.empty_cache()
+            else:
+              # print(f"Current : {current_dq.shape},{current_dk.shape},{current_dv.shape}: {dq.shape},{dv.shape},{dv.shape}")
+              current_dq += dq
+              current_dk += dk
+              current_dv += dv
+              gc.collect()
+              torch.cuda.empty_cache()
 
 class _attention(torch.autograd.Function):
   
@@ -293,17 +307,19 @@ class _attention(torch.autograd.Function):
             nodes_partion_vary_qkv_forward(exe_order_per_rank_unaligned, rank, q, k, v, 
                                    grid, sm_scale, M, num_heads, n_ctx, 
                                    hidden_dim, block_m, block_n, o, M, sft_d, warp_specialize)
+            
             for output_recv, work_o, m_recv, work_m, sft_d_recv, work_sft_d in zip(output_list_o, work_list_o, output_list_m, work_list_m, output_list_sft_d, work_list_sft_d):
               work_o.wait()
               work_m.wait()
               work_sft_d.wait()
-              print(f"Output(R:{rank}) : {output_recv.shape}, {m_recv.shape}, {sft_d_recv.shape}")
-              maximum = torch.maximum(M, m_recv)
-              scale_current = torch.exp2(M-maximum)
-              scale_recv = torch.exp2(m_recv-maximum)
-              sft_d = sft_d*scale_current+sft_d_recv*scale_recv
-              o = o*scale_current.unsqueeze(-1)+output_recv*scale_recv.unsqueeze(-1)
-              M = maximum
+              # print(f"Output(R:{rank}) : {output_recv.shape}, {m_recv.shape}, {sft_d_recv.shape}")
+              with semaphore:
+                maximum = torch.maximum(M, m_recv)
+                scale_current = torch.exp2(M-maximum)
+                scale_recv = torch.exp2(m_recv-maximum)
+                sft_d = sft_d*scale_current+sft_d_recv*scale_recv
+                o = o*scale_current.unsqueeze(-1)+output_recv*scale_recv.unsqueeze(-1)
+                M = maximum
             o = o / sft_d.unsqueeze(-1)
             dist.barrier()
         ctx.save_for_backward(q,k,v,o,M)
@@ -312,8 +328,8 @@ class _attention(torch.autograd.Function):
         ctx.rank = rank
         ctx.world_size = world_size
         ctx.num_heads = num_heads
-        return o, M
-  
+        return o
+
   @staticmethod
   def backward(ctx, do):
       q, k, v, o, M = ctx.saved_tensors
@@ -328,7 +344,7 @@ class _attention(torch.autograd.Function):
       num_hiddens = q.shape[-1]
       n_ctx = q.shape[1]
       grid_preprocess = (n_ctx//pre_block, num_heads, 1)
-      print(f"Grid (bwd_pre_process) : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
+      # print(f"Grid (bwd_pre_process) : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
       delta = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
       # Preprocess
       # _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
@@ -338,22 +354,18 @@ class _attention(torch.autograd.Function):
       dv = torch.empty_like(v)
       bulk_slice_factor = 1
       grid_bwd = (n_ctx//block_m, num_heads, 1)
-      print(f"Grid (bwd) : {grid_bwd}")
+      # print(f"Grid (bwd) : {grid_bwd}")
       gc.collect()
       torch.cuda.empty_cache()
       # _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, num_heads, n_ctx, 
       #                          num_hiddens, block_m, block_n, bulk_slice_factor)
-      
 
       if world_size != 1:
             exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
-        
-      if world_size != 1:
             dist.barrier()
-            exe_order_per_rank_v[rank].remove((rank,rank))
-            exe_order_per_rank_h[rank].remove((rank,rank))
-            dist.barrier()
-
+            for i in range(world_size):
+              exe_order_per_rank_v[i].remove((i,i))
+              exe_order_per_rank_h[i].remove((i,i))
             work_list_dq = []
             work_list_dk = []
             work_list_dv = []
@@ -397,12 +409,11 @@ class _attention(torch.autograd.Function):
                   req_rec_dv = dist.irecv(recv_dv, src=kv_rank, tag=2)  
                   work_list_dv.append(req_rec_dv)
                   output_list_dv.append(recv_dv)
-            
+                        
             nodes_partion_q_fixed_kv_backward(exe_order_per_rank_h, exe_order_per_rank_v, rank, q, k, v, grid_preprocess, grid_bwd,
-                                      o, do, M, pre_block, sm_scale, num_heads, n_ctx, num_hiddens, block_m, block_n, 
-                                      bulk_slice_factor, warp_specialize=True)
+                                              o, do, M, pre_block, sm_scale, num_heads, n_ctx, num_hiddens, block_m, block_n, 
+                                              bulk_slice_factor, warp_specialize=True)
 
-            # dist.barrier()
             nodes_partion_vary_qkv_backward(exe_order_per_rank_unaligned, rank, q, k, v, grid_preprocess, grid_bwd,
                                    o, do, M, dq, dk, dv, pre_block, sm_scale, num_heads, n_ctx, num_hiddens, block_m, block_n, 
                                    bulk_slice_factor, warp_specialize=True)
@@ -411,11 +422,13 @@ class _attention(torch.autograd.Function):
               work_dq.wait()
               work_dk.wait()
               work_dv.wait()
-              print(f"Output(R:{rank}) : {dq_recv.shape}, {dk_recv.shape}, {dv_recv.shape}")
-              dq += dq_recv
-              dk += dk_recv
-              dv += dv_recv
+              with semaphore:
+                print(f"Output(R:{rank}) : {dq_recv.shape}, {dk_recv.shape}, {dv_recv.shape}")
+                dq += dq_recv
+                dk += dk_recv
+                dv += dv_recv
             dist.barrier()
-      print(f"dv : {dv}")
-      print(f"dk : {dk}")
-      print(f"dq : {dq}")
+      # print(f"dv : {dv}")
+      # print(f"dk : {dk}")
+      # print(f"dq : {dq}")
+      return dq, dk, dv, None, None, None, None, None, None, None, None
