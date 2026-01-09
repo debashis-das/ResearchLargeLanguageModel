@@ -4,6 +4,7 @@ from dataclasses import dataclass
 @dataclass
 class Config:
     debug: bool = False
+    batch = 8
     tokens = 64
     num_heads = 4
     # hiddens = 2048
