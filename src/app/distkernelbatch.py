@@ -5,7 +5,7 @@ from torch import nn
 
 from config import Config
 from transformer.MLP import MLP
-from transformer.FusedAttention import _attention
+from transformer.FusedAttentionBatch import _attention
 from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
 
@@ -51,6 +51,7 @@ class MultiGPUExecutor:
       src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       X = self.embedding(src_tokens)
       for _ in range(1):
+        # print(f"X shape : {X.shape}")
         X = self.rms1(X)
         q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
         q, k = self.rope_embedding(q, k)
@@ -66,10 +67,11 @@ class MultiGPUExecutor:
         output = self.attention(q, k, v, block_m, block_n, Config.batch, Config.num_heads, n_ctx, Config.hiddens, 
                                 Config.sm_scale, world_size, self.rank)
         # print(f"Output ({rank},{rank}): {output.shape}")
-        output = output.permute(0, 2, 1, 3).reshape(self.tokens_per_gpu,-1)
-        v = v.permute(0, 2, 1, 3).reshape(self.tokens_per_gpu, -1)
+        output = output.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu,-1)
+        v = v.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu, -1)
         # print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
         x_residual = output + v
+        # print(f"x_residual : {output.shape}, {v.shape}, {x_residual.shape}")
         y_rms = self.rms2(x_residual)
         z = self.mlp(y_rms)
         X = x_residual + self.W_down(z)
@@ -77,8 +79,11 @@ class MultiGPUExecutor:
       logits = self.dense(X)
       logits = logits.float()
       # print(f"Logits : {logits.shape} : {logits}")
-      shift_labels = src_tokens[1:].contiguous()
-      shift_logits = logits[:-1,:].contiguous()
+      B, T, H = logits.shape
+      logits = logits.view(B*T, H)
+      src_tokens = src_tokens.view(B*T)
+      shift_labels = src_tokens[...,1:].contiguous()
+      shift_logits = logits[...,:-1,:].contiguous()
       # print(f"shift_logits: {shift_logits.shape}, shift_labels: {shift_labels.shape}")
       loss = self.loss_fn(shift_logits, shift_labels.long())
       return loss
