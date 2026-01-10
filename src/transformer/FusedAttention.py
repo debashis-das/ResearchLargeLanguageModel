@@ -3,8 +3,8 @@ import torch
 import gc
 import torch.distributed as dist
 
-# from kernels.AttentionForwardKernel import _attention_forward
-# from kernels.AttentionBackwardKernel import _attention_bwd_pre_process, _attention_bwd
+from kernels.AttentionForwardKernel import _attention_forward
+from kernels.AttentionBackwardKernel import _attention_bwd_pre_process, _attention_bwd
 
 semaphore = threading.Semaphore()
 
@@ -102,7 +102,7 @@ def nodes_partion_vary_qkv_forward(exe_order_per_rank_unaligned, rank, q, k, v, 
             req_rec_q = dist.irecv(recv_q, src=q_rank)
             req_rec_q.wait()
             # print(f"input irecv (src:{q_rank},dest recevied to :{rank})")
-          print(f"R({rank}:{rank==q_rank})(s1:{q_rank},s2:{kv_rank}) {recv_q.shape}, {recv_k.shape}, {recv_v.shape}: {recv_q.stride()}, {recv_k.stride()}, {recv_v.stride()}")
+          # print(f"R({rank}:{rank==q_rank})(s1:{q_rank},s2:{kv_rank}) {recv_q.shape}, {recv_k.shape}, {recv_v.shape}: {recv_q.stride()}, {recv_k.stride()}, {recv_v.stride()}")
           o = torch.ones_like(q)
           M = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
           sft_dem = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
@@ -202,7 +202,7 @@ def nodes_partion_vary_qkv_backward(exe_order_per_rank_unaligned, rank, q, k, v,
             req_rec_q = dist.irecv(recv_q, src=q_rank)
             req_rec_q.wait()
             # print(f"input irecv (src:{q_rank},dest recevied to :{rank})")
-          print(f"R({rank}:{rank==q_rank})(s1:{q_rank},s2:{kv_rank}) {recv_q.shape}, {recv_k.shape}, {recv_v.shape}: {recv_q.stride()}, {recv_k.stride()}, {recv_v.stride()}")
+          # print(f"R({rank}:{rank==q_rank})(s1:{q_rank},s2:{kv_rank}) {recv_q.shape}, {recv_k.shape}, {recv_v.shape}: {recv_q.stride()}, {recv_k.stride()}, {recv_v.stride()}")
           with semaphore:
             delta = torch.empty((recv_q.shape[0], recv_q.shape[1]), device=recv_q.device, dtype=torch.float32)
             # _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
@@ -245,9 +245,9 @@ class _attention(torch.autograd.Function):
         
         # Attention forward
         # mask region
-        # _attention_forward[grid](sm_scale, M, sft_d, num_heads, n_ctx,
-        #                 q, k, v, o,
-        #                 hidden_dim, block_m, block_n, True, warp_specialize)
+        _attention_forward[grid](sm_scale, M, sft_d, num_heads, n_ctx,
+                        q, k, v, o,
+                        hidden_dim, block_m, block_n, True, warp_specialize)
         # gc.collect()
         # torch.cuda.empty_cache()
         if world_size != 1:
@@ -328,6 +328,7 @@ class _attention(torch.autograd.Function):
         ctx.rank = rank
         ctx.world_size = world_size
         ctx.num_heads = num_heads
+        print(o)
         return o
 
   @staticmethod
@@ -347,7 +348,7 @@ class _attention(torch.autograd.Function):
       # print(f"Grid (bwd_pre_process) : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
       delta = torch.empty((q.shape[0], q.shape[1]), device=q.device, dtype=torch.float32)
       # Preprocess
-      # _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
+      _attention_bwd_pre_process[grid_preprocess](o, do, delta, n_ctx, pre_block, num_heads, num_hiddens)
       # bwd
       dq = torch.empty_like(q)
       dk = torch.empty_like(k)
@@ -357,8 +358,8 @@ class _attention(torch.autograd.Function):
       # print(f"Grid (bwd) : {grid_bwd}")
       gc.collect()
       torch.cuda.empty_cache()
-      # _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, num_heads, n_ctx, 
-      #                          num_hiddens, block_m, block_n, bulk_slice_factor)
+      _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, num_heads, n_ctx, 
+                               num_hiddens, block_m, block_n, bulk_slice_factor)
 
       if world_size != 1:
             exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
@@ -423,7 +424,7 @@ class _attention(torch.autograd.Function):
               work_dk.wait()
               work_dv.wait()
               with semaphore:
-                print(f"Output(R:{rank}) : {dq_recv.shape}, {dk_recv.shape}, {dv_recv.shape}")
+                # print(f"Output(R:{rank}) : {dq_recv.shape}, {dk_recv.shape}, {dv_recv.shape}")
                 dq += dq_recv
                 dk += dk_recv
                 dv += dv_recv

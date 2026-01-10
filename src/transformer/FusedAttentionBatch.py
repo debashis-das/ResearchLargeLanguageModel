@@ -3,8 +3,8 @@ import torch
 import gc
 import torch.distributed as dist
 
-# from kernels.AttentionForwardKernelBatch import _attention_forward
-# from kernels.AttentionBackwardKernelBatch import _attention_bwd_pre_process, _attention_bwd
+from kernels.AttentionForwardKernelBatch import _attention_forward
+from kernels.AttentionBackwardKernelBatch import _attention_bwd_pre_process, _attention_bwd
 
 semaphore = threading.Semaphore()
 
@@ -245,9 +245,9 @@ class _attention(torch.autograd.Function):
         
         # Attention forward
         # mask region
-        # _attention_forward[grid](sm_scale, M, sft_d, batch, num_heads, n_ctx,
-        #                 q, k, v, o,
-        #                 hidden_dim, block_m, block_n, True, warp_specialize)
+        _attention_forward[grid](sm_scale, M, sft_d, batch, num_heads, n_ctx,
+                        q, k, v, o,
+                        hidden_dim, block_m, block_n, True, warp_specialize)
         # gc.collect()
         # torch.cuda.empty_cache()
         if world_size != 1:
@@ -329,6 +329,7 @@ class _attention(torch.autograd.Function):
         ctx.world_size = world_size
         ctx.num_heads = num_heads
         ctx.batch = batch
+        print(o)
         return o
 
   @staticmethod
@@ -349,7 +350,7 @@ class _attention(torch.autograd.Function):
       # print(f"Grid (bwd_pre_process) : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
       delta = torch.empty_like(M, device=q.device, dtype=torch.float32)
       # Preprocess
-      # _attention_bwd_pre_process[grid_preprocess](o, do, delta, batch, n_ctx, pre_block, num_heads, num_hiddens)
+      _attention_bwd_pre_process[grid_preprocess](o, do, delta, batch, n_ctx, pre_block, num_heads, num_hiddens)
       # bwd
       dq = torch.empty_like(q)
       dk = torch.empty_like(k)
@@ -359,8 +360,8 @@ class _attention(torch.autograd.Function):
       # print(f"Grid (bwd) : {grid_bwd}")
       gc.collect()
       torch.cuda.empty_cache()
-      # _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, batch, num_heads, n_ctx, 
-      #                          num_hiddens, block_m, block_n, bulk_slice_factor)
+      _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, batch, num_heads, n_ctx, 
+                               num_hiddens, block_m, block_n, bulk_slice_factor)
 
       if world_size != 1:
             exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
@@ -430,7 +431,7 @@ class _attention(torch.autograd.Function):
                 dk += dk_recv
                 dv += dv_recv
             dist.barrier()
-      # print(f"dv : {dv}")
-      # print(f"dk : {dk}")
-      # print(f"dq : {dq}")
+      # print(f"dv : {dv.shape}")
+      # print(f"dk : {dk.shape}")
+      # print(f"dq : {dq.shape}")
       return dq, dk, dv, None, None, None, None, None, None, None, None, None

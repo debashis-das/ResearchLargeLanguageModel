@@ -1,7 +1,7 @@
 import torch
 import torch.distributed as dist
 from torch import nn
-# import triton
+import triton
 
 from config import Config
 from transformer.MLP import MLP
@@ -10,8 +10,8 @@ from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
 
 # torch.set_printoptions(profile="full")
-# DEVICE = triton.runtime.driver.active.get_active_torch_device()
-DEVICE = "cpu"
+DEVICE = triton.runtime.driver.active.get_active_torch_device()
+# DEVICE = "cpu"
 
 
 class MultiGPUExecutor:
@@ -86,7 +86,9 @@ class MultiGPUExecutor:
 if __name__ == "__main__":
   # device = 'cuda' if torch.cuda.is_available() else 'cpu'
   # per gpu code
-  dist.init_process_group("gloo")
+  # dist.init_process_group("gloo")
+  dist.init_process_group("nccl")
+
   world_size = dist.get_world_size()
   tokens_per_gpu = Config.tokens//world_size
 
