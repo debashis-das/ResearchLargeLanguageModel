@@ -329,7 +329,7 @@ class _attention(torch.autograd.Function):
         ctx.world_size = world_size
         ctx.num_heads = num_heads
         ctx.batch = batch
-        print(o)
+        # print(o)
         return o
 
   @staticmethod

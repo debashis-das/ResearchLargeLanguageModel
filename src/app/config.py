@@ -5,10 +5,10 @@ from dataclasses import dataclass
 class Config:
     debug: bool = False
     batch = 8
-    tokens = 64
+    tokens = 512
     num_heads = 4
     # hiddens = 2048
-    hiddens = 32*num_heads
+    hiddens = 64*num_heads
     total_vocab = 200021
     dropout = 0.1
     sm_scale = 1.3

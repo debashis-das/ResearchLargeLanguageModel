@@ -15,9 +15,10 @@ DEVICE = triton.runtime.driver.active.get_active_torch_device()
 # DEVICE = "cpu"
 
 
-class MultiGPUExecutor:
+class MultiGPUExecutor(nn.Module):
 
   def __init__(self, world_size, rank, device=DEVICE):
+    super().__init__()
     self.device = device
     self.rank = rank
     self.world_size = world_size
@@ -38,18 +39,8 @@ class MultiGPUExecutor:
     self.attention = _attention.apply
     self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
 
-  def execute(self, tokens):
-    try:
-      loss = self.transformerPerGPU(tokens)
-      dist.all_reduce(loss, op=dist.ReduceOp.SUM)
-      loss = loss / (Config.batch*Config.tokens)
-      print(f"Loss : {loss}")
-      loss.backward()
-    finally:
-      dist.destroy_process_group()
-
-  def transformerPerGPU(self, tokens):
-      src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
+  def forward(self, src_tokens):
+      # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       X = self.embedding(src_tokens)
       for _ in range(1):
         # print(f"X shape : {X.shape}")
@@ -99,15 +90,36 @@ if __name__ == "__main__":
   tokens_per_gpu = Config.tokens//world_size
 
   rank = dist.get_rank()
-  multi_gpu_executor = MultiGPUExecutor(world_size, rank)
+  model_per_rank = MultiGPUExecutor(world_size, rank)
+  model_per_rank = model_per_rank.to(DEVICE)
+  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-2, weight_decay=0.01)
   for i in range(12):
     paraquet_filename = f"dataset/mathematics/parquets/{i:06d}.parquet"
     df = pd.read_parquet(paraquet_filename)
     df_per_rank = df.loc[df['shard'] == rank]
     batch = []
-    for index, row in df_per_rank.iterrows():
-      batch.append(torch.tensor(row['tensor'][:Config.tokens]))
-      if len(batch) == 8:
-          tokens = torch.stack(batch)
-          multi_gpu_executor.execute(tokens)
-          batch = []
+    try:
+      for index, row in df_per_rank.iterrows():
+        batch.append(torch.tensor(row['tensor'][:tokens_per_gpu], device=DEVICE))
+        if len(batch) == 8:
+            tokens = torch.stack(batch)
+            # print(f"Tokens : {tokens.shape}")
+            loss = model_per_rank(tokens)
+            dist.all_reduce(loss, op=dist.ReduceOp.SUM)
+            loss = loss / (Config.batch*Config.tokens)
+            print(f"Loss : {loss}")
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+            if index % 1000 == 0:
+              torch.save({
+                      'parquet_idx': i,
+                      'epoch_per_parquet': index,
+                      'model_state_dict': model_per_rank.state_dict(),
+                      'optimizer_state_dic': optimizer.state_dict(),
+                      'loss': loss
+                      }, f"./{rank}/{i}-{index}-model-params")
+
+            batch = []
+    finally:
+      dist.destroy_process_group()
