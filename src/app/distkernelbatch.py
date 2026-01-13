@@ -2,6 +2,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 import triton
+import pandas as pd
 
 from config import Config
 from transformer.MLP import MLP
@@ -99,5 +100,14 @@ if __name__ == "__main__":
 
   rank = dist.get_rank()
   multi_gpu_executor = MultiGPUExecutor(world_size, rank)
-  tokens = torch.randint(low=0, high=Config.total_vocab, size=(Config.batch, tokens_per_gpu,)).tolist()
-  multi_gpu_executor.execute(tokens)
+  for i in range(12):
+    paraquet_filename = f"dataset/mathematics/parquets/{i:06d}.parquet"
+    df = pd.read_parquet(paraquet_filename)
+    df_per_rank = df.loc[df['shard'] == rank]
+    batch = []
+    for index, row in df_per_rank.iterrows():
+      batch.append(torch.tensor(row['tensor'][:Config.tokens]))
+      if len(batch) == 8:
+          tokens = torch.stack(batch)
+          multi_gpu_executor.execute(tokens)
+          batch = []
