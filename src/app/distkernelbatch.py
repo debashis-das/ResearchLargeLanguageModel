@@ -3,12 +3,16 @@ import torch.distributed as dist
 from torch import nn
 import triton
 import pandas as pd
+from torch.nn import functional as F
+import gc
 
 from config import Config
 from transformer.MLP import MLP
 from transformer.FusedAttentionBatch import _attention
 from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
+from transformers import AutoTokenizer
+
 
 # torch.set_printoptions(profile="full")
 DEVICE = triton.runtime.driver.active.get_active_torch_device()
@@ -42,7 +46,7 @@ class MultiGPUExecutor(nn.Module):
   def forward(self, src_tokens):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       X = self.embedding(src_tokens)
-      for _ in range(1):
+      for _ in range(2):
         # print(f"X shape : {X.shape}")
         X = self.rms1(X)
         q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
@@ -70,6 +74,7 @@ class MultiGPUExecutor(nn.Module):
       X = self.rms3(X)
       logits = self.dense(X)
       logits = logits.float()
+      output_logits = logits[:,-1,:]
       # print(f"Logits : {logits.shape} : {logits}")
       B, T, H = logits.shape
       logits = logits.view(B*T, H)
@@ -78,7 +83,81 @@ class MultiGPUExecutor(nn.Module):
       shift_logits = logits[...,:-1,:].contiguous()
       # print(f"shift_logits: {shift_logits.shape}, shift_labels: {shift_labels.shape}")
       loss = self.loss_fn(shift_logits, shift_labels.long())
-      return loss
+      return output_logits, loss
+
+def validate(rank, max_tokens):
+  current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", extra_special_tokens={"eos":"<!~start_sentence>","bos":"<!~end_sentence/>"})
+  current_tokenizer.sep_token = None
+  current_tokenizer.cls_token = None
+  checkpoint = torch.load(f"model/0-model-params", weights_only=True, map_location=DEVICE)
+  try:
+    step = 0
+    start_sentence = [current_tokenizer.encode("<!~start_sentence> Find the lateral area")]
+    start_tensor = torch.tensor(start_sentence, device=DEVICE)
+    current_len = start_tensor.shape[-1]
+    batch = torch.repeat_interleave(start_tensor,8, dim=0)
+    while step < max_tokens:
+      Config.tokens = current_len
+      model_per_rank = MultiGPUExecutor(world_size, rank)
+      model_per_rank.load_state_dict(checkpoint['model_state_dict'])
+      output_logits, loss = model_per_rank(batch)
+      X_next = torch.multinomial(F.softmax(output_logits, dim=-1), num_samples=1)
+      batch = torch.cat((batch, X_next), dim=1)
+      # print(f"Generate : {batch.shape}")
+      current_len = batch.shape[-1]
+      step += 1
+    for idx in range(8):
+      print(f"{idx} : {current_tokenizer.decode(batch[idx].tolist())}")
+  finally:
+    dist.destroy_process_group()
+
+def train(rank, tokens_per_gpu):
+  batch = []
+  for i in range(1):
+    paraquet_filename = f"dataset/mathematics/parquets/{rank}/{i:06d}.parquet"
+    df = pd.read_parquet(paraquet_filename)
+    # df_per_rank = df.loc[df['shard'] == rank]
+    try:
+      step = 0
+      for index, row in df.iterrows():
+        batch.append(torch.tensor(row['tensor'][:tokens_per_gpu], device=DEVICE))
+        if len(batch) == 8:
+            tokens = torch.stack(batch)
+            # print(f"Tokens : {tokens.shape}")
+            _, loss = model_per_rank(tokens)
+            dist.all_reduce(loss, op=dist.ReduceOp.SUM)
+            loss = loss / (Config.batch*Config.tokens)
+            print(f"StepPerFile : {step:010d} : Loss : {loss}")
+            step += 1
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+            del tokens
+            del batch
+            gc.collect()
+            torch.cuda.empty_cache()
+            if step % 500 == 0:
+              torch.save({
+                      'parquet_idx': i,
+                      'epoch_per_parquet': index,
+                      'model_state_dict': model_per_rank.state_dict(),
+                      'optimizer_state_dic': optimizer.state_dict(),
+                      'loss': loss
+                      }, f"model/{rank}-model-params")
+              print(f"Model saved for {rank} with name : {rank}-model-params")
+
+            batch = []
+    finally:
+      dist.destroy_process_group()
+      torch.save({
+                  'parquet_idx': i,
+                  'epoch_per_parquet': index,
+                  'model_state_dict': model_per_rank.state_dict(),
+                  'optimizer_state_dic': optimizer.state_dict(),
+                  'loss': loss
+                  }, f"model/{rank}-model-params")
+      print(f"Model training complete saved for {rank} with name : {rank}-model-params")
+
 
 if __name__ == "__main__":
   # device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -92,46 +171,9 @@ if __name__ == "__main__":
   rank = dist.get_rank()
   model_per_rank = MultiGPUExecutor(world_size, rank)
   model_per_rank = model_per_rank.to(DEVICE)
-  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-6, weight_decay=0.008)
-  batch = []
+  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=8e-6, weight_decay=0.008)
+  max_tokens = 100
+  train(rank, tokens_per_gpu)
+  # validate(rank, max_tokens)
   
-  for i in range(1):
-    paraquet_filename = f"dataset/mathematics/parquets/{rank}/{i:06d}.parquet"
-    df = pd.read_parquet(paraquet_filename)
-    # df_per_rank = df.loc[df['shard'] == rank]
-    try:
-      step = 0
-      for index, row in df.iterrows():
-        batch.append(torch.tensor(row['tensor'][:tokens_per_gpu], device=DEVICE))
-        if len(batch) == 8:
-            tokens = torch.stack(batch)
-            # print(f"Tokens : {tokens.shape}")
-            loss = model_per_rank(tokens)
-            dist.all_reduce(loss, op=dist.ReduceOp.SUM)
-            loss = loss / (Config.batch*Config.tokens)
-            print(f"StepPerFile : {step:010d} : Loss : {loss}")
-            step += 1
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
-            if index % 100 == 0:
-              torch.save({
-                      'parquet_idx': i,
-                      'epoch_per_parquet': index,
-                      'model_state_dict': model_per_rank.state_dict(),
-                      'optimizer_state_dic': optimizer.state_dict(),
-                      'loss': loss
-                      }, f"./{rank}/{i}-{index}-model-params")
-              print(f"Model saved for {rank} with name : {rank}/{i}-{index}-model-params")
-
-            batch = []
-    finally:
-      dist.destroy_process_group()
-      torch.save({
-                  'parquet_idx': i,
-                  'epoch_per_parquet': index,
-                  'model_state_dict': model_per_rank.state_dict(),
-                  'optimizer_state_dic': optimizer.state_dict(),
-                  'loss': loss
-                  }, f"./{rank}/{i}-{index}-model-params")
-      print(f"Model training complete saved for {rank} with name : {rank}/{i}-{index}-model-params")
+  
