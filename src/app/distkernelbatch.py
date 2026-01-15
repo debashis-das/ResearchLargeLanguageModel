@@ -92,14 +92,15 @@ if __name__ == "__main__":
   rank = dist.get_rank()
   model_per_rank = MultiGPUExecutor(world_size, rank)
   model_per_rank = model_per_rank.to(DEVICE)
-  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-3, weight_decay=0.01)
+  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-6, weight_decay=0.008)
   batch = []
   
-  for i in range(20):
+  for i in range(1):
     paraquet_filename = f"dataset/mathematics/parquets/{rank}/{i:06d}.parquet"
     df = pd.read_parquet(paraquet_filename)
     # df_per_rank = df.loc[df['shard'] == rank]
     try:
+      step = 0
       for index, row in df.iterrows():
         batch.append(torch.tensor(row['tensor'][:tokens_per_gpu], device=DEVICE))
         if len(batch) == 8:
@@ -108,11 +109,12 @@ if __name__ == "__main__":
             loss = model_per_rank(tokens)
             dist.all_reduce(loss, op=dist.ReduceOp.SUM)
             loss = loss / (Config.batch*Config.tokens)
-            print(f"Loss : {loss}")
+            print(f"StepPerFile : {step:010d} : Loss : {loss}")
+            step += 1
             loss.backward()
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
-            if index % 1000 == 0:
+            if index % 100 == 0:
               torch.save({
                       'parquet_idx': i,
                       'epoch_per_parquet': index,
@@ -120,7 +122,16 @@ if __name__ == "__main__":
                       'optimizer_state_dic': optimizer.state_dict(),
                       'loss': loss
                       }, f"./{rank}/{i}-{index}-model-params")
+              print(f"Model saved for {rank} with name : {rank}/{i}-{index}-model-params")
 
             batch = []
     finally:
       dist.destroy_process_group()
+      torch.save({
+                  'parquet_idx': i,
+                  'epoch_per_parquet': index,
+                  'model_state_dict': model_per_rank.state_dict(),
+                  'optimizer_state_dic': optimizer.state_dict(),
+                  'loss': loss
+                  }, f"./{rank}/{i}-{index}-model-params")
+      print(f"Model training complete saved for {rank} with name : {rank}/{i}-{index}-model-params")
