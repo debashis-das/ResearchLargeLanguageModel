@@ -92,14 +92,15 @@ if __name__ == "__main__":
   rank = dist.get_rank()
   model_per_rank = MultiGPUExecutor(world_size, rank)
   model_per_rank = model_per_rank.to(DEVICE)
-  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-2, weight_decay=0.01)
-  for i in range(12):
-    paraquet_filename = f"dataset/mathematics/parquets/{i:06d}.parquet"
+  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-3, weight_decay=0.01)
+  batch = []
+  
+  for i in range(20):
+    paraquet_filename = f"dataset/mathematics/parquets/{rank}/{i:06d}.parquet"
     df = pd.read_parquet(paraquet_filename)
-    df_per_rank = df.loc[df['shard'] == rank]
-    batch = []
+    # df_per_rank = df.loc[df['shard'] == rank]
     try:
-      for index, row in df_per_rank.iterrows():
+      for index, row in df.iterrows():
         batch.append(torch.tensor(row['tensor'][:tokens_per_gpu], device=DEVICE))
         if len(batch) == 8:
             tokens = torch.stack(batch)
