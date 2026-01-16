@@ -46,7 +46,7 @@ class MultiGPUExecutor(nn.Module):
   def forward(self, src_tokens):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       X = self.embedding(src_tokens)
-      for _ in range(2):
+      for _ in range(1):
         # print(f"X shape : {X.shape}")
         X = self.rms1(X)
         q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
@@ -111,10 +111,10 @@ def validate(rank, max_tokens):
   finally:
     dist.destroy_process_group()
 
-def train(rank, tokens_per_gpu):
+def train(base, rank, tokens_per_gpu):
   batch = []
   for i in range(1):
-    paraquet_filename = f"dataset/mathematics/parquets/{rank}/{i:06d}.parquet"
+    paraquet_filename = f"{base}/{rank}/{i:06d}.parquet"
     df = pd.read_parquet(paraquet_filename)
     # df_per_rank = df.loc[df['shard'] == rank]
     try:
@@ -173,7 +173,8 @@ if __name__ == "__main__":
   model_per_rank = model_per_rank.to(DEVICE)
   optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=8e-6, weight_decay=0.008)
   max_tokens = 100
-  train(rank, tokens_per_gpu)
+  # train("dataset/mathematics/parquets", rank, tokens_per_gpu)
   # validate(rank, max_tokens)
+  train("dataset/deepseek-r1/parquets", rank, tokens_per_gpu)
   
   
