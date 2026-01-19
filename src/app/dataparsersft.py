@@ -1,6 +1,7 @@
 import torch
 from transformers import AutoTokenizer
 import pandas as pd
+from datasets import load_dataset
 
 reasoning_start = "<start_working_out>" 
 reasoning_end   = "<end_working_out>" 
@@ -63,15 +64,17 @@ def parseParquetToTensor(total_files, current_tokenizer):
     try:
         df = [pd.DataFrame(columns=['tensor', 'batch', 'shard', 'token_idx']) for _ in range(8)]
         for idx in range(total_files):
-            current_file_name = f"dataset/deepseek-r1/train-{idx:05d}-of-00010.parquet"
+            # current_file_name = f"dataset/deepseek-r1/train-{idx:05d}-of-00010.parquet"
             token_vals = []
-            sft_df_input = pd.read_parquet(current_file_name)
-            for index, record in sft_df_input.iterrows():
+            # sft_df_input = pd.read_parquet(current_file_name)
+            sf_ds_input = load_dataset("open-r1/OpenR1-Math-220k")
+            for index, record in enumerate(sf_ds_input['train']):
+                # print(F"Processing {record['messages']}")
                 token_vals.extend(current_tokenizer.apply_chat_template(record['messages'], tokenize = True, add_generation_prompt = True))
                 if len(token_vals) > 32000:
                     for shard_idx in range(8):
                         tensor = torch.tensor(token_vals[4000*shard_idx:4000*shard_idx+4000], dtype=torch.int32)
-                        print(f"{current_file_name} : tensor : {tensor.shape}, batch : {batch_idx}, shard : {shard_idx}, token : {token_idx}")
+                        print(f"open-r1/OpenR1-Math-220k : tensor : {tensor.shape}, batch : {batch_idx}, shard : {shard_idx}, token : {token_idx}")
                         df[shard_idx].loc[len(df[shard_idx])-1] = [tensor.numpy(), batch_idx, shard_idx, token_idx]
                     batch_idx += 1
                     if batch_idx != 0 and batch_idx % 8 == 0:
