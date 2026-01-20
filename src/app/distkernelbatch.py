@@ -159,8 +159,22 @@ def train(base, rank, tokens_per_gpu):
       print(f"Model training complete saved for {rank} with name : {rank}-model-params")
 
 
+def extract_kv_cache_from_model():
+  checkpoint = torch.load(f"model/0-model-params", weights_only=True, map_location=DEVICE)
+  model = MultiGPUExecutor(world_size=1, rank=0)
+  model.load_state_dict(checkpoint['model_state_dict'])
+  model.eval()
+  current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", extra_special_tokens={"eos":"<!~start_sentence>","bos":"<!~end_sentence/>"})
+  start_sentence = [current_tokenizer.encode("<!~start_sentence> Find the lateral area")]
+  start_tensor = torch.tensor(start_sentence, device=DEVICE)
+  current_len = start_tensor.shape[-1]
+  batch = torch.repeat_interleave(start_tensor,8, dim=0)
+  outputs = model(batch, use_cache=True)
+  print(hasattr(outputs, 'k_cache'))
+
+
 if __name__ == "__main__":
-  # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+  device = 'cuda' if torch.cuda.is_available() else 'cpu'
   # per gpu code
   # dist.init_process_group("gloo")
   dist.init_process_group("nccl")
@@ -175,6 +189,7 @@ if __name__ == "__main__":
   max_tokens = 100
   # train("dataset/mathematics/parquets", rank, tokens_per_gpu)
   # validate(rank, max_tokens)
-  train("dataset/deepseek-r1/parquets", rank, tokens_per_gpu)
+  # train("dataset/deepseek-r1/parquets", rank, tokens_per_gpu)
+  extract_kv_cache_from_model()  
   
   
