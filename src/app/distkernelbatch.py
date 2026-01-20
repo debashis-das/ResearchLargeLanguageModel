@@ -50,7 +50,7 @@ class MultiGPUExecutor(nn.Module):
         # print(f"X shape : {X.shape}")
         X = self.rms1(X)
         q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
-        q, k = self.rope_embedding(q, k)
+        q, k = self.rope_embedding(q, k) 
         q = q.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous()
         k = k.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous()
         v = v.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous()
@@ -84,6 +84,28 @@ class MultiGPUExecutor(nn.Module):
       # print(f"shift_logits: {shift_logits.shape}, shift_labels: {shift_labels.shape}")
       loss = self.loss_fn(shift_logits, shift_labels.long())
       return output_logits, loss
+
+def generation(world_size, rank, tokens_per_gpu):
+  current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
+                      extra_special_tokens={"bos_token":"<!~start_sentence>", 
+                      "eos_token":"<!~end_sentence/>", "pad_token":"<pad>"})
+  start_sentence = current_tokenizer.encode("<!~start_sentence> Find the lateral area")
+  pad_id = current_tokenizer.pad_token_id
+  start_tensor = torch.tensor(start_sentence, device=DEVICE)
+  n = tokens_per_gpu-start_tensor.shape[-1]
+  print(f"Number of tokens : {n}")
+  start_tensor = torch.cat([start_tensor, 
+                            torch.full((n,),pad_id, device=DEVICE)]).unsqueeze(0)
+          
+  print(f"Start tensor : {start_tensor.shape}")
+  tensor_tokens = torch.repeat_interleave(start_tensor, Config.batch, dim=0)
+  print(f"Tokens shape : {tensor_tokens.shape}")
+  checkpoint = torch.load(f"model/0-model-params", weights_only=True, map_location=DEVICE)
+  model = MultiGPUExecutor(world_size, rank)
+  model.load_state_dict(checkpoint['model_state_dict'])
+  model.eval()
+  output, _ = model(tensor_tokens)
+  print(output.shape)
 
 def validate(rank, max_tokens):
   current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", extra_special_tokens={"eos":"<!~start_sentence>","bos":"<!~end_sentence/>"})
@@ -145,7 +167,7 @@ def train(base, rank, tokens_per_gpu):
                       'loss': loss
                       }, f"model/{rank}-model-params")
               print(f"Model saved for {rank} with name : {rank}-model-params")
-
+              return
             batch = []
     finally:
       dist.destroy_process_group()
@@ -173,8 +195,7 @@ if __name__ == "__main__":
   model_per_rank = model_per_rank.to(DEVICE)
   optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=8e-6, weight_decay=0.008)
   max_tokens = 100
+  generation(world_size, rank, tokens_per_gpu)
   # train("dataset/mathematics/parquets", rank, tokens_per_gpu)
   # validate(rank, max_tokens)
-  train("dataset/deepseek-r1/parquets", rank, tokens_per_gpu)
-  
-  
+  # train("dataset/deepseek-r1/parquets", rank, tokens_per_gpu)
