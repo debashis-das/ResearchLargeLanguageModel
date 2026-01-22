@@ -85,32 +85,47 @@ class MultiGPUExecutor(nn.Module):
       loss = self.loss_fn(shift_logits, shift_labels.long())
       return output_logits, loss
 
-def generation(world_size, rank, tokens_per_gpu):
+def generation(world_size, rank, tokens_per_gpu, max_tokens_generation=200):
   current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
-                      extra_special_tokens={"bos_token":"<!~start_sentence>", 
-                      "eos_token":"<!~end_sentence/>", "pad_token":"<pad>"})
+                      extra_special_tokens={"bos_token":"<s>", 
+                      "eos_token":"</s>", "pad_token":"</s>"})
   start_sentence = current_tokenizer.encode("<!~start_sentence> Find the lateral area")
   pad_id = current_tokenizer.pad_token_id
-  start_tensor = torch.tensor(start_sentence, device=DEVICE)
-  n = tokens_per_gpu-start_tensor.shape[-1]
-  print(f"Number of tokens : {n}")
-  start_tensor = torch.cat([start_tensor, 
-                            torch.full((n,),pad_id, device=DEVICE)]).unsqueeze(0)
-          
-  print(f"Start tensor : {start_tensor.shape}")
-  tensor_tokens = torch.repeat_interleave(start_tensor, Config.batch, dim=0)
-  print(f"Tokens shape : {tensor_tokens.shape}")
+  tokens_generated = 0
+
   checkpoint = torch.load(f"model/0-model-params", weights_only=True, map_location=DEVICE)
   model = MultiGPUExecutor(world_size, rank)
   model.load_state_dict(checkpoint['model_state_dict'])
   model.eval()
-  output, _ = model(tensor_tokens)
-  print(output.shape)
+
+  start_tensor = torch.tensor(start_sentence, device=DEVICE).unsqueeze(0)
+  tensor_tokens = torch.repeat_interleave(start_tensor[:,:-1], Config.batch, dim=0)
+
+  while tokens_generated < max_tokens_generation:
+    n = tokens_per_gpu-tensor_tokens.shape[-1]
+    print(f"Number of pad tokens : {n}")
+    # print(f"Tensor tokens : {tensor_tokens.shape}")
+    pad_tensor = torch.full((Config.batch, n), pad_id, device=DEVICE)
+    # print(f"Pad Tensor tokens : {pad_tensor.shape}")
+    total_tensor = torch.cat([tensor_tokens, pad_tensor], dim=-1)
+    # print(f"total_tensor : {total_tensor.shape}")
+    output_logits, _ = model(total_tensor)
+    # print(f"Logits : {output_logits.shape}")
+    X_next = torch.multinomial(F.softmax(output_logits, dim=-1), num_samples=1)
+    # print(f"X_next : {X_next.shape}")
+    tensor_tokens = torch.cat((tensor_tokens, X_next), dim=-1)
+    print(f"Generated tensor : {tensor_tokens.shape}")
+    tokens_generated += 1
+
+  for i in range(tensor_tokens.shape[0]):
+    generation = current_tokenizer.decode(tensor_tokens[i].tolist()) 
+    print(f"Generated {i}: {generation}")
+
 
 def validate(rank, max_tokens):
-  current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", extra_special_tokens={"eos":"<!~start_sentence>","bos":"<!~end_sentence/>"})
-  current_tokenizer.sep_token = None
-  current_tokenizer.cls_token = None
+  current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
+                      extra_special_tokens={"bos_token":"<s>", 
+                      "eos_token":"</s>", "pad_token":"</s>"})
   checkpoint = torch.load(f"model/0-model-params", weights_only=True, map_location=DEVICE)
   try:
     step = 0
@@ -158,7 +173,7 @@ def train(base, rank, tokens_per_gpu):
             del batch
             gc.collect()
             torch.cuda.empty_cache()
-            if step % 500 == 0:
+            if step % 1 == 0:
               torch.save({
                       'parquet_idx': i,
                       'epoch_per_parquet': index,

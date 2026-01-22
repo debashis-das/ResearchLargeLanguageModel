@@ -1,6 +1,7 @@
 import torch
 from transformers import AutoTokenizer
 import pandas as pd
+import random
 
 reasoning_start = "<start_working_out>" 
 reasoning_end   = "<end_working_out>" 
@@ -61,13 +62,46 @@ def parseParquetToTensor(total_files, current_tokenizer):
     token_idx = 0
     count = 0
     try:
+        eos_token = current_tokenizer.encode(current_tokenizer.eos_token)
         df = [pd.DataFrame(columns=['tensor', 'batch', 'shard', 'token_idx']) for _ in range(8)]
         for idx in range(total_files):
             current_file_name = f"dataset/deepseek-r1/train-{idx:05d}-of-00010.parquet"
+            filler_file_name = f"dataset/mathematics/parquets/0/000000.parquet"
             token_vals = []
             sft_df_input = pd.read_parquet(current_file_name)
-            for index, record in sft_df_input.iterrows():
-                token_vals.extend(current_tokenizer.apply_chat_template(record['messages'], tokenize = True, add_generation_prompt = True))
+            filler_df_input = pd.read_parquet(filler_file_name)
+            filler_df_len = len(filler_df_input)
+            for _, record in sft_df_input.iterrows():
+                message = current_tokenizer.apply_chat_template(record['messages'], tokenize = True, add_generation_prompt = True)
+                message = eos_token + message + eos_token
+                message_len = len(message)
+                message_count = random.randint(2,4)
+                filler_count = message_count+1
+                total_message_size = message_count*message_len
+                # print(f"Message length : {message_len}, Count : {message_count}, Total message size : {total_message_size}")
+                filler_space = 32000 - total_message_size
+                if filler_space < 0:
+                    continue
+                # print(f"filler space : {filler_space}")
+                residue = 0
+                balanced_space = filler_space // filler_count
+                previous_index = 0
+                for i in range(filler_count):
+                    # print(f"Balanced space : {i*balanced_space} - {(i+1)*balanced_space}")
+                    current_index = random.randint(i*balanced_space,(i+1)*balanced_space)
+                    residue = (i+1)*balanced_space - current_index
+                    # print(f"Current Index : {current_index}, residue : {residue}")
+                    filler_len = current_index+residue-previous_index
+                    while filler_len>0:
+                        filler_record = filler_df_input.iloc[random.randint(0,filler_df_len-1)]
+                        filler_sidx = random.randint(1,1024)
+                        current_filler_record = filler_record['tensor'][filler_sidx:filler_sidx+filler_len]
+                        filler_len -= len(current_filler_record)
+                        token_vals.extend(current_filler_record)
+                    previous_index = current_index
+                    if i < message_count:
+                        token_vals.extend(message)
+                # print(f"Text created : {len(token_vals)} : {current_tokenizer.decode(token_vals)}")  
                 if len(token_vals) > 32000:
                     for shard_idx in range(8):
                         tensor = torch.tensor(token_vals[4000*shard_idx:4000*shard_idx+4000], dtype=torch.int32)
@@ -98,7 +132,9 @@ def parseParquetToTensor(total_files, current_tokenizer):
 
 
 if __name__ == "__main__":
-    tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", extra_special_tokens={"eos_token":"</s>"})
+    tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
+                      extra_special_tokens={"bos_token":"<s>", 
+                      "eos_token":"</s>", "pad_token":"</s>"})
     tokenizer.chat_template = chat_template
     total_files=10
     parseParquetToTensor(total_files, tokenizer)
