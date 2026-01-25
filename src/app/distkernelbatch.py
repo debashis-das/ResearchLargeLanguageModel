@@ -43,7 +43,7 @@ class MultiGPUExecutor(nn.Module):
     self.attention = _attention.apply
     self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
 
-  def forward(self, src_tokens):
+  def forward(self, src_tokens, all_logits = False):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       X = self.embedding(src_tokens)
       for _ in range(1):
@@ -83,17 +83,16 @@ class MultiGPUExecutor(nn.Module):
       shift_logits = logits[...,:-1,:].contiguous()
       # print(f"shift_logits: {shift_logits.shape}, shift_labels: {shift_labels.shape}")
       loss = self.loss_fn(shift_logits, shift_labels.long())
+      if all_logits:
+        return all_logits, loss
       return output_logits, loss
 
-def generation(world_size, rank, tokens_per_gpu, max_tokens_generation=200):
-  current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
-                      extra_special_tokens={"bos_token":"<s>", 
-                      "eos_token":"</s>", "pad_token":"</s>"})
-  start_sentence = current_tokenizer.encode("<!~start_sentence> Find the lateral area")
+def generate_base(world_size, rank, tokens_per_gpu, current_tokenizer, max_tokens_generation=200):
+  start_sentence = current_tokenizer.encode("<!~start_sentence> Find the lateral area ")
   pad_id = current_tokenizer.pad_token_id
   tokens_generated = 0
 
-  checkpoint = torch.load(f"model/0-model-params", weights_only=True, map_location=DEVICE)
+  checkpoint = torch.load(f"model/{rank}-model-params", weights_only=True, map_location=DEVICE)
   model = MultiGPUExecutor(world_size, rank)
   model.load_state_dict(checkpoint['model_state_dict'])
   model.eval()
@@ -121,32 +120,44 @@ def generation(world_size, rank, tokens_per_gpu, max_tokens_generation=200):
     generation = current_tokenizer.decode(tensor_tokens[i].tolist()) 
     print(f"Generated {i}: {generation}")
 
+# def generate_sft(world_size, rank, tokens_per_gpu, current_tokenizer, max_tokens_generation=200):
+#   pad_id = current_tokenizer.pad_token_id
+#   paraquet_filename = f"dataset/unsloth/shards/{rank}/{0:06d}.parquet"
+#   df = pd.read_parquet(paraquet_filename)
+#   checkpoint = torch.load(f"model/{rank}-model-params", weights_only=True, map_location=DEVICE)
+#   model = MultiGPUExecutor(world_size, rank)
+#   model.load_state_dict(checkpoint['model_state_dict'])
+#   model.eval()  
+#   g_idx = 0
+#   for _, record in df.iterrows():
+#     tokens_generated = 0
+#     start_tensor = torch.tensor(record["tensor"], device=DEVICE).unsqueeze(0)
+#     tensor_tokens = torch.repeat_interleave(start_tensor, Config.batch, dim=0)
+#     generation_idxs = record["generation_idx"]
+#     if generation_idxs[g_idx] >= rank*4000 and generation_idxs[g_idx] < (rank+1)*4000:
+#       token_idx = generation_idxs[g_idx]
+#       while token_idx < (rank+1)*4000:
+#         if start_tensor[token_idx] != pad_id:
+          
+#         n = tokens_per_gpu-tensor_tokens.shape[-1]
+#         print(f"Number of pad tokens : {n}")
+#         # print(f"Tensor tokens : {tensor_tokens.shape}")
+#         pad_tensor = torch.full((Config.batch, n), pad_id, device=DEVICE)
+#         # print(f"Pad Tensor tokens : {pad_tensor.shape}")
+#         total_tensor = torch.cat([tensor_tokens, pad_tensor], dim=-1)
+#         # print(f"total_tensor : {total_tensor.shape}")
+#         output_logits, _ = model(total_tensor)
+#         # print(f"Logits : {output_logits.shape}")
+#         X_next = torch.multinomial(F.softmax(output_logits, dim=-1), num_samples=1)
+#         # print(f"X_next : {X_next.shape}")
+#         tensor_tokens = torch.cat((tensor_tokens, X_next), dim=-1)
+#         print(f"Generated tensor : {tensor_tokens.shape}")
+#         tokens_generated += 1
 
-def validate(rank, max_tokens):
-  current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
-                      extra_special_tokens={"bos_token":"<s>", 
-                      "eos_token":"</s>", "pad_token":"</s>"})
-  checkpoint = torch.load(f"model/0-model-params", weights_only=True, map_location=DEVICE)
-  try:
-    step = 0
-    start_sentence = [current_tokenizer.encode("<!~start_sentence> Find the lateral area")]
-    start_tensor = torch.tensor(start_sentence, device=DEVICE)
-    current_len = start_tensor.shape[-1]
-    batch = torch.repeat_interleave(start_tensor,8, dim=0)
-    while step < max_tokens:
-      Config.tokens = current_len
-      model_per_rank = MultiGPUExecutor(world_size, rank)
-      model_per_rank.load_state_dict(checkpoint['model_state_dict'])
-      output_logits, loss = model_per_rank(batch)
-      X_next = torch.multinomial(F.softmax(output_logits, dim=-1), num_samples=1)
-      batch = torch.cat((batch, X_next), dim=1)
-      # print(f"Generate : {batch.shape}")
-      current_len = batch.shape[-1]
-      step += 1
-    for idx in range(8):
-      print(f"{idx} : {current_tokenizer.decode(batch[idx].tolist())}")
-  finally:
-    dist.destroy_process_group()
+#       for i in range(tensor_tokens.shape[0]):
+#         generation = current_tokenizer.decode(tensor_tokens[i].tolist()) 
+#         print(f"Generated {i}: {generation}")
+
 
 def train(base, rank, tokens_per_gpu):
   batch = []
@@ -180,7 +191,7 @@ def train(base, rank, tokens_per_gpu):
                       'model_state_dict': model_per_rank.state_dict(),
                       'optimizer_state_dic': optimizer.state_dict(),
                       'loss': loss
-                      }, f"model/{rank}-model-params")
+                      }, f"model/{rank}-base-model-params")
               print(f"Model saved for {rank} with name : {rank}-model-params")
               return
             batch = []
@@ -192,7 +203,7 @@ def train(base, rank, tokens_per_gpu):
                   'model_state_dict': model_per_rank.state_dict(),
                   'optimizer_state_dic': optimizer.state_dict(),
                   'loss': loss
-                  }, f"model/{rank}-model-params")
+                  }, f"model/{rank}-base-model-params")
       print(f"Model training complete saved for {rank} with name : {rank}-model-params")
 
 
@@ -210,7 +221,16 @@ if __name__ == "__main__":
   model_per_rank = model_per_rank.to(DEVICE)
   optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=8e-6, weight_decay=0.008)
   max_tokens = 100
-  generation(world_size, rank, tokens_per_gpu)
-  # train("dataset/mathematics/parquets", rank, tokens_per_gpu)
-  # validate(rank, max_tokens)
+  current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
+                      extra_special_tokens={"bos_token":"<s>", 
+                      "eos_token":"</s>", "pad_token":"</s>"})
+  #base
+  train("dataset/mathematics/parquets", rank, tokens_per_gpu)
+  #generate
+  # generate_base(world_size, rank, tokens_per_gpu, current_tokenizer)
+  #sft
+  # train("dataset/deepseek-r1/shards", rank, tokens_per_gpu)
+  #generate
+  # generate_sft(world_size, rank, tokens_per_gpu,current_tokenizer)
+
   # train("dataset/deepseek-r1/parquets", rank, tokens_per_gpu)

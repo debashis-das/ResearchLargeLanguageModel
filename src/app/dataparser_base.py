@@ -2,21 +2,32 @@ import json
 import torch
 import pandas as pd
 from transformers import AutoTokenizer
+import random
 
-def parseJsonl(base, filenames, current_tokenizer):
+def parseJsonl(base, filenames, current_tokenizer, train=True):
     shard_idx = 0
     batch_idx = 0
     token_idx = 0
     count = 0
     try:
         df = [pd.DataFrame(columns=['tensor', 'batch', 'shard', 'token_idx']) for _ in range(8)]
+        pad_id = current_tokenizer.pad_token_id
         for name in filenames:
             token_vals = []
             current_file_name = f"{base}/{name}" 
             with open(current_file_name) as file:
                 for line in file:
                     current_json = json.loads(line)
-                    token_vals.extend(current_tokenizer.encode(f"<!~start_sentence>{current_json['text']}<!~end_sentence/>"))
+                    if train:
+                        token_vals.extend(current_tokenizer.encode(f"<!~start_sentence>{current_json['text']}<!~end_sentence/>"))
+                    else:
+                        index = random.randint(1, 32000)
+                        current_tokens = current_tokenizer.encode(f"<!~start_sentence>{current_json['text']}<!~end_sentence/>")[:index]
+                        pad_length = 32000 - len(current_tokens)
+                        pad_tensor = torch.full((pad_length,), pad_id)
+                        token_vals.extend(current_tokens[:index])
+                        token_vals.extend(pad_tensor)
+                        print(f"Decoded ({len(token_vals)}) : {current_tokenizer.decode(token_vals)}")
                     if len(token_vals) > 32000:
                         for shard_idx in range(8):
                             tensor = torch.tensor(token_vals[4000*shard_idx:4000*shard_idx+4000], dtype=torch.int32)
@@ -28,7 +39,10 @@ def parseJsonl(base, filenames, current_tokenizer):
                         token_idx += 1
                     if len(df[0]) == 100000:
                         for shard_idx in range(8):
-                            paraquet_filename = f"dataset/mathematics/parquets/{shard_idx}/{count:06d}.parquet"
+                            if train:
+                                paraquet_filename = f"dataset/mathematics/parquets/{shard_idx}/{count:06d}.parquet"
+                            else:
+                                paraquet_filename = f"dataset/mathematics/parquets/test/{shard_idx}/{count:06d}.parquet"
                             df[shard_idx].to_parquet(paraquet_filename, compression="zstd", engine="pyarrow")
                             print(f"Successfully created a new Parquet file: '{paraquet_filename}'")
                         count += 1
@@ -104,5 +118,6 @@ if __name__ == "__main__":
                   "mathematics_000108.jsonl","mathematics_000109.jsonl"]
     current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", extra_special_tokens={"eos":"<!~start_sentence>","bos":"<!~end_sentence/>"})
     parseJsonl(base, file_names, current_tokenizer)
+
     # readParquet(base, "parquets/000011.parquet", current_tokenizer)
    

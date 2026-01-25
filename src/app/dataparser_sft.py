@@ -62,7 +62,7 @@ def parseParquetToTensor(total_files, current_tokenizer):
     token_idx = 0
     count = 0
     try:
-        eos_token = current_tokenizer.encode(current_tokenizer.eos_token)
+        eos_token_idx = current_tokenizer.eos_token_id
         df = [pd.DataFrame(columns=['tensor', 'batch', 'shard', 'token_idx']) for _ in range(8)]
         for idx in range(total_files):
             current_file_name = f"dataset/deepseek-r1/train-{idx:05d}-of-00010.parquet"
@@ -72,8 +72,8 @@ def parseParquetToTensor(total_files, current_tokenizer):
             filler_df_input = pd.read_parquet(filler_file_name)
             filler_df_len = len(filler_df_input)
             for _, record in sft_df_input.iterrows():
-                message = current_tokenizer.apply_chat_template(record['messages'], tokenize = True, add_generation_prompt = True)
-                message = eos_token + message + eos_token
+                message = current_tokenizer.apply_chat_template(format_dataset(record), tokenize = True, add_generation_prompt = True)
+                message = [eos_token_idx] + message + [eos_token_idx]
                 message_len = len(message)
                 message_count = random.randint(2,4)
                 filler_count = message_count+1
@@ -130,6 +130,12 @@ def parseParquetToTensor(total_files, current_tokenizer):
     except Exception as e:
         print(f"An error occurred: {e}")
 
+
+def messageOpenr1(current_tokenizer):
+    current_file_name = f"dataset/deepseek-r1/train-{0:05d}-of-00010.parquet"
+    sft_df_input = pd.read_parquet(current_file_name)
+    message = current_tokenizer.apply_chat_template(format_dataset(sft_df_input.iloc[0]), tokenize = False, add_generation_prompt = True)
+    print(message)
 
 if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
