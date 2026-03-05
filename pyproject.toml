@@ -11,6 +11,11 @@ requires-python = ">=3.9"
 dependencies = [
     "numpy",
     "torch >= 2.1",
+    "transformers",
+    "pandas",
+    "pyarrow",
+    "together @ git+ssh://git@github.com/togethercomputer/together-py.git"
+
 ]
 
 [tool.pytest.ini_options]
