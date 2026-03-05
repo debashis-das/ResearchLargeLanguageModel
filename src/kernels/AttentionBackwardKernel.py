@@ -21,7 +21,14 @@ def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
   delta = delta_ptr + off_h*n_ctx + offs_pre_block
   tl.store(delta, o_do)
 
-
+@triton.autotune(
+    configs=[
+        triton.Config({'block_m':128, 'block_n':64}, num_warps=4, num_stages=3),
+        triton.Config({'block_m':64,  'block_n':128}, num_warps=4, num_stages=3),
+        triton.Config({'block_m':128, 'block_n':128}, num_warps=8, num_stages=2),
+    ],
+    key=['n_ctx', 'hidden_dim'],   # runtime-dependent shapes
+)
 @triton.jit
 def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
                    sm_scale: tl.constexpr, num_heads: tl.constexpr,
