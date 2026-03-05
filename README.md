@@ -20,5 +20,8 @@ pip install -e .
 batch : 8
 tokens : 4k–5k
 embedding : 8k
+
+# TODO
 dtype : BF16
+
 

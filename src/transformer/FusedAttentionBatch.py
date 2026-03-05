@@ -2,6 +2,7 @@ import threading
 import torch
 import gc
 import torch.distributed as dist
+import triton
 
 from kernels.AttentionForwardKernelBatch import _attention_forward
 from kernels.AttentionBackwardKernelBatch import _attention_bwd_pre_process, _attention_bwd
@@ -32,7 +33,7 @@ def identify_nodes_for_qkv(world_size:int):
 
 def nodes_partion_q_fixed_kv_forward(exe_order_per_rank_h, exe_order_per_rank_v, rank, q, k, v, grid, 
                              sm_scale, M, batch, num_heads, n_ctx, 
-                             hidden_dim, block_m, block_n, warp_specialize):
+                             hidden_dim, warp_specialize):
     wait_list = []
     for (q_rank, dst_rank) in exe_order_per_rank_h[rank]:
         if q_rank != dst_rank:
@@ -55,7 +56,7 @@ def nodes_partion_q_fixed_kv_forward(exe_order_per_rank_h, exe_order_per_rank_v,
 
               # _attention_forward[grid](sm_scale, M, sft_dem, batch, num_heads, n_ctx,
               #             recv_q, k, v, o,
-              #             hidden_dim, block_m, block_n, True, warp_specialize)
+              #             hidden_dim, True, warp_specialize)
               req_rec_o = dist.isend(o, dst=q_rank, tag=0)
               req_rec_m = dist.isend(M, dst=q_rank, tag=1)
               req_rec_sft_d = dist.isend(sft_dem, dst=q_rank, tag=2)
@@ -67,7 +68,7 @@ def nodes_partion_q_fixed_kv_forward(exe_order_per_rank_h, exe_order_per_rank_v,
 
 def nodes_partion_vary_qkv_forward(exe_order_per_rank_unaligned, rank, q, k, v, grid, 
                            sm_scale, M, batch, num_heads, n_ctx, 
-                           hidden_dim, block_m, block_n, current_o, current_m, current_sft_d, warp_specialize):
+                           hidden_dim, current_o, current_m, current_sft_d, warp_specialize):
     input_2_send = False
     input_2_recv = False
     for rank_in_list, list_per_rank in enumerate(exe_order_per_rank_unaligned):
@@ -109,7 +110,7 @@ def nodes_partion_vary_qkv_forward(exe_order_per_rank_unaligned, rank, q, k, v, 
           with semaphore:
             # _attention_forward[grid](sm_scale, M, batch, num_heads, n_ctx,
             #               recv_q, recv_k, recv_v, o,
-            #               hidden_dim, block_m, block_n, False, warp_specialize)
+            #               hidden_dim, False, warp_specialize)
             if rank != q_rank:
               req_rec_o = dist.isend(o, dst=q_rank, tag=0)
               req_rec_m = dist.isend(M, dst=q_rank, tag=1)
@@ -130,7 +131,7 @@ def nodes_partion_vary_qkv_forward(exe_order_per_rank_unaligned, rank, q, k, v, 
 
 
 def nodes_partion_q_fixed_kv_backward(exe_order_per_rank_h, exe_order_per_rank_v, rank, q, k, v, grid_preprocess, grid_bwd,
-                                      o, do, M, pre_block, sm_scale, batch, num_heads, n_ctx, num_hiddens, block_m, block_n, 
+                                      o, do, M, pre_block, sm_scale, batch, num_heads, n_ctx, num_hiddens, 
                                       bulk_slice_factor, warp_specialize):
     recv_q = torch.empty_like(q)
     wait_list = []
@@ -154,7 +155,7 @@ def nodes_partion_q_fixed_kv_backward(exe_order_per_rank_h, exe_order_per_rank_v
               dk = torch.empty_like(k)
               dv = torch.empty_like(v)
               # _attention_bwd[grid_bwd](recv_q, k, v, do, dq, dk, dv, M, delta, sm_scale, batch, num_heads, n_ctx, 
-              #                                num_hiddens, block_m, block_n, bulk_slice_factor)
+              #                                num_hiddens, bulk_slice_factor,)
               req_rec_dq = dist.isend(dq, dst=q_rank, tag=0)
               req_rec_dk = dist.isend(dk, dst=q_rank, tag=1)
               req_rec_dv = dist.isend(dv, dst=q_rank, tag=2)
@@ -210,7 +211,7 @@ def nodes_partion_vary_qkv_backward(exe_order_per_rank_unaligned, rank, q, k, v,
             dk = torch.empty_like(recv_k)
             dv = torch.empty_like(recv_v)
             # _attention_bwd[grid_bwd](req_rec_q, recv_k, recv_v, do, dq, dk, dv, M, delta, sm_scale, batch, num_heads, n_ctx, 
-            #                                 num_hiddens, block_m, block_n, bulk_slice_factor)
+            #                                 num_hiddens, bulk_slice_factor,)
             if rank != q_rank:
               req_rec_dq = dist.isend(dq, dst=q_rank, tag=0)
               req_rec_dk = dist.isend(dk, dst=q_rank, tag=1)
@@ -239,15 +240,20 @@ class _attention(torch.autograd.Function):
         o = torch.empty_like(q)
         M = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
         sft_d = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
-
-        grid = (n_ctx//block_m, num_heads*batch, 1)
+        
+        grid_fwd = lambda META: (
+            triton.cdiv(n_ctx, META['BLOCK_M']),
+            num_heads * batch,
+            1
+        )
+        # grid = (n_ctx//block_m, num_heads*batch, 1)
         # print(f"Grid : {grid}")
         
         # Attention forward
         # mask region
-        _attention_forward[grid](sm_scale, M, sft_d, batch, num_heads, n_ctx,
+        _attention_forward[grid_fwd](sm_scale, M, sft_d, batch, num_heads, n_ctx,
                         q, k, v, o,
-                        hidden_dim, block_m, block_n, True, warp_specialize)
+                        hidden_dim, True, warp_specialize,)
         # gc.collect()
         # torch.cuda.empty_cache()
         if world_size != 1:
@@ -301,11 +307,11 @@ class _attention(torch.autograd.Function):
                   output_list_sft_d.append(recv_sft_d)
 
             nodes_partion_q_fixed_kv_forward(exe_order_per_rank_h, exe_order_per_rank_v,
-                                     rank, q, k, v, grid, sm_scale, M, batch, num_heads, n_ctx, 
+                                     rank, q, k, v, grid_fwd, sm_scale, M, batch, num_heads, n_ctx, 
                                      hidden_dim, block_m, block_n, warp_specialize)
             # dist.barrier()
             nodes_partion_vary_qkv_forward(exe_order_per_rank_unaligned, rank, q, k, v, 
-                                   grid, sm_scale, M, batch, num_heads, n_ctx, 
+                                   grid_fwd, sm_scale, M, batch, num_heads, n_ctx, 
                                    hidden_dim, block_m, block_n, o, M, sft_d, warp_specialize)
             
             for output_recv, work_o, m_recv, work_m, sft_d_recv, work_sft_d in zip(output_list_o, work_list_o, output_list_m, work_list_m, output_list_sft_d, work_list_sft_d):
@@ -356,12 +362,17 @@ class _attention(torch.autograd.Function):
       dk = torch.empty_like(k)
       dv = torch.empty_like(v)
       bulk_slice_factor = 1
-      grid_bwd = (n_ctx//block_m, num_heads*batch, 1)
+      # grid_bwd = (n_ctx//block_m, num_heads*batch, 1)
       # print(f"Grid (bwd) : {grid_bwd}")
       gc.collect()
       torch.cuda.empty_cache()
+      grid_bwd = lambda META: (
+          triton.cdiv(n_ctx, META['BLOCK_M']),
+          num_heads * batch,
+          1
+      )
       _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, batch, num_heads, n_ctx, 
-                               num_hiddens, block_m, block_n, bulk_slice_factor)
+                               num_hiddens,bulk_slice_factor,)
 
       if world_size != 1:
             exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)

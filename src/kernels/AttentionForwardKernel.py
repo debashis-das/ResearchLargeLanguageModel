@@ -50,10 +50,19 @@ def _attention_forward_inner_mask(acc, l_i, m_i, q, desc_k, desc_v,
         offsetv_y += block_n
     return acc, l_i, m_i
 
+@triton.autotune(
+    configs=[
+        triton.Config({'block_m': 128, 'block_n': 128}, num_warps=4),
+        triton.Config({'block_m': 64,  'block_n': 128}, num_warps=4),
+        triton.Config({'block_m': 128, 'block_n': 64},  num_warps=4),
+        triton.Config({'block_m': 64,  'block_n': 64},  num_warps=4),
+    ],
+    key=['num_heads', 'n_ctx', 'hidden_dim'],   # runtime-dependent shapes
+)
 @triton.jit
 def _attention_forward(sm_scale, max_tensor, softmax_dem, num_heads, n_ctx, desc_q, desc_k, desc_v, desc_o,
-                       hidden_dim: tl.constexpr, block_m: tl.constexpr, block_n: tl.constexpr, mask_region: tl.constexpr,
-                       warp_specialize: tl.constexpr):
+                       hidden_dim: tl.constexpr, mask_region: tl.constexpr,
+                       warp_specialize: tl.constexpr, block_m: tl.constexpr, block_n: tl.constexpr):
     dtype = tl.float32
     assert block_n <= hidden_dim
     start_m = tl.program_id(0)

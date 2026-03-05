@@ -25,8 +25,8 @@ def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
 @triton.jit
 def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
                    sm_scale: tl.constexpr, num_heads: tl.constexpr,
-                   n_ctx: tl.constexpr, hidden_dim: tl.constexpr, block_m: tl.constexpr,
-                   block_n: tl.constexpr, bulk_slice_factor: tl.constexpr):
+                   n_ctx: tl.constexpr, hidden_dim: tl.constexpr, bulk_slice_factor: tl.constexpr, block_m: tl.constexpr,
+                   block_n: tl.constexpr):
   LN2 = 0.6931471824645996  # = ln(2)
   # current context block
   ctxid = tl.program_id(0)
