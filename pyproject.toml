@@ -13,9 +13,7 @@ dependencies = [
     "torch >= 2.1",
     "transformers",
     "pandas",
-    "pyarrow",
-    "together @ git+ssh://git@github.com/togethercomputer/together-py.git"
-
+    "pyarrow"
 ]
 
 [tool.pytest.ini_options]
