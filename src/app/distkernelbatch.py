@@ -56,11 +56,11 @@ class MultiGPUExecutor(nn.Module):
         v = v.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous()
 
         n_ctx = self.tokens_per_gpu
-        block_m = 32
-        block_n = 16
-        grid_fwd = (n_ctx//block_m, Config.num_heads*Config.batch, 1)
+        # block_m = 32
+        # block_n = 16
+        # grid_fwd = (n_ctx//block_m, Config.num_heads*Config.batch, 1)
         # print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
-        output = self.attention(q, k, v, block_m, block_n, Config.batch, Config.num_heads, n_ctx, Config.hiddens, 
+        output = self.attention(q, k, v, Config.batch, Config.num_heads, n_ctx, Config.hiddens, 
                                 Config.sm_scale, world_size, self.rank)
         # print(f"Output ({rank},{rank}): {output.shape}")
         output = output.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu,-1)

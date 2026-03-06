@@ -167,7 +167,7 @@ def nodes_partion_q_fixed_kv_backward(exe_order_per_rank_h, exe_order_per_rank_v
     
 
 def nodes_partion_vary_qkv_backward(exe_order_per_rank_unaligned, rank, q, k, v, grid_preprocess, grid_bwd,
-                                   o, do, M, current_dq, current_dk, current_dv, pre_block, sm_scale, batch, num_heads, n_ctx, num_hiddens, block_m, block_n, 
+                                   o, do, M, current_dq, current_dk, current_dv, pre_block, sm_scale, batch, num_heads, n_ctx, num_hiddens, 
                                    bulk_slice_factor, warp_specialize):
     input_2_send = False
     input_2_recv = False
@@ -233,7 +233,7 @@ class _attention(torch.autograd.Function):
   
   # Assumption that it is used only for causal case
   @staticmethod
-  def forward(ctx, q, k, v, block_m, block_n, batch, num_heads, n_ctx, hidden_dim, sm_scale, world_size, rank, warp_specialize=True):
+  def forward(ctx, q, k, v, batch, num_heads, n_ctx, hidden_dim, sm_scale, world_size, rank, warp_specialize=True):
         if world_size != 1:
             exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
         
@@ -242,7 +242,7 @@ class _attention(torch.autograd.Function):
         sft_d = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
         
         grid_fwd = lambda META: (
-            triton.cdiv(n_ctx, META['BLOCK_M']),
+            triton.cdiv(n_ctx, META['block_m']),
             num_heads * batch,
             1
         )
@@ -308,11 +308,11 @@ class _attention(torch.autograd.Function):
 
             nodes_partion_q_fixed_kv_forward(exe_order_per_rank_h, exe_order_per_rank_v,
                                      rank, q, k, v, grid_fwd, sm_scale, M, batch, num_heads, n_ctx, 
-                                     hidden_dim, block_m, block_n, warp_specialize)
+                                     hidden_dim, warp_specialize)
             # dist.barrier()
             nodes_partion_vary_qkv_forward(exe_order_per_rank_unaligned, rank, q, k, v, 
                                    grid_fwd, sm_scale, M, batch, num_heads, n_ctx, 
-                                   hidden_dim, block_m, block_n, o, M, sft_d, warp_specialize)
+                                   hidden_dim, o, M, sft_d, warp_specialize)
             
             for output_recv, work_o, m_recv, work_m, sft_d_recv, work_sft_d in zip(output_list_o, work_list_o, output_list_m, work_list_m, output_list_sft_d, work_list_sft_d):
               work_o.wait()
@@ -347,8 +347,6 @@ class _attention(torch.autograd.Function):
       world_size = ctx.world_size
       num_heads = ctx.num_heads
       batch = ctx.batch
-      block_m = 32
-      block_n = 16
       pre_block = 64
       num_hiddens = q.shape[-1]
       n_ctx = q.shape[1]
@@ -367,7 +365,7 @@ class _attention(torch.autograd.Function):
       gc.collect()
       torch.cuda.empty_cache()
       grid_bwd = lambda META: (
-          triton.cdiv(n_ctx, META['BLOCK_M']),
+          triton.cdiv(n_ctx, META['block_m']),
           num_heads * batch,
           1
       )
@@ -425,11 +423,11 @@ class _attention(torch.autograd.Function):
                   output_list_dv.append(recv_dv)
                         
             nodes_partion_q_fixed_kv_backward(exe_order_per_rank_h, exe_order_per_rank_v, rank, q, k, v, grid_preprocess, grid_bwd,
-                                              o, do, M, pre_block, sm_scale, batch, num_heads, n_ctx, num_hiddens, block_m, block_n, 
+                                              o, do, M, pre_block, sm_scale, batch, num_heads, n_ctx, num_hiddens,
                                               bulk_slice_factor, warp_specialize=True)
 
             nodes_partion_vary_qkv_backward(exe_order_per_rank_unaligned, rank, q, k, v, grid_preprocess, grid_bwd,
-                                   o, do, M, dq, dk, dv, pre_block, sm_scale, batch, num_heads, n_ctx, num_hiddens, block_m, block_n, 
+                                   o, do, M, dq, dk, dv, pre_block, sm_scale, batch, num_heads, n_ctx, num_hiddens, 
                                    bulk_slice_factor, warp_specialize=True)
 
             for dq_recv, work_dq, dk_recv, work_dk, dv_recv, work_dv in zip(output_list_dq, work_list_dq, output_list_dk, work_list_dk, output_list_dv, work_list_dv):
