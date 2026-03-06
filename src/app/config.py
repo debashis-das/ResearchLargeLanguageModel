@@ -5,16 +5,16 @@ from dataclasses import dataclass
 class Config:
     debug: bool = False
     batch = 8
-    tokens = 4096
-    num_heads = 16
+    # tokens = 4096
+    tokens = 2048
+    # num_heads = 16
+    num_heads = 8
     # hiddens = 2048
-    hiddens = 128*num_heads
+    # hiddens = 128*num_heads
+    hiddens = 64*num_heads
     total_vocab = 200021
     dropout = 0.1
     sm_scale = 1.3
-    #attention
-    block_m = 128
-    block_n = 128
     #mlp
     mlp_intermediate_hidden = 1024
     learning_iter = 8
