@@ -37,13 +37,12 @@ def _attention_forward_inner_mask(acc, l_i, m_i, q, desc_k, desc_v,
         # -- compute correction factor
         alpha = tl.math.exp2(m_i - m_ij)
         l_ij = tl.sum(p, 1)
-        alpha = alpha.to(dtype)
         acc = acc * alpha[:, None]
 
         # print(f"Offset of v [0, {offsetv_y}]")
         v = desc_v.load([offsetv_y, 0])
         p = p.to(dtype)
-        acc = tl.dot(p, v.to(dtype), acc)
+        acc = tl.dot(p, v, acc)
         l_i = l_i * alpha + l_ij
         m_i = m_ij
         offsetk_y += block_n
@@ -89,7 +88,7 @@ def _attention_forward(sm_scale, max_tensor, softmax_dem, batch, num_heads, n_ct
     # initialize pointer to m and l
     m_i = tl.zeros([block_m], dtype=dtype) - float("inf")
     l_i = tl.zeros([block_m], dtype=dtype) + 1.0
-    acc = tl.zeros([block_m, hidden_dim], dtype=dtype)
+    acc = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
     # load scales
     qk_scale = sm_scale
     qk_scale *= 1.44269504 #1/log(2)
