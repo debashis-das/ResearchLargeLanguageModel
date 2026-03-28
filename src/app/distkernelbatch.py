@@ -46,7 +46,7 @@ class MultiGPUExecutor(nn.Module):
   def forward(self, src_tokens, all_logits = False):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       X = self.embedding(src_tokens)
-      for _ in range(1):
+      for _ in range(24):
         print(f"X shape : {X.shape}")
         X = self.rms1(X)
         q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
