@@ -59,15 +59,15 @@ class MultiGPUExecutor(nn.Module):
         block_m = 32
         block_n = 16
         grid_fwd = (n_ctx//block_m, Config.num_heads*Config.batch, 1)
-        # print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
+        print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
         output = self.attention(q, k, v, Config.batch, Config.num_heads, n_ctx, Config.hiddens, 
                                 Config.sm_scale, world_size, self.rank)
-        # print(f"Output ({rank},{rank}): {output.shape}")
+        print(f"Output ({rank},{rank}): {output.shape}")
         output = output.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu,-1)
         v = v.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu, -1)
         # print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
         x_residual = output + v
-        # print(f"x_residual : {output.shape}, {v.shape}, {x_residual.shape}")
+        print(f"x_residual : {output.shape}, {v.shape}, {x_residual.shape}")
         y_rms = self.rms2(x_residual)
         z = self.mlp(y_rms)
         X = x_residual + self.W_down(z)
@@ -225,11 +225,11 @@ if __name__ == "__main__":
                       extra_special_tokens={"bos_token":"<s>", 
                       "eos_token":"</s>", "pad_token":"</s>"})
   #base
-  # train("dataset/mathematics/parquets", rank, tokens_per_gpu)
+  # train("dataset/mathematics/parquets", ranktokens_per_gpu, tokens_per_gpu)
   #generate
   # generate_base(world_size, rank, tokens_per_gpu, current_tokenizer)
   #sft
-  train("dataset/deepseek-r1/shards", rank, tokens_per_gpu)
+  train("dataset/deepseek-r1/shards", rank, )
   #generate
   # generate_sft(world_size, rank, tokens_per_gpu,current_tokenizer)
 
