@@ -62,7 +62,7 @@ class MultiGPUExecutor(nn.Module):
         # print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
         output = self.attention(q, k, v, Config.batch, Config.num_heads, n_ctx, Config.hiddens, 
                                 Config.sm_scale, world_size, self.rank)
-        # print(f"Output ({rank},{rank}): {output.shape}")
+        print(f"Output ({rank},{rank}): {output.shape} : {output[:,:,:10,:10]}")
         output = output.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu,-1)
         v = v.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu, -1)
         print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
@@ -73,7 +73,7 @@ class MultiGPUExecutor(nn.Module):
         X = x_residual + self.W_down(z)
       X = self.rms3(X)
       logits = self.dense(X)
-      print(f"Logits before float : {logits.shape} : {logits[:10,:10,:10]}")
+      print(f"Logits before float : {logits.shape} : {logits[:,:10,:10]}")
       logits = logits.float()
       output_logits = logits[:,-1,:]
       # print(f"Logits : {logits.shape} : {logits}")
