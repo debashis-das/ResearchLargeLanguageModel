@@ -8,8 +8,8 @@ class RopeEmbedding(nn.Module):
         self.n = 10000
         self.dropout = nn.Dropout(dropout)
         # k/n^(2i/d) with n = 10000
-        theta = torch.pow(self.n, -2*torch.arange(1,num_hiddens//2+1,dtype=torch.float64, device=device)/num_hiddens)
-        expression = torch.arange(block_size_per_gpu*rank+1, block_size_per_gpu*(rank+1)+1, dtype=torch.float64, device=device).reshape(-1,1)*theta
+        theta = torch.pow(self.n, -2*torch.arange(1,num_hiddens//2+1,dtype=torch.float16, device=device)/num_hiddens)
+        expression = torch.arange(block_size_per_gpu*rank+1, block_size_per_gpu*(rank+1)+1, dtype=torch.float16, device=device).reshape(-1,1)*theta
         # print(f'Theta : {theta}')
         sin_val = torch.sin(expression)
         cos_val = torch.cos(expression)
