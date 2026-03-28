@@ -229,7 +229,7 @@ if __name__ == "__main__":
   #generate
   # generate_base(world_size, rank, tokens_per_gpu, current_tokenizer)
   #sft
-  train("dataset/deepseek-r1/shards", rank, )
+  train("dataset/deepseek-r1/shards", rank, tokens_per_gpu)
   #generate
   # generate_sft(world_size, rank, tokens_per_gpu,current_tokenizer)
 
