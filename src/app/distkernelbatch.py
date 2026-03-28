@@ -15,7 +15,7 @@ from transformers import AutoTokenizer
 
 
 # torch.set_printoptions(profile="full")
-DEVICE = triton.runtime.driver.active.get_active_torch_device()
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # DEVICE = "cpu"
 
 
