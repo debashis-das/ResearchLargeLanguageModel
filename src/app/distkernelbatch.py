@@ -184,7 +184,7 @@ def train(base, rank, tokens_per_gpu):
             del batch
             gc.collect()
             torch.cuda.empty_cache()
-            if step % 1 == 0:
+            if step == 10:
               torch.save({
                       'parquet_idx': i,
                       'epoch_per_parquet': index,
