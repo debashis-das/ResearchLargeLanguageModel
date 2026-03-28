@@ -61,9 +61,9 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
   desc_dq = tl.make_tensor_descriptor(dq, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
                                         block_shape=[block_m, hidden_dim])
   
-  dvalue = tl.zeros([block_m, hidden_dim], dtype=tl.float16)
-  dkey = tl.zeros([block_m, hidden_dim], dtype=tl.float16)
-  dquery = tl.zeros([block_m, hidden_dim], dtype=tl.float16)
+  dvalue = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
+  dkey = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
+  dquery = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
 
   mask_block_n:tl.constexpr = block_n // bulk_slice_factor
   key = desc_k.load([init_offset,0])
