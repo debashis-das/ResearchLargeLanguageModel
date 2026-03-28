@@ -11,7 +11,7 @@ class Config:
     num_heads = 4
     # hiddens = 2048
     # hiddens = 128*num_heads
-    hiddens = 128*num_heads
+    hiddens = 64*num_heads
     total_vocab = 200021
     dropout = 0.1
     sm_scale = 1.3
