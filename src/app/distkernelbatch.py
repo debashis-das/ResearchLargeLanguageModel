@@ -51,9 +51,9 @@ class MultiGPUExecutor(nn.Module):
         X = self.rms1(X)
         q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
         q, k = self.rope_embedding(q, k) 
-        q = q.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous()
-        k = k.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous()
-        v = v.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous()
+        q = q.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous().bfloat16()
+        k = k.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous().bfloat16()
+        v = v.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous().bfloat16()
 
         n_ctx = self.tokens_per_gpu
         block_m = 32
