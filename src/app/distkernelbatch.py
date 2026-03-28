@@ -46,7 +46,7 @@ class MultiGPUExecutor(nn.Module):
   def forward(self, src_tokens, all_logits = False):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       X = self.embedding(src_tokens)
-      for _ in range(24):
+      for _ in range(1):
         # print(f"X shape : {X.shape}")
         X = self.rms1(X)
         q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
@@ -65,14 +65,15 @@ class MultiGPUExecutor(nn.Module):
         # print(f"Output ({rank},{rank}): {output.shape}")
         output = output.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu,-1)
         v = v.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu, -1)
-        # print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
+        print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
         x_residual = output + v
-        # print(f"x_residual : {output.shape}, {v.shape}, {x_residual.shape}")
+        print(f"x_residual : {output.shape}, {v.shape}, {x_residual.shape}")
         y_rms = self.rms2(x_residual)
         z = self.mlp(y_rms)
         X = x_residual + self.W_down(z)
       X = self.rms3(X)
       logits = self.dense(X)
+      print(f"Logits before float : {logits.shape} : {logits[:10,:10,:10]}")
       logits = logits.float()
       output_logits = logits[:,-1,:]
       # print(f"Logits : {logits.shape} : {logits}")
@@ -185,7 +186,7 @@ def train(base, rank, tokens_per_gpu):
             del batch
             gc.collect()
             torch.cuda.empty_cache()
-            if step == 10:
+            if step == 1:
               torch.save({
                       'parquet_idx': i,
                       'epoch_per_parquet': index,
