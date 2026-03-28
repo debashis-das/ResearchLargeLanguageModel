@@ -81,7 +81,7 @@ class MultiGPUExecutor(nn.Module):
       src_tokens = src_tokens.view(B*T)
       shift_labels = src_tokens[...,1:].contiguous()
       shift_logits = logits[...,:-1,:].contiguous()
-      print(f"shift_logits: {shift_logits.shape}, shift_labels: {shift_labels.shape}")
+      print(f"shift_logits({shift_logits.shape}), shift_labels({shift_labels.shape}) : {shift_logits[:10][:10]}, {shift_labels[:10]}")
       loss = self.loss_fn(shift_logits, shift_labels.long())
       print(f"Loss : {loss} ")
       if all_logits:
