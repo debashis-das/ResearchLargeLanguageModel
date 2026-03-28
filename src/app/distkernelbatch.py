@@ -15,8 +15,8 @@ from transformers import AutoTokenizer
 
 
 # torch.set_printoptions(profile="full")
-# DEVICE = triton.runtime.driver.active.get_active_torch_device()
-DEVICE = "cpu"
+DEVICE = triton.runtime.driver.active.get_active_torch_device()
+# DEVICE = "cpu"
 
 
 class MultiGPUExecutor(nn.Module):
