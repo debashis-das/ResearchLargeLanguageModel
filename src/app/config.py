@@ -16,5 +16,5 @@ class Config:
     dropout = 0.1
     sm_scale = 1.3
     #mlp
-    mlp_intermediate_hidden = 1024
+    mlp_intermediate_hidden = 512
     learning_iter = 8
