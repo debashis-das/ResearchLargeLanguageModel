@@ -86,8 +86,8 @@ def _attention_forward(sm_scale, max_tensor, softmax_dem, batch, num_heads, n_ct
     # print(f"offs_m : {offs_m}")
     # print(f"offs_n : {offs_n}")
     # initialize pointer to m and l
-    m_i = tl.zeros([block_m], dtype=dtype) - float("inf")
-    l_i = tl.zeros([block_m], dtype=dtype) + 1.0
+    m_i = tl.zeros([block_m], dtype=tl.float32) - float("inf")
+    l_i = tl.zeros([block_m], dtype=tl.float32) + 1.0
     acc = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
     # load scales
     qk_scale = sm_scale
