@@ -6,9 +6,9 @@ class Config:
     debug: bool = False
     batch = 1
     # tokens = 4096
-    tokens = 512
+    tokens = 1024
     # num_heads = 16
-    num_heads = 4
+    num_heads = 8
     # hiddens = 2048
     # hiddens = 128*num_heads
     hiddens = 64*num_heads
