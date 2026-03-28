@@ -168,7 +168,7 @@ def train(base, rank, tokens_per_gpu):
     try:
       step = 0
       for index, row in df.iterrows():
-        batch.append(torch.tensor(row['tensor'][:tokens_per_gpu], device=DEVICE))
+        batch.append(torch.tensor(row['tensor'][:tokens_per_gpu], device=DEVICE, dtype=torch.bfloat16))
         if len(batch) == 8:
             tokens = torch.stack(batch)
             # print(f"Tokens : {tokens.shape}")
