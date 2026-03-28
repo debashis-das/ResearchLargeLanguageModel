@@ -51,8 +51,8 @@ def nodes_partion_q_fixed_kv_forward(exe_order_per_rank_h, exe_order_per_rank_v,
             # print(f"Rec1_forward(s:{q_rank},c:{rank}) {recv_q.shape}, {k.shape}, {v.shape} : {recv_q.stride()}, {k.stride()}, {v.stride()}")
             with semaphore:
               o = torch.ones_like(q)
-              M = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
-              sft_dem = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
+              M = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
+              sft_dem = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
 
               # _attention_forward[grid](sm_scale, M, sft_dem, batch, num_heads, n_ctx,
               #             recv_q, k, v, o,
@@ -105,8 +105,8 @@ def nodes_partion_vary_qkv_forward(exe_order_per_rank_unaligned, rank, q, k, v, 
             # print(f"input irecv (src:{q_rank},dest recevied to :{rank})")
           # print(f"R({rank}:{rank==q_rank})(s1:{q_rank},s2:{kv_rank}) {recv_q.shape}, {recv_k.shape}, {recv_v.shape}: {recv_q.stride()}, {recv_k.stride()}, {recv_v.stride()}")
           o = torch.ones_like(q)
-          M = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
-          sft_dem = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
+          M = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
+          sft_dem = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
           with semaphore:
             # _attention_forward[grid](sm_scale, M, batch, num_heads, n_ctx,
             #               recv_q, recv_k, recv_v, o,
@@ -149,7 +149,7 @@ def nodes_partion_q_fixed_kv_backward(exe_order_per_rank_h, exe_order_per_rank_v
             req_rec_q.wait()
             # print(f"Rec1_backward(s:{q_rank},c:{rank}) {recv_q.shape}, {k.shape}, {v.shape} : {recv_q.stride()}, {k.stride()}, {v.stride()}")
             with semaphore:
-              delta = torch.empty((recv_q.shape[0], recv_q.shape[1]), device=recv_q.device, dtype=torch.float32)
+              delta = torch.empty((recv_q.shape[0], recv_q.shape[1]), device=recv_q.device, dtype=torch.bfloat16)
               # _attention_bwd_pre_process[grid_preprocess](o, do, delta, batch, n_ctx, pre_block, num_heads, num_hiddens)
               dq = torch.empty_like(recv_q)
               dk = torch.empty_like(k)
@@ -205,7 +205,7 @@ def nodes_partion_vary_qkv_backward(exe_order_per_rank_unaligned, rank, q, k, v,
             # print(f"input irecv (src:{q_rank},dest recevied to :{rank})")
           # print(f"R({rank}:{rank==q_rank})(s1:{q_rank},s2:{kv_rank}) {recv_q.shape}, {recv_k.shape}, {recv_v.shape}: {recv_q.stride()}, {recv_k.stride()}, {recv_v.stride()}")
           with semaphore:
-            delta = torch.empty((recv_q.shape[0], recv_q.shape[1]), device=recv_q.device, dtype=torch.float32)
+            delta = torch.empty((recv_q.shape[0], recv_q.shape[1]), device=recv_q.device, dtype=torch.bfloat16)
             # _attention_bwd_pre_process[grid_preprocess](o, do, delta, batch, n_ctx, pre_block, num_heads, num_hiddens)
             dq = torch.empty_like(recv_q)
             dk = torch.empty_like(recv_k)
@@ -238,8 +238,8 @@ class _attention(torch.autograd.Function):
             exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
         
         o = torch.empty_like(q)
-        M = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
-        sft_d = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
+        M = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
+        sft_d = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
         
         grid_fwd = lambda META: (
             triton.cdiv(n_ctx, META['block_m']),
@@ -352,7 +352,7 @@ class _attention(torch.autograd.Function):
       n_ctx = q.shape[1]
       grid_preprocess = (n_ctx//pre_block, num_heads*batch, 1)
       # print(f"Grid (bwd_pre_process) : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
-      delta = torch.empty_like(M, device=q.device, dtype=torch.float32)
+      delta = torch.empty_like(M, device=q.device, dtype=torch.bfloat16)
       # Preprocess
       _attention_bwd_pre_process[grid_preprocess](o, do, delta, batch, n_ctx, pre_block, num_heads, num_hiddens)
       # bwd
