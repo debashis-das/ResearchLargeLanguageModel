@@ -4,7 +4,7 @@ from dataclasses import dataclass
 @dataclass
 class Config:
     debug: bool = False
-    batch = 4
+    batch = 8
     # tokens = 4096
     tokens = 1024
     # num_heads = 16
