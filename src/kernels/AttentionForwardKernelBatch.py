@@ -52,9 +52,9 @@ def _attention_forward_inner_mask(acc, l_i, m_i, q, desc_k, desc_v,
 
 @triton.autotune(
     configs=[
-        triton.Config({'block_m':128, 'block_n':64}, num_warps=4, num_stages=3),
-        triton.Config({'block_m':64,  'block_n':128}, num_warps=4, num_stages=3),
-        triton.Config({'block_m':128, 'block_n':128}, num_warps=8, num_stages=2)
+        triton.Config({'block_m':64, 'block_n':32}, num_warps=4, num_stages=2),
+        triton.Config({'block_m':32,  'block_n':64}, num_warps=4, num_stages=2),
+        triton.Config({'block_m':64, 'block_n':64}, num_warps=8, num_stages=2)
     ],
     key=['n_ctx', 'hidden_dim'],   # runtime-dependent shapes
 )
@@ -62,7 +62,7 @@ def _attention_forward_inner_mask(acc, l_i, m_i, q, desc_k, desc_v,
 def _attention_forward(sm_scale, max_tensor, softmax_dem, batch, num_heads, n_ctx, desc_q, desc_k, desc_v, desc_o,
                        hidden_dim: tl.constexpr, mask_region: tl.constexpr, warp_specialize: tl.constexpr, 
                        block_m: tl.constexpr, block_n: tl.constexpr):
-    dtype = tl.float32
+    dtype = tl.bfloat16 if desc_q.element_type == tl.float16 else tl.float32
     assert block_n <= hidden_dim
     start_m = tl.program_id(0)
     off_hz = tl.program_id(1)
@@ -87,9 +87,9 @@ def _attention_forward(sm_scale, max_tensor, softmax_dem, batch, num_heads, n_ct
     # print(f"offs_m : {offs_m}")
     # print(f"offs_n : {offs_n}")
     # initialize pointer to m and l
-    m_i = tl.zeros([block_m], dtype=tl.float32) - float("inf")
-    l_i = tl.zeros([block_m], dtype=tl.float32) + 1.0
-    acc = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
+    m_i = tl.zeros([block_m], dtype=dtype) - float("inf")
+    l_i = tl.zeros([block_m], dtype=dtype) + 1.0
+    acc = tl.zeros([block_m, hidden_dim], dtype=dtype)
     # load scales
     qk_scale = sm_scale
     qk_scale *= 1.44269504 #1/log(2)
