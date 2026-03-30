@@ -46,3 +46,4 @@ class TransformerLayer(nn.Module):
         # print(f"z : {z.shape}, {z[:,:10,:10]}")
         X = x_residual + self.W_down(z)
         # print(f"X after MLP and residual : {X.shape}, {X}")
+        return X
