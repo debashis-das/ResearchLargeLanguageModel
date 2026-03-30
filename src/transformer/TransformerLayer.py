@@ -5,10 +5,11 @@ from app.config import Config
 
 class TransformerLayer(nn.Module):
 
-      def __init__(self, world_size, rank, rope_embedding=None, attention=None, W_q=None, W_k=None, W_v=None, W_down=None, mlp=None, rms1=None, rms2=None):
+      def __init__(self, world_size, rank, tokens_per_gpu, rope_embedding=None, attention=None, W_q=None, W_k=None, W_v=None, W_down=None, mlp=None, rms1=None, rms2=None):
           super().__init__()
           self.world_size = world_size
           self.rank = rank
+          self.tokens_per_gpu = tokens_per_gpu
           self.rope_embedding = rope_embedding
           self.attention = attention
           self.W_q = W_q

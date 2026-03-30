@@ -22,12 +22,12 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class MultiGPUExecutor(nn.Module):
 
-  def __init__(self, world_size, rank, device=DEVICE):
+  def __init__(self, world_size, rank, tokens_per_gpu, device=DEVICE):
     super().__init__()
     self.device = device
     self.rank = rank
     self.world_size = world_size
-    self.tokens_per_gpu = Config.tokens//world_size
+    self.tokens_per_gpu = tokens_per_gpu
     self.embedding = nn.Embedding(Config.total_vocab, Config.hiddens, device=DEVICE)
     self.rms1 = RMSNorm(Config.hiddens, device=DEVICE)
     self.rms2 = RMSNorm(Config.hiddens, device=DEVICE)
@@ -45,7 +45,7 @@ class MultiGPUExecutor(nn.Module):
     self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
     self.model = nn.Sequential()
     for i in range(24):
-      self.model.add_module(f"transformer_layer_{i}", TransformerLayer(world_size=self.world_size, rank=self.rank, rope_embedding = self.rope_embedding, 
+      self.model.add_module(f"transformer_layer_{i}", TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, rope_embedding = self.rope_embedding, 
                                           attention = self.attention, 
                                           W_q = self.W_q, 
                                           W_k = self.W_k, 
@@ -211,13 +211,13 @@ if __name__ == "__main__":
   tokens_per_gpu = Config.tokens//world_size
 
   rank = dist.get_rank()
-  model_per_rank = MultiGPUExecutor(world_size, rank)
+  model_per_rank = MultiGPUExecutor(world_size, rank, tokens_per_gpu)
   model_per_rank = model_per_rank.to(DEVICE)
   optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=8e-6, weight_decay=0.008)
   max_tokens = 100
-  current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
-                      extra_special_tokens={"bos_token":"<s>", 
-                      "eos_token":"</s>", "pad_token":"</s>"})
+  # current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
+  #                     extra_special_tokens={"bos_token":"<s>", 
+  #                     "eos_token":"</s>", "pad_token":"</s>"})
   #base
   # train("dataset/mathematics/parquets", ranktokens_per_gpu, tokens_per_gpu)
   #generate
