@@ -48,6 +48,8 @@ class MultiGPUExecutor(nn.Module):
       X = self.embedding(src_tokens)
       for _ in range(1):
         # print(f"X shape : {X.shape}")
+        if X.dtype != torch.float32:
+          X = X.to(torch.float32)
         X = self.rms1(X)
         q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
         q, k = self.rope_embedding(q, k) 
@@ -62,20 +64,20 @@ class MultiGPUExecutor(nn.Module):
         # print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
         output = self.attention(q, k, v, Config.batch, Config.num_heads, n_ctx, Config.hiddens, 
                                 Config.sm_scale, world_size, self.rank)
-        print(f"Output ({rank},{rank}): {output.shape} : {output[:,:,:10,:10]}")
+        # print(f"Output ({rank},{rank}): {output.shape} : {output[:,:,:10,:10]}")
         output = output.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu,-1)
         v = v.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu, -1)
-        print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
+        # print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
         x_residual = output + v
-        print(f"x_residual : {output.shape}, {v.shape}, {x_residual.shape}")
+        # print(f"x_residual : {output.shape}, {v.shape}, {x_residual.shape}")
         y_rms = self.rms2(x_residual)
         z = self.mlp(y_rms)
-        print(f"z : {z.shape}, {z[:,:10,:10]}")
+        # print(f"z : {z.shape}, {z[:,:10,:10]}")
         X = x_residual + self.W_down(z)
-        print(f"X after MLP and residual : {X.shape}, {X[:,:10,:10]}")
+        # print(f"X after MLP and residual : {X.shape}, {X}")
       X = self.rms3(X)
       logits = self.dense(X)
-      print(f"Logits before float : {logits.shape} : {logits[:,:10,:10]}")
+      # print(f"Logits before float : {logits.shape} : {logits[:,:10,:10]}")
       logits = logits.float()
       output_logits = logits[:,-1,:]
       # print(f"Logits : {logits.shape} : {logits}")
@@ -84,9 +86,9 @@ class MultiGPUExecutor(nn.Module):
       src_tokens = src_tokens.view(B*T)
       shift_labels = src_tokens[...,1:].contiguous()
       shift_logits = logits[...,:-1,:].contiguous()
-      print(f"shift_logits({shift_logits.shape}), shift_labels({shift_labels.shape}) : {shift_logits[:10][:10]}, {shift_labels[:10]}")
+      # print(f"shift_logits({shift_logits.shape}), shift_labels({shift_labels.shape}) : {shift_logits[:10][:10]}, {shift_labels[:10]}")
       loss = self.loss_fn(shift_logits, shift_labels.long())
-      print(f"Loss : {loss} ")
+      # print(f"Loss : {loss} ")
       if all_logits:
         return all_logits, loss
       return output_logits, loss

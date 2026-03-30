@@ -41,7 +41,7 @@ def _attention_forward_inner_mask(acc, l_i, m_i, q, desc_k, desc_v,
 
         # print(f"Offset of v [0, {offsetv_y}]")
         v = desc_v.load([offsetv_y, 0])
-        p = p.to(dtype)
+        # p = p.to(dtype)
         acc = tl.dot(p, v, acc)
         l_i = l_i * alpha + l_ij
         m_i = m_ij
