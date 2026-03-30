@@ -1,6 +1,7 @@
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 from transformer.TransformerLayer import TransformerLayer
 import triton
 import pandas as pd
@@ -28,39 +29,20 @@ class MultiGPUExecutor(nn.Module):
     self.rank = rank
     self.world_size = world_size
     self.tokens_per_gpu = tokens_per_gpu
-    self.embedding = nn.Embedding(Config.total_vocab, Config.hiddens, device=DEVICE)
-    self.rms1 = RMSNorm(Config.hiddens, device=DEVICE)
-    self.rms2 = RMSNorm(Config.hiddens, device=DEVICE)
-    self.rms3 = RMSNorm(Config.hiddens, device=DEVICE)
-    self.mlp = MLP(Config.hiddens, Config.mlp_intermediate_hidden, device=DEVICE)
-
-    self.W_q = nn.LazyLinear(Config.hiddens, bias=False, device=DEVICE)
-    self.W_k = nn.LazyLinear(Config.hiddens, bias=False, device=DEVICE)
-    self.W_v = nn.LazyLinear(Config.hiddens, bias=False, device=DEVICE)
-    self.W_down = nn.LazyLinear(Config.hiddens, bias=False, device=DEVICE)
-    self.dense = nn.LazyLinear(Config.total_vocab, bias=False, device=DEVICE)
-
-    self.rope_embedding = RopeEmbedding(Config.hiddens, Config.dropout, self.tokens_per_gpu, rank, device=DEVICE)
-    self.attention = _attention.apply
+    self.embedding = nn.Embedding(Config.total_vocab, Config.hiddens, device=device)
+    self.rms3 = RMSNorm(Config.hiddens, device=device)
+    self.dense = nn.LazyLinear(Config.total_vocab, bias=False, device=device)
     self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
     self.model = nn.Sequential()
     for i in range(24):
-      self.model.add_module(f"transformer_layer_{i}", TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, rope_embedding = self.rope_embedding, 
-                                          attention = self.attention, 
-                                          W_q = self.W_q, 
-                                          W_k = self.W_k, 
-                                          W_v = self.W_v, 
-                                          W_down = self.W_down, 
-                                          mlp = self.mlp, 
-                                          rms1 = self.rms1, 
-                                          rms2 = self.rms2))
+      self.model.add_module(f"transformer_layer_{i}", TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, device=device))
   
   
   def forward(self, src_tokens, all_logits = False):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       X = self.embedding(src_tokens)
       for layer in self.model:
-        X = layer(X)
+        X = checkpoint(layer, X, use_reentrant=False)
         if X.dtype != torch.float32:
           X = X.to(torch.float32)
       X = self.rms3(X)
@@ -155,6 +137,7 @@ class MultiGPUExecutor(nn.Module):
 
 def train(base, rank, tokens_per_gpu):
   batch = []
+  accumulation_steps = Config.target_batch_size // Config.batch
   for i in range(1):
     paraquet_filename = f"{base}/{rank}/{i:06d}.parquet"
     df = pd.read_parquet(paraquet_filename)
@@ -169,16 +152,18 @@ def train(base, rank, tokens_per_gpu):
             _, loss = model_per_rank(tokens)
             dist.all_reduce(loss, op=dist.ReduceOp.SUM)
             loss = loss / (Config.batch*Config.tokens)
-            print(f"StepPerFile : {step:010d} : Loss : {loss}")
-            step += 1
+            loss = loss / accumulation_steps
             loss.backward()
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
-            del tokens
-            del batch
-            gc.collect()
-            torch.cuda.empty_cache()
-            if step == 1:
+            running_loss += loss.item()*accumulation_steps
+
+            step += 1
+            if step % accumulation_steps == 0:
+              optimizer.step()
+              optimizer.zero_grad(set_to_none=True)
+              free, total = torch.cuda.mem_get_info(DEVICE)
+              mem_used_MB = (total - free) / 1024 ** 2
+              print(f"step {step} : mem_used_MB={mem_used_MB} ,train loss={running_loss/accumulation_steps}")
+              running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
               torch.save({
                       'parquet_idx': i,
                       'epoch_per_parquet': index,
@@ -187,7 +172,10 @@ def train(base, rank, tokens_per_gpu):
                       'loss': loss
                       }, f"model/{rank}-base-model-params")
               print(f"Model saved for {rank} with name : {rank}-model-params")
-              return
+            del tokens
+            del batch
+            gc.collect()
+            torch.cuda.empty_cache()
             batch = []
     finally:
       dist.destroy_process_group()

@@ -1,24 +1,31 @@
+from app.distkernel import DEVICE
 from torch import nn
 
 from app.config import Config
+from transformer import RopeEmbedding
+from transformer.FusedAttentionBatch import _attention
+from transformer.MLP import MLP
+from transformer.RMSNorm import RMSNorm
 
 
 class TransformerLayer(nn.Module):
 
-      def __init__(self, world_size, rank, tokens_per_gpu, rope_embedding=None, attention=None, W_q=None, W_k=None, W_v=None, W_down=None, mlp=None, rms1=None, rms2=None):
-          super().__init__()
-          self.world_size = world_size
-          self.rank = rank
-          self.tokens_per_gpu = tokens_per_gpu
-          self.rope_embedding = rope_embedding
-          self.attention = attention
-          self.W_q = W_q
-          self.W_k = W_k
-          self.W_v = W_v
-          self.W_down = W_down
-          self.mlp = mlp
-          self.rms1 = rms1
-          self.rms2 = rms2
+      def __init__(self, world_size, rank, tokens_per_gpu, device):
+        super().__init__()
+        self.world_size = world_size
+        self.rank = rank
+        self.tokens_per_gpu = tokens_per_gpu
+        self.rms1 = RMSNorm(Config.hiddens, device=device)
+        self.rms2 = RMSNorm(Config.hiddens, device=device)
+        self.mlp = MLP(Config.hiddens, Config.mlp_intermediate_hidden, device=device)
+
+        self.W_q = nn.LazyLinear(Config.hiddens, bias=False, device=device)
+        self.W_k = nn.LazyLinear(Config.hiddens, bias=False, device=device)
+        self.W_v = nn.LazyLinear(Config.hiddens, bias=False, device=device)
+        self.W_down = nn.LazyLinear(Config.hiddens, bias=False, device=device)
+
+        self.rope_embedding = RopeEmbedding(Config.hiddens, Config.dropout, self.tokens_per_gpu, rank, device=device)
+        self.attention = _attention.apply
 
       def forward(self, X):
         X = self.rms1(X)
