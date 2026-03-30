@@ -1,6 +1,7 @@
 import torch
 import torch.distributed as dist
 from torch import nn
+from transformer.TransformerLayer import TransformerLayer
 import triton
 import pandas as pd
 from torch.nn import functional as F
@@ -11,7 +12,7 @@ from transformer.MLP import MLP
 from transformer.FusedAttentionBatch import _attention
 from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
-from transformers import AutoTokenizer
+# from transformers import AutoTokenizer
 
 
 # torch.set_printoptions(profile="full")
@@ -42,39 +43,26 @@ class MultiGPUExecutor(nn.Module):
     self.rope_embedding = RopeEmbedding(Config.hiddens, Config.dropout, self.tokens_per_gpu, rank, device=DEVICE)
     self.attention = _attention.apply
     self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
-
+    self.model = nn.Sequential()
+    for i in range(24):
+      self.model.add_module(f"transformer_layer_{i}", TransformerLayer(world_size=self.world_size, rank=self.rank, rope_embedding = self.rope_embedding, 
+                                          attention = self.attention, 
+                                          W_q = self.W_q, 
+                                          W_k = self.W_k, 
+                                          W_v = self.W_v, 
+                                          W_down = self.W_down, 
+                                          mlp = self.mlp, 
+                                          rms1 = self.rms1, 
+                                          rms2 = self.rms2))
+  
+  
   def forward(self, src_tokens, all_logits = False):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       X = self.embedding(src_tokens)
-      for _ in range(24):
-        # print(f"X shape : {X.shape}")
+      for layer in self.model:
+        X = layer(X)
         if X.dtype != torch.float32:
           X = X.to(torch.float32)
-        X = self.rms1(X)
-        q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
-        q, k = self.rope_embedding(q, k) 
-        q = q.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous().bfloat16()
-        k = k.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous().bfloat16()
-        v = v.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous().bfloat16()
-
-        n_ctx = self.tokens_per_gpu
-        block_m = 32
-        block_n = 16
-        grid_fwd = (n_ctx//block_m, Config.num_heads*Config.batch, 1)
-        # print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
-        output = self.attention(q, k, v, Config.batch, Config.num_heads, n_ctx, Config.hiddens, 
-                                Config.sm_scale, world_size, self.rank)
-        # print(f"Output ({rank},{rank}): {output.shape} : {output[:,:,:10,:10]}")
-        output = output.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu,-1)
-        v = v.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu, -1)
-        # print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
-        x_residual = output + v
-        # print(f"x_residual : {output.shape}, {v.shape}, {x_residual.shape}")
-        y_rms = self.rms2(x_residual)
-        z = self.mlp(y_rms)
-        # print(f"z : {z.shape}, {z[:,:10,:10]}")
-        X = x_residual + self.W_down(z)
-        # print(f"X after MLP and residual : {X.shape}, {X}")
       X = self.rms3(X)
       logits = self.dense(X)
       # print(f"Logits before float : {logits.shape} : {logits[:,:10,:10]}")
