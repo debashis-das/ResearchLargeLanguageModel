@@ -43,9 +43,6 @@ class MultiGPUExecutor(nn.Module):
       X = self.embedding(src_tokens)
       for layer in self.model:
         X = checkpoint(layer, X, use_reentrant=False)
-        print(f"X.shape: {X.shape}, X.dtype: {X.dtype}")
-        if X.dtype != torch.float32:
-          X = X.to(torch.float32)
       X = self.rms3(X)
       logits = self.dense(X)
       # print(f"Logits before float : {logits.shape} : {logits[:,:10,:10]}")
@@ -59,7 +56,7 @@ class MultiGPUExecutor(nn.Module):
       shift_logits = logits[...,:-1,:].contiguous()
       # print(f"shift_logits({shift_logits.shape}), shift_labels({shift_labels.shape}) : {shift_logits[:10][:10]}, {shift_labels[:10]}")
       loss = self.loss_fn(shift_logits, shift_labels.long())
-      # print(f"Loss : {loss} ")
+      print(f"Loss : {loss} ")
       if all_logits:
         return all_logits, loss
       return output_logits, loss
@@ -140,6 +137,9 @@ def train(base, rank, tokens_per_gpu):
   batch = []
   accumulation_steps = Config.target_batch_size // Config.batch
   running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
+  model_per_rank = MultiGPUExecutor(world_size, rank, tokens_per_gpu)
+  model_per_rank = model_per_rank.to(DEVICE)
+  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=8e-6, weight_decay=0.008)
   for i in range(1):
     paraquet_filename = f"{base}/{rank}/{i:06d}.parquet"
     df = pd.read_parquet(paraquet_filename)
@@ -200,10 +200,10 @@ if __name__ == "__main__":
   tokens_per_gpu = Config.tokens//world_size
 
   rank = dist.get_rank()
-  model_per_rank = MultiGPUExecutor(world_size, rank, tokens_per_gpu)
-  model_per_rank = model_per_rank.to(DEVICE)
-  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=8e-6, weight_decay=0.008)
-  max_tokens = 100
+  # model_per_rank = MultiGPUExecutor(world_size, rank, tokens_per_gpu)
+  # model_per_rank = model_per_rank.to(DEVICE)
+  # optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=8e-6, weight_decay=0.008)
+  # max_tokens = 100
   # current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
   #                     extra_special_tokens={"bos_token":"<s>", 
   #                     "eos_token":"</s>", "pad_token":"</s>"})
