@@ -59,7 +59,7 @@ class TransformerLayer(nn.Module):
         # print(f"X after MLP and residual : {X.shape}, {X}")
         return X
 
-      def exit_on_nan(self, q, message):
-          if torch.isnan(q).any():
-            print(f"[Layer {self.layer_id}] {message}")
+      def exit_on_nan(self, input, message):
+          if torch.isnan(input).any():
+            print(f"[Layer {self.layer_id}] [Shape {input.shape}] {message} : {input}")
             exit()
