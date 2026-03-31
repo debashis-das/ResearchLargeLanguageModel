@@ -17,7 +17,7 @@ from transformer.RopeEmbedding import RopeEmbedding
 
 
 # torch.set_printoptions(profile="full")
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = triton.runtime.driver.active.get_active_torch_device()
 # DEVICE = "cpu"
 
 
