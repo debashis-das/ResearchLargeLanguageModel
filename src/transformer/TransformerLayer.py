@@ -23,7 +23,6 @@ class TransformerLayer(nn.Module):
         self.W_k = nn.LazyLinear(Config.hiddens, bias=False, device=device)
         self.W_v = nn.LazyLinear(Config.hiddens, bias=False, device=device)
         self.W_down = nn.LazyLinear(Config.hiddens, bias=False, device=device)
-        print("DEBUG:",Config.hiddens, Config.dropout, tokens_per_gpu, rank, device)
         self.rope_embedding = RopeEmbedding(Config.hiddens, Config.dropout, tokens_per_gpu, rank, device=device)
         self.attention = _attention.apply
 
