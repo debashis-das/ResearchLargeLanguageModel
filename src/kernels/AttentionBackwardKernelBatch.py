@@ -29,6 +29,7 @@ def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
         triton.Config({'block_m':64, 'block_n':64}, num_warps=4, num_stages=1),
         triton.Config({'block_m':32,  'block_n':64}, num_warps=4, num_stages=1),
         triton.Config({'block_m':64, 'block_n':64}, num_warps=4, num_stages=1),
+        triton.Config({'block_m':32, 'block_n':32}, num_warps=4, num_stages=1)
     ],
     key=['n_ctx', 'hidden_dim'],   # runtime-dependent shapes
 )

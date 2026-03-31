@@ -52,8 +52,9 @@ def _attention_forward_inner_mask(acc, l_i, m_i, q, desc_k, desc_v,
 @triton.autotune(
     configs=[
         triton.Config({'block_m':64, 'block_n':32}, num_warps=4, num_stages=1),
-        triton.Config({'block_m':32,  'block_n':64}, num_warps=4, num_stages=1),
-        triton.Config({'block_m':64, 'block_n':64}, num_warps=4, num_stages=1)
+        triton.Config({'block_m':32, 'block_n':64}, num_warps=4, num_stages=1),
+        triton.Config({'block_m':64, 'block_n':64}, num_warps=4, num_stages=1),
+        triton.Config({'block_m':32, 'block_n':32}, num_warps=4, num_stages=1)
     ],
     key=['n_ctx', 'hidden_dim'],   # runtime-dependent shapes
 )
