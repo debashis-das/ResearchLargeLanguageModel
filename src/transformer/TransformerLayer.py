@@ -2,10 +2,10 @@ from app.distkernel import DEVICE
 from torch import nn
 
 from app.config import Config
-from transformer import RopeEmbedding
-from transformer.FusedAttentionBatch import _attention
-from transformer.MLP import MLP
-from transformer.RMSNorm import RMSNorm
+from . import RopeEmbedding
+from .FusedAttentionBatch import _attention
+from .MLP import MLP
+from .RMSNorm import RMSNorm
 
 
 class TransformerLayer(nn.Module):
