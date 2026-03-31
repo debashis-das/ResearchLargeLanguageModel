@@ -138,6 +138,7 @@ class MultiGPUExecutor(nn.Module):
 def train(base, rank, tokens_per_gpu):
   batch = []
   accumulation_steps = Config.target_batch_size // Config.batch
+  running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
   for i in range(1):
     paraquet_filename = f"{base}/{rank}/{i:06d}.parquet"
     df = pd.read_parquet(paraquet_filename)
