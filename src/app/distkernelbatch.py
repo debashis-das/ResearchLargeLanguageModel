@@ -43,6 +43,7 @@ class MultiGPUExecutor(nn.Module):
       X = self.embedding(src_tokens)
       for layer in self.model:
         X = checkpoint(layer, X, use_reentrant=False)
+        print(f"X.shape: {X.shape}, X.dtype: {X.dtype}")
         if X.dtype != torch.float32:
           X = X.to(torch.float32)
       X = self.rms3(X)
