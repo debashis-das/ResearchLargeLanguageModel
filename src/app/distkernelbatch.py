@@ -56,7 +56,9 @@ class MultiGPUExecutor(nn.Module):
       shift_logits = logits[...,:-1,:].contiguous()
       # print(f"shift_logits({shift_logits.shape}), shift_labels({shift_labels.shape}) : {shift_logits[:10][:10]}, {shift_labels[:10]}")
       loss = self.loss_fn(shift_logits, shift_labels.long())
-      print(f"Loss : {loss} ")
+      if loss.isnan():
+        print(f"[Nan] X : {X.shape} : {X[:,:10,:10]}")
+        print(f"[Nan] Logits : {logits.shape} : {logits[:,:10,:10]}")
       if all_logits:
         return all_logits, loss
       return output_logits, loss
