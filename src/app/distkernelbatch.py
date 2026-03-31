@@ -163,7 +163,6 @@ def train(base, rank, tokens_per_gpu):
               optimizer.zero_grad(set_to_none=True)
               free, total = torch.cuda.mem_get_info(DEVICE)
               mem_used_MB = (total - free) / 1024 ** 2
-              print(f"step {step} : mem_used_MB={mem_used_MB} ,train loss={running_loss/accumulation_steps}")
               running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
               torch.save({
                       'parquet_idx': i,
@@ -172,7 +171,7 @@ def train(base, rank, tokens_per_gpu):
                       'optimizer_state_dic': optimizer.state_dict(),
                       'loss': loss
                       }, f"model/{rank}-base-model-params")
-              print(f"Model saved for {rank} with name : {rank}-model-params")
+              print(f"[Rank {rank}] Model saved {rank}-model-params, step {step} : mem_used_MB={mem_used_MB} ,train loss={running_loss/accumulation_steps}")
             del tokens
             del batch
             gc.collect()
