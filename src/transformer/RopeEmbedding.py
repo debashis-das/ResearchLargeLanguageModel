@@ -32,6 +32,6 @@ class RopeEmbedding(nn.Module):
         # print(f'Query({rank}) : {query.shape} , Cos : {self.cos.shape}, Rotate half : {rotate_half(query).shape}, Sin : {self.sin.shape}')
         q_type = query.dtype
         k_type = key.dtype
-        q_embed = (query.float()*self.cos.float()) + (rotate_half(query).float()*self.sin.float())
-        k_embed = (key.float()*self.cos.float()) + (rotate_half(key).float()*self.sin.float())
+        q_embed = (query.to(torch.float16)*self.cos.to(torch.float16)) + (rotate_half(query).to(torch.float16)*self.sin.to(torch.float16))
+        k_embed = (key.to(torch.float16)*self.cos.to(torch.float16)) + (rotate_half(key).to(torch.float16)*self.sin.to(torch.float16))
         return q_embed.to(q_type), k_embed.to(k_type)
