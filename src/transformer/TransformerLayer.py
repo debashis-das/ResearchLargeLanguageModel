@@ -1,4 +1,4 @@
-from app.distkernel import DEVICE
+import torch
 from torch import nn
 
 from app.config import Config
