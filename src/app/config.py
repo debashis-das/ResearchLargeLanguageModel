@@ -3,9 +3,8 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
-    debug: bool = False
-    target_batch_size = 20
-    batch = 4
+    target_batch_size = 10
+    batch = 1
     # tokens = 4096
     tokens = 1024
     # num_heads = 16
