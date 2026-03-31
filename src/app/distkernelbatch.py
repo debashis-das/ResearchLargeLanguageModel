@@ -33,9 +33,9 @@ class MultiGPUExecutor(nn.Module):
     self.rms3 = RMSNorm(Config.hiddens, device=device)
     self.dense = nn.LazyLinear(Config.total_vocab, bias=False, device=device)
     self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
-    self.model = nn.Sequential()
+    self.model = []
     for i in range(24):
-      self.model.add_module(f"transformer_layer_{i}", TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, device=device))
+      self.model.append(TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, device=device))
   
   
   def forward(self, src_tokens, all_logits = False):
