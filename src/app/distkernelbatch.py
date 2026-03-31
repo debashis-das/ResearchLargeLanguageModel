@@ -35,7 +35,7 @@ class MultiGPUExecutor(nn.Module):
     self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
     self.model = nn.ModuleList()
     for i in range(24):
-      self.model.append(TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, device=device))
+      self.model.append(TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, device=device, layer_id=i))
   
   
   def forward(self, src_tokens, all_logits = False):
@@ -56,9 +56,6 @@ class MultiGPUExecutor(nn.Module):
       shift_logits = logits[...,:-1,:].contiguous()
       # print(f"shift_logits({shift_logits.shape}), shift_labels({shift_labels.shape}) : {shift_logits[:10][:10]}, {shift_labels[:10]}")
       loss = self.loss_fn(shift_logits, shift_labels.long())
-      if loss.isnan():
-        print(f"[Nan] X : {X.shape} : {X[:,:10,:10]}")
-        print(f"[Nan] Logits : {logits.shape} : {logits[:,:10,:10]}")
       if all_logits:
         return all_logits, loss
       return output_logits, loss
