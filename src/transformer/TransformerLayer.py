@@ -29,6 +29,7 @@ class TransformerLayer(nn.Module):
 
       def forward(self, X):
         X = self.rms1(X)
+        self.exit_on_nan(X, f"NaN in input after RMSNorm1 in rank {self.rank}")
         q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
         q, k = self.rope_embedding(q, k) 
         print(f"q.shape: {q.shape}, k.shape: {k.shape}")

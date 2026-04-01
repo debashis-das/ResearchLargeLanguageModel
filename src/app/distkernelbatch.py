@@ -37,10 +37,15 @@ class MultiGPUExecutor(nn.Module):
     for i in range(24):
       self.model.append(TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, device=device, layer_id=i))
   
-  
+  def exit_on_nan(self, input, message):
+    if torch.isnan(input).any():
+      print(f"[Layer {self.layer_id}] [Shape {input.shape}] {message} : {input}")
+      exit()
+
   def forward(self, src_tokens, all_logits = False):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       X = self.embedding(src_tokens)
+      self.exit_on_nan(X, f"NaN in embedding output in rank {self.rank}")
       for layer in self.model:
         X = checkpoint(layer, X, use_reentrant=False)
       X = self.rms3(X)
