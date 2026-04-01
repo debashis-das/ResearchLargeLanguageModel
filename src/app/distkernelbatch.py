@@ -44,6 +44,7 @@ class MultiGPUExecutor(nn.Module):
 
   def forward(self, src_tokens, all_logits = False):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
+      self.exit_on_nan(src_tokens, f"NaN in input tokens in rank {self.rank}")
       X = self.embedding(src_tokens)
       self.exit_on_nan(X, f"NaN in embedding output in rank {self.rank}")
       for layer in self.model:
