@@ -46,7 +46,10 @@ class MultiGPUExecutor(nn.Module):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       self.exit_on_nan(src_tokens, f"NaN in input tokens in rank {self.rank}")
       X = self.embedding(src_tokens)
-      self.exit_on_nan(X, f"NaN in embedding output in rank {self.rank}")
+      if torch.isnan(X).any():
+        print("Embedding weight NaN:", torch.isnan(self.embedding.weight).any())
+        print("Embedding weight max:", self.embedding.weight.abs().max())
+        self.exit_on_nan(X, f"NaN in embedding output in rank {self.rank}")
       for layer in self.model:
         X = checkpoint(layer, X, use_reentrant=False)
       X = self.rms3(X)
@@ -152,7 +155,7 @@ def train(base, rank, tokens_per_gpu):
     try:
       step = 0
       for index, row in df.iterrows():
-        batch.append(torch.tensor(row['tensor'][:tokens_per_gpu], device=DEVICE))
+        batch.append(torch.tensor(row['tensor'][:tokens_per_gpu], device=DEVICE, dtype=torch.long))
         if len(batch) == Config.batch:
             tokens = torch.stack(batch)
             # print(f"Tokens : {tokens.shape}")
@@ -161,8 +164,11 @@ def train(base, rank, tokens_per_gpu):
             loss = loss / (Config.batch*Config.tokens)
             loss = loss / accumulation_steps
             loss.backward()
-            running_loss += loss.item()*accumulation_steps
+            if torch.isnan(model_per_rank.embedding.weight.grad).any():
+              print("Grad NaN:", torch.isnan(model_per_rank.embedding.weight.grad).any())
+              torch.nn.utils.clip_grad_norm_(model_per_rank.parameters(), 1.0)
 
+            running_loss += loss.item()*accumulation_steps
             step += 1
             if step % accumulation_steps == 0:
               optimizer.step()
