@@ -62,7 +62,7 @@ def _attention_forward_inner_mask(acc, l_i, m_i, q, desc_k, desc_v,
 def _attention_forward(sm_scale, max_tensor, softmax_dem, batch, num_heads, n_ctx, desc_q, desc_k, desc_v, desc_o,
                        hidden_dim: tl.constexpr, mask_region: tl.constexpr, warp_specialize: tl.constexpr, 
                        block_m: tl.constexpr, block_n: tl.constexpr):
-    dtype = tl.bfloat16
+    dtype = tl.float32
     assert block_n <= hidden_dim
     start_m = tl.program_id(0)
     off_hz = tl.program_id(1)

@@ -147,7 +147,7 @@ def train(base, rank, tokens_per_gpu):
   running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
   model_per_rank = MultiGPUExecutor(world_size, rank, tokens_per_gpu)
   model_per_rank = model_per_rank.to(DEVICE)
-  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=8e-6, weight_decay=0.008)
+  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-6)
   for i in range(1):
     paraquet_filename = f"{base}/{rank}/{i:06d}.parquet"
     df = pd.read_parquet(paraquet_filename)
@@ -164,10 +164,9 @@ def train(base, rank, tokens_per_gpu):
             loss = loss / (Config.batch*Config.tokens)
             loss = loss / accumulation_steps
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model_per_rank.parameters(), 1.0)
             if torch.isnan(model_per_rank.embedding.weight.grad).any():
               print("Grad NaN:", torch.isnan(model_per_rank.embedding.weight.grad).any())
-              torch.nn.utils.clip_grad_norm_(model_per_rank.parameters(), 1.0)
-
             running_loss += loss.item()*accumulation_steps
             step += 1
             if step % accumulation_steps == 0:

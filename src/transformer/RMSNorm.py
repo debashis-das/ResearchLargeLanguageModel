@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 class RMSNorm(nn.Module):
-    def __init__(self, num_hiddens, device, eps=1e-6):
+    def __init__(self, num_hiddens, device, eps=1e-8):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(num_hiddens, device=device))
         self.variance_epsilon = eps
