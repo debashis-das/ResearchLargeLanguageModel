@@ -32,7 +32,6 @@ class TransformerLayer(nn.Module):
         self.exit_on_nan(X, f"NaN in input after RMSNorm1 in rank {self.rank}")
         q, k, v = self.W_q(X), self.W_k(X), self.W_v(X)
         q, k = self.rope_embedding(q, k) 
-        print(f"q.shape: {q.shape}, k.shape: {k.shape}")
         self.exit_on_nan(q, f"NaN in query after rope embedding in rank {self.rank}")
         self.exit_on_nan(k, f"NaN in key after rope embedding in rank {self.rank}")
         q = q.reshape(Config.batch, self.tokens_per_gpu, Config.num_heads, -1).permute(0, 2, 1, 3).contiguous()

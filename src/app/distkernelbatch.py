@@ -39,7 +39,7 @@ class MultiGPUExecutor(nn.Module):
   
   def exit_on_nan(self, input, message):
     if torch.isnan(input).any():
-      print(f"[Layer {self.layer_id}] [Shape {input.shape}] {message} : {input}")
+      print(f"[Rank {self.rank}] [Shape {input.shape}] {message} : {input}")
       exit()
 
   def forward(self, src_tokens, all_logits = False):
