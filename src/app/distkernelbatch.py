@@ -42,7 +42,7 @@ class MultiGPUExecutor(nn.Module):
       print(f"[Rank {self.rank}] [Shape {input.shape}] {message} : {input}")
       exit()
 
-  def forward(self, src_tokens, all_logits = False):
+  def forward(self, src_tokens, step, all_logits = False):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
       self.exit_on_nan(src_tokens, f"NaN in input tokens in rank {self.rank}")
       X = self.embedding(src_tokens)
@@ -54,8 +54,8 @@ class MultiGPUExecutor(nn.Module):
         X = checkpoint(layer, X, use_reentrant=False)
       X = self.rms3(X)
       logits = self.dense(X)
-      print("Logits NaN:", torch.isnan(logits).any())
-      print("Logits max:", logits.abs().max())
+      print(f"[Step {step}] Logits NaN:", torch.isnan(logits).any())
+      print(f"[Step {step}] Logits max:", logits.abs().max())
       # print(f"Logits before float : {logits.shape} : {logits[:,:10,:10]}")
       logits = logits.float()
       output_logits = logits[:,-1,:]
@@ -161,7 +161,7 @@ def train(base, rank, tokens_per_gpu):
         if len(batch) == Config.batch:
             tokens = torch.stack(batch)
             # print(f"Tokens : {tokens.shape}")
-            _, loss = model_per_rank(tokens)
+            _, loss = model_per_rank(tokens, step)
             dist.all_reduce(loss, op=dist.ReduceOp.SUM)
             loss = loss / (Config.batch*Config.tokens)
             loss = loss / accumulation_steps
