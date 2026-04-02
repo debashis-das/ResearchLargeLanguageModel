@@ -355,6 +355,7 @@ class _attention(torch.autograd.Function):
       delta = torch.empty_like(M, device=q.device, dtype=torch.bfloat16)
       # Preprocess
       _attention_bwd_pre_process[grid_preprocess](o, do, delta, batch, n_ctx, pre_block, num_heads, num_hiddens)
+      print(f"[Attention] delta({delta.shape}): {torch.isnan(delta).any()} : delta.max(): {delta.abs().max()} : delta.min(): {delta.abs().min()}")
       # bwd
       dq = torch.empty_like(q)
       dk = torch.empty_like(k)
