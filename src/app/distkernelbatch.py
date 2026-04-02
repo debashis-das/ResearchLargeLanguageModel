@@ -51,7 +51,8 @@ class MultiGPUExecutor(nn.Module):
         print("Embedding weight max:", self.embedding.weight.abs().max())
         self.exit_on_nan(X, f"NaN in embedding output in rank {self.rank}")
       for layer in self.model:
-        X = checkpoint(layer, X, use_reentrant=False)
+        # X = checkpoint(layer, X, use_reentrant=False)
+        X = layer(X)
       X = self.rms3(X)
       logits = self.dense(X)
       print(f"[Step {step}] Logits NaN:", torch.isnan(logits).any())
