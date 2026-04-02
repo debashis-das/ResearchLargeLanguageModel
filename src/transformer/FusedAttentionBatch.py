@@ -443,4 +443,7 @@ class _attention(torch.autograd.Function):
       # print(f"dv : {dv.shape}")
       # print(f"dk : {dk.shape}")
       # print(f"dq : {dq.shape}")
+      print(f"[Attention] dv: {torch.isnan(dv).any()} : dv.max(): {dv.abs().max()} : dv.min(): {dv.abs().min()}")
+      print(f"[Attention] dk: {torch.isnan(dk).any()} : dk.max(): {dk.abs().max()} : dk.min(): {dk.abs().min()}")
+      print(f"[Attention] dq: {torch.isnan(dq).any()} : dq.max(): {dq.abs().max()} : dq.min(): {dq.abs().min()}")
       return dq, dk, dv, None, None, None, None, None, None, None, None, None
