@@ -54,6 +54,8 @@ class MultiGPUExecutor(nn.Module):
         X = checkpoint(layer, X, use_reentrant=False)
       X = self.rms3(X)
       logits = self.dense(X)
+      print("Logits NaN:", torch.isnan(logits).any())
+      print("Logits max:", logits.abs().max())
       # print(f"Logits before float : {logits.shape} : {logits[:,:10,:10]}")
       logits = logits.float()
       output_logits = logits[:,-1,:]
