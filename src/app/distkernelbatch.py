@@ -45,20 +45,20 @@ class MultiGPUExecutor(nn.Module):
   
   def exit_on_nan(self, input, message):
     if torch.isnan(input).any():
-      logging.debug(f"[Rank {self.rank}] [Shape {input.shape}] {message} : {input}")
+      logging.info(f"[Rank {self.rank}] [Shape {input.shape}] {message} : {input}")
       exit()
 
   def forward(self, src_tokens, step, all_logits = False):
       # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
-      self.exit_on_nan(src_tokens, f"NaN in input tokens in rank {self.rank}")
+      # self.exit_on_nan(src_tokens, f"NaN in input tokens in rank {self.rank}")
       X = self.embedding(src_tokens)
       if torch.isnan(X).any():
         logging.debug(f"Embedding weight NaN: {torch.isnan(self.embedding.weight).any()}")
         logging.debug(f"Embedding weight max: {self.embedding.weight.abs().max()}")
-        self.exit_on_nan(X, f"NaN in embedding output in rank {self.rank}")
+        # self.exit_on_nan(X, f"NaN in embedding output in rank {self.rank}")
       for layer in self.model:
-        # X = checkpoint(layer, X, use_reentrant=False)
-        X = layer(X)
+        X = checkpoint(layer, X, use_reentrant=False)
+        # X = layer(X)
       X = self.rms3(X)
       logits = self.dense(X)
       logging.debug(f"[Step {step}] Logits NaN: {torch.isnan(logits).any()}")
@@ -175,7 +175,7 @@ def train(base, rank, tokens_per_gpu):
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model_per_rank.parameters(), 1.0)
             if torch.isnan(model_per_rank.embedding.weight.grad).any():
-              print("Grad NaN:", torch.isnan(model_per_rank.embedding.weight.grad).any())
+              logging.debug(f"Grad NaN: {torch.isnan(model_per_rank.embedding.weight.grad).any()}")
             running_loss += loss.item()*accumulation_steps
             step += 1
             if step % accumulation_steps == 0:
