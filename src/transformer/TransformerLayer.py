@@ -10,7 +10,7 @@ from transformer.MLP import MLP
 from transformer.RMSNorm import RMSNorm
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
