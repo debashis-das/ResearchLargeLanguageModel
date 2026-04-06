@@ -183,7 +183,7 @@ def train(base, rank, tokens_per_gpu):
               optimizer.zero_grad(set_to_none=True)
               free, total = torch.cuda.mem_get_info(DEVICE)
               mem_used_MB = (total - free) / 1024 ** 2
-              if step % 100 == 0:
+              if step % 50 == 0:
                 torch.save({
                         'parquet_idx': i,
                         'epoch_per_parquet': index,
@@ -191,7 +191,7 @@ def train(base, rank, tokens_per_gpu):
                         'optimizer_state_dic': optimizer.state_dict(),
                         'loss': loss
                         }, f"model/{rank}-base-model-params")
-                logging.info(f"[Rank {rank}] Model saved {rank}-model-params, step {step} : mem_used_MB={mem_used_MB} ,train loss={running_loss/accumulation_steps}")
+                logging.info(f"[Rank {rank}] Model saved {rank}-model-params, step {step:010d} : mem_used_MB={mem_used_MB} ,train loss={running_loss/accumulation_steps}")
               running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
             del tokens
             del batch
