@@ -20,13 +20,11 @@ def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
   offset = batch_idx*heads*n_ctx*hidden + head_idx*n_ctx*hidden + offs_pre_block[:,None]*hidden + offs_hid[None,:]
   o = tl.load(o_ptr + offset)
   do = tl.load(do_ptr + offset)
-  # o = o.to(tl.float32)
-  # do = do.to(tl.float32)
-  # o = tl.maximum(tl.minimum(o, 1.0e6), -1.0e6)
-  # do = tl.maximum(tl.minimum(do, 1.0e6), -1.0e6)
-  sum_term = tl.sum(o * do, axis=1, keep_dims=True)
-  o_do = o * (do - sum_term)
-  # o_do = tl.sum(o*do, axis=1)
+  o = o.to(tl.float32)
+  do = do.to(tl.float32)
+  o = tl.maximum(tl.minimum(o, 1.0e6), -1.0e6)
+  do = tl.maximum(tl.minimum(do, 1.0e6), -1.0e6)
+  o_do = tl.sum(o*do, axis=1)
   delta = delta_ptr + batch_idx*heads*n_ctx + head_idx*n_ctx + offs_pre_block
   tl.store(delta, o_do)
 

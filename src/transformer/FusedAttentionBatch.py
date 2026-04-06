@@ -352,7 +352,7 @@ class _attention(torch.autograd.Function):
       n_ctx = q.shape[1]
       grid_preprocess = (n_ctx//pre_block, num_heads*batch, 1)
       # print(f"Grid (bwd_pre_process) : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
-      delta = torch.empty_like(M, device=q.device, dtype=torch.bfloat16)
+      delta = torch.empty_like(M, device=q.device, dtype=torch.float32)
       print(f"[Attention] do({do.shape}): {torch.isnan(do).any()} : do.max(): {do.abs().max()} : do.min(): {do.abs().min()}")
       # Preprocess
       _attention_bwd_pre_process[grid_preprocess](o, do, delta, batch, n_ctx, pre_block, num_heads, num_hiddens)
