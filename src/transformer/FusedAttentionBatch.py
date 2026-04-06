@@ -9,7 +9,7 @@ from kernels.AttentionForwardKernelBatch import _attention_forward
 from kernels.AttentionBackwardKernelBatch import _attention_bwd_pre_process, _attention_bwd
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 semaphore = threading.Semaphore()

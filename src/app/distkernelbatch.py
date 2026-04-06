@@ -18,7 +18,7 @@ from transformer.RopeEmbedding import RopeEmbedding
 # from transformers import AutoTokenizer
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
@@ -156,7 +156,7 @@ def train(base, rank, tokens_per_gpu):
   running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
   model_per_rank = MultiGPUExecutor(world_size, rank, tokens_per_gpu)
   model_per_rank = model_per_rank.to(DEVICE)
-  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-5)
+  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-5, weight_decay=0.008)
   for i in range(1):
     paraquet_filename = f"{base}/{rank}/{i:06d}.parquet"
     df = pd.read_parquet(paraquet_filename)
