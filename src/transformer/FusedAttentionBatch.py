@@ -331,7 +331,7 @@ class _attention(torch.autograd.Function):
                 sft_d = sft_d*scale_current+sft_d_recv*scale_recv
                 o = o*scale_current.unsqueeze(-1)+output_recv*scale_recv.unsqueeze(-1)
                 M = maximum
-        o = o / sft_d.unsqueeze(-1)
+            o = o / sft_d.unsqueeze(-1)
         dist.barrier()
         ctx.save_for_backward(q,k,v,o,M)
         ctx.sm_scale = sm_scale
