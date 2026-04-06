@@ -50,8 +50,9 @@ class TransformerLayer(nn.Module):
         block_n = 16
         grid_fwd = (n_ctx//block_m, Config.num_heads*Config.batch, 1)
         # print(f"Grid (fwd) : {grid_fwd} : q{q.shape} strides : {q.stride()} : k{k.shape} strides : {k.stride()} : v{v.shape} strides : {v.stride()}")
-        output = self.attention(q, k, v, Config.batch, Config.num_heads, n_ctx, Config.hiddens, 
-                                Config.sm_scale, self.world_size, self.rank)
+        # output = self.attention(q, k, v, Config.batch, Config.num_heads, n_ctx, Config.hiddens, 
+        #                         Config.sm_scale, self.world_size, self.rank)
+        output = self.attention(q, k, v, is_causal=True, training=self.training)
         # self.exit_on_nan(output, f"NaN in attention output in rank {self.rank}")
         # print(f"Output ({rank},{rank}): {output.shape} : {output[:,:,:10,:10]}")
         output = output.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu,-1)
