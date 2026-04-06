@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
-    target_batch_size = 5
+    target_batch_size = 1
     batch = 1
     # tokens = 4096
     tokens = 1024
