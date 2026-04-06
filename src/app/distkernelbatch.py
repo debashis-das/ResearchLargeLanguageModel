@@ -156,7 +156,7 @@ def train(base, rank, tokens_per_gpu):
   running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
   model_per_rank = MultiGPUExecutor(world_size, rank, tokens_per_gpu)
   model_per_rank = model_per_rank.to(DEVICE)
-  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-3)
+  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-4, weight_decay=0.008)
   for i in range(1):
     paraquet_filename = f"{base}/{rank}/{i:06d}.parquet"
     df = pd.read_parquet(paraquet_filename)
@@ -183,14 +183,15 @@ def train(base, rank, tokens_per_gpu):
               optimizer.zero_grad(set_to_none=True)
               free, total = torch.cuda.mem_get_info(DEVICE)
               mem_used_MB = (total - free) / 1024 ** 2
-              torch.save({
-                      'parquet_idx': i,
-                      'epoch_per_parquet': index,
-                      'model_state_dict': model_per_rank.state_dict(),
-                      'optimizer_state_dic': optimizer.state_dict(),
-                      'loss': loss
-                      }, f"model/{rank}-base-model-params")
-              logging.info(f"[Rank {rank}] Model saved {rank}-model-params, step {step} : mem_used_MB={mem_used_MB} ,train loss={running_loss/accumulation_steps}")
+              if step % 100 == 0:
+                torch.save({
+                        'parquet_idx': i,
+                        'epoch_per_parquet': index,
+                        'model_state_dict': model_per_rank.state_dict(),
+                        'optimizer_state_dic': optimizer.state_dict(),
+                        'loss': loss
+                        }, f"model/{rank}-base-model-params")
+                logging.info(f"[Rank {rank}] Model saved {rank}-model-params, step {step} : mem_used_MB={mem_used_MB} ,train loss={running_loss/accumulation_steps}")
               running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
             del tokens
             del batch
