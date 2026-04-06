@@ -3,12 +3,12 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
-    target_batch_size = 10
-    batch = 2
+    target_batch_size = 5
+    batch = 1
     # tokens = 4096
     tokens = 1024
     # num_heads = 16
-    num_heads = 8
+    num_heads = 4
     # hiddens = 2048
     # hiddens = 128*num_heads
     hiddens = 64*num_heads
