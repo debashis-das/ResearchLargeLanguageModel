@@ -1,3 +1,5 @@
+import logging
+
 import torch
 import torch.distributed as dist
 from torch import nn
@@ -15,6 +17,10 @@ from transformer.RMSNorm import RMSNorm
 from transformer.RopeEmbedding import RopeEmbedding
 # from transformers import AutoTokenizer
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
 
 # torch.set_printoptions(profile="full")
 DEVICE = triton.runtime.driver.active.get_active_torch_device()
@@ -32,14 +38,14 @@ class MultiGPUExecutor(nn.Module):
     self.embedding = nn.Embedding(Config.total_vocab, Config.hiddens, device=device)
     self.rms3 = RMSNorm(Config.hiddens, device=device)
     self.dense = nn.LazyLinear(Config.total_vocab, bias=False, device=device)
-    self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
+    self.loss_fn = nn.CrossEntropyLoss(reduction="mean")
     self.model = nn.ModuleList()
     for i in range(24):
       self.model.append(TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, device=device, layer_id=i))
   
   def exit_on_nan(self, input, message):
     if torch.isnan(input).any():
-      print(f"[Rank {self.rank}] [Shape {input.shape}] {message} : {input}")
+      logging.debug(f"[Rank {self.rank}] [Shape {input.shape}] {message} : {input}")
       exit()
 
   def forward(self, src_tokens, step, all_logits = False):
@@ -47,17 +53,17 @@ class MultiGPUExecutor(nn.Module):
       self.exit_on_nan(src_tokens, f"NaN in input tokens in rank {self.rank}")
       X = self.embedding(src_tokens)
       if torch.isnan(X).any():
-        print("Embedding weight NaN:", torch.isnan(self.embedding.weight).any())
-        print("Embedding weight max:", self.embedding.weight.abs().max())
+        logging.debug(f"Embedding weight NaN: {torch.isnan(self.embedding.weight).any()}")
+        logging.debug(f"Embedding weight max: {self.embedding.weight.abs().max()}")
         self.exit_on_nan(X, f"NaN in embedding output in rank {self.rank}")
       for layer in self.model:
         # X = checkpoint(layer, X, use_reentrant=False)
         X = layer(X)
       X = self.rms3(X)
       logits = self.dense(X)
-      print(f"[Step {step}] Logits NaN:", torch.isnan(logits).any())
-      print(f"[Step {step}] Logits max:", logits.abs().max())
-      # print(f"Logits before float : {logits.shape} : {logits[:,:10,:10]}")
+      logging.debug(f"[Step {step}] Logits NaN: {torch.isnan(logits).any()}")
+      logging.debug(f"[Step {step}] Logits max: {logits.abs().max()}")
+      # logging.debug(f"Logits before float : {logits.shape} : {logits[:,:10,:10]}")
       logits = logits.float()
       output_logits = logits[:,-1,:]
       # print(f"Logits : {logits.shape} : {logits}")
@@ -164,7 +170,7 @@ def train(base, rank, tokens_per_gpu):
             # print(f"Tokens : {tokens.shape}")
             _, loss = model_per_rank(tokens, step)
             dist.all_reduce(loss, op=dist.ReduceOp.SUM)
-            loss = loss / (Config.batch*Config.tokens)
+            # loss = loss / (Config.batch*Config.tokens)
             loss = loss / accumulation_steps
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model_per_rank.parameters(), 1.0)
@@ -184,7 +190,7 @@ def train(base, rank, tokens_per_gpu):
                       'optimizer_state_dic': optimizer.state_dict(),
                       'loss': loss
                       }, f"model/{rank}-base-model-params")
-              print(f"[Rank {rank}] Model saved {rank}-model-params, step {step} : mem_used_MB={mem_used_MB} ,train loss={running_loss/accumulation_steps}")
+              logging.info(f"[Rank {rank}] Model saved {rank}-model-params, step {step} : mem_used_MB={mem_used_MB} ,train loss={running_loss/accumulation_steps}")
               running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
             del tokens
             del batch
