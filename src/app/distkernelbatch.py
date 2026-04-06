@@ -40,7 +40,7 @@ class MultiGPUExecutor(nn.Module):
     self.dense = nn.LazyLinear(Config.total_vocab, bias=False, device=device)
     self.loss_fn = nn.CrossEntropyLoss(reduction="mean")
     self.model = nn.ModuleList()
-    for i in range(24):
+    for i in range(10):
       self.model.append(TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, device=device, layer_id=i))
   
   def exit_on_nan(self, input, message):
