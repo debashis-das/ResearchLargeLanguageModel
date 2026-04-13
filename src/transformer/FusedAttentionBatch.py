@@ -238,10 +238,11 @@ class _attention(torch.autograd.Function):
   
   # Assumption that it is used only for causal case
   @staticmethod
-  def forward(ctx, q, k, v, batch, num_heads, n_ctx, hidden_dim, sm_scale, world_size, rank, warp_specialize=True):
+  def forward(ctx, q, k, v, world_size, rank, warp_specialize=True):
         if world_size != 1:
             exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
-        
+        batch, num_heads, n_ctx, hidden_dim = q.shape[0], q.shape[1], q.shape[2], q.shape[3]
+        sm_scale = 1.0 / (hidden_dim ** 0.5)
         o = torch.empty_like(q)
         M = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
         sft_d = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
