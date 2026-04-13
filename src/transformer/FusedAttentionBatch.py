@@ -252,13 +252,17 @@ class _attention(torch.autograd.Function):
             num_heads * batch,
             1
         )
+        if q.dtype == torch.float16:
+          lower_precision = True
+        else:
+          lower_precision = False
         # grid = (n_ctx//block_m, num_heads*batch, 1)
         # print(f"Grid : {grid}")
         
         # Attention forward
         # mask region
         _attention_forward[grid_fwd](sm_scale, M, sft_d, batch, num_heads, n_ctx,
-                        q, k, v, o,
+                        q, k, v, o, lower_precision,
                         hidden_dim, True, warp_specialize,)
         # gc.collect()
         # torch.cuda.empty_cache()
