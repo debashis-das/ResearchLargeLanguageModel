@@ -243,9 +243,9 @@ class _attention(torch.autograd.Function):
             exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
         batch, num_heads, n_ctx, hidden_dim = q.shape[0], q.shape[1], q.shape[2], q.shape[3]
         sm_scale = 1.0 / (hidden_dim ** 0.5)
-        o = torch.empty_like(q)
-        M = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
-        sft_d = torch.empty((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
+        o = torch.zeros_like(q)
+        M = torch.zeros((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
+        sft_d = torch.zeros((q.shape[0], q.shape[1], q.shape[2]), device=q.device, dtype=torch.bfloat16)
         
         grid_fwd = lambda META: (
             triton.cdiv(n_ctx, META['block_m']),
@@ -338,7 +338,7 @@ class _attention(torch.autograd.Function):
                 M = maximum
             o = o / sft_d.unsqueeze(-1)
         dist.barrier()
-        ctx.save_for_backward(q,k,v,o,M)
+        ctx.save_for_backward(q,k,v,o,M,sft_d)
         ctx.sm_scale = sm_scale
         ctx.hidden_dim = hidden_dim
         ctx.rank = rank
@@ -350,7 +350,7 @@ class _attention(torch.autograd.Function):
 
   @staticmethod
   def backward(ctx, do):
-      q, k, v, o, M = ctx.saved_tensors
+      q, k, v, o, M, sft_d = ctx.saved_tensors
       sm_scale = ctx.sm_scale
       hidden_dim = ctx.hidden_dim
       rank = ctx.rank
@@ -362,15 +362,15 @@ class _attention(torch.autograd.Function):
       n_ctx = q.shape[1]
       grid_preprocess = (n_ctx//pre_block, num_heads*batch, 1)
       # print(f"Grid (bwd_pre_process) : {grid_preprocess}, q: {q.shape}, k: {k.shape}, v: {v.shape} ")
-      delta = torch.empty_like(M, device=q.device, dtype=torch.float32)
+      delta = torch.zeros_like(M, device=q.device, dtype=torch.float32)
       logging.debug(f"[Attention] do({do.shape}): {torch.isnan(do).any()} : do.max(): {do.abs().max()} : do.min(): {do.abs().min()}")
       # Preprocess
       _attention_bwd_pre_process[grid_preprocess](o, do, delta, batch, n_ctx, pre_block, num_heads, num_hiddens)
       logging.debug(f"[Attention] delta({delta.shape}): {torch.isnan(delta).any()} : delta.max(): {delta.abs().max()} : delta.min(): {delta.abs().min()}")
       # bwd
-      dq = torch.empty_like(q)
-      dk = torch.empty_like(k)
-      dv = torch.empty_like(v)
+      dq = torch.zeros_like(q)
+      dk = torch.zeros_like(k)
+      dv = torch.zeros_like(v)
       bulk_slice_factor = 1
       # grid_bwd = (n_ctx//block_m, num_heads*batch, 1)
       # print(f"Grid (bwd) : {grid_bwd}")
@@ -381,7 +381,7 @@ class _attention(torch.autograd.Function):
           num_heads * batch,
           1
       )
-      _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, batch, num_heads, n_ctx, 
+      _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sft_d, sm_scale, batch, num_heads, n_ctx,
                                num_hiddens,bulk_slice_factor,)
 
       if world_size != 1:

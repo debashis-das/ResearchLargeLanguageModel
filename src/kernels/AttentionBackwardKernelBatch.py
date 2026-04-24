@@ -22,8 +22,8 @@ def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
   do = tl.load(do_ptr + offset)
   o = o.to(tl.float32)
   do = do.to(tl.float32)
-  o = tl.maximum(tl.minimum(o, 1.0e6), -1.0e6)
-  do = tl.maximum(tl.minimum(do, 1.0e6), -1.0e6)
+  # o = tl.maximum(tl.minimum(o, 1.0e8), -1.0e8)
+  # do = tl.maximum(tl.minimum(do, 1.0e8), -1.0e8)
   o_do = tl.sum(o*do, axis=1)
   delta = delta_ptr + batch_idx*heads*n_ctx + head_idx*n_ctx + offs_pre_block
   tl.store(delta, o_do)
@@ -31,18 +31,18 @@ def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
 @triton.autotune(
     configs=[
         triton.Config({'block_m':64, 'block_n':64}, num_warps=4, num_stages=1),
-        triton.Config({'block_m':32,  'block_n':64}, num_warps=4, num_stages=1),
-        triton.Config({'block_m':64, 'block_n':64}, num_warps=4, num_stages=1),
+        # triton.Config({'block_m':32,  'block_n':64}, num_warps=4, num_stages=1),
+        triton.Config({'block_m':64, 'block_n':32}, num_warps=4, num_stages=1),
         triton.Config({'block_m':32, 'block_n':32}, num_warps=4, num_stages=1)
     ],
     key=['n_ctx', 'hidden_dim'],   # runtime-dependent shapes
 )
 @triton.jit
-def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
+def _attention_bwd(q, k, v, do, dq, dk, dv, m, d, sft_d,
                    sm_scale: tl.constexpr, batch: tl.constexpr, num_heads: tl.constexpr,
                    n_ctx: tl.constexpr, hidden_dim: tl.constexpr, bulk_slice_factor: tl.constexpr, block_m: tl.constexpr,
                    block_n: tl.constexpr):
-  LN2 = 0.6931471824645996  # = ln(2)
+  # LN2 = 0.6931471824645996  # = ln(2)
   # current context block
   ctxid = tl.program_id(0)
   # current head
@@ -57,7 +57,7 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
                                         block_shape=[block_m, hidden_dim])
   desc_k = tl.make_tensor_descriptor(k, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
                                     block_shape=[block_m, hidden_dim])
-  
+
 
   desc_dv = tl.make_tensor_descriptor(dv, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
                                         block_shape=[block_m, hidden_dim])
@@ -65,7 +65,7 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
                                     block_shape=[block_m, hidden_dim])
   desc_dq = tl.make_tensor_descriptor(dq, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
                                         block_shape=[block_m, hidden_dim])
-  
+
   dvalue = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
   dkey = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
   dquery = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
@@ -86,12 +86,11 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
   for sub_block_n in tl.range(0, block_m, mask_block_n):
     offset += sub_block_n
     offset_n = offset + tl.arange(0, mask_block_n)
-    dquery_temp, dkey_temp, dvalue_temp = _attention_bwd_dqdkdv_per_sublock_n(dquery, dkey, dvalue, m, d,
+    dquery, dkey, dvalue = _attention_bwd_dqdkdv_per_sublock_n(dquery, dkey, dvalue, m, sft_d, d,
                                       key, value, desc_query_mask_block_n,
-                                      desc_do_mask_block_n, desc_key_mask_block_n, True, offset_m, offset_n, offset)
-    dkey += dkey_temp
-    dvalue += dvalue_temp
-    dquery += dquery_temp
+                                      desc_do_mask_block_n,
+                                      desc_key_mask_block_n,
+                                      True, offset_m, offset_n, offset, sm_scale)
 
   # right of mask for non mask regions
   desc_query_block_n = tl.make_tensor_descriptor(q, shape=[y_dim, hidden_dim], strides=[hidden_dim, 1],
@@ -106,35 +105,35 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
   for sub_block_n in tl.range(0, diff, block_n):
     offset += sub_block_n
     offset_n = offset + tl.arange(0, block_n)
-    dquery_temp, dkey_temp, dvalue_temp = _attention_bwd_dqdkdv_per_sublock_n(dquery, dkey, dvalue, m, d,
+    dquery, dkey, dvalue = _attention_bwd_dqdkdv_per_sublock_n(dquery, dkey, dvalue, m, sft_d, d,
                                       key, value, desc_query_block_n,
-                                      desc_do_block_n, desc_key_block_n, False, offset_m, offset_n, offset)
-    dkey += dkey_temp
-    dvalue += dvalue_temp
-    dquery += dquery_temp
-
+                                      desc_do_block_n,
+                                      desc_key_block_n,
+                                      False, offset_m, offset_n, offset, sm_scale)
   desc_dv.store([init_offset, 0], dvalue)
-  desc_dk.store([init_offset, 0], dkey*sm_scale)
-  desc_dq.store([init_offset, 0], dquery*LN2)
+  desc_dk.store([init_offset, 0], dkey)
+  desc_dq.store([init_offset, 0], dquery)
 
 
 @triton.jit
-def _attention_bwd_dqdkdv_per_sublock_n(dquery, dkey, dvalue, m, d,
+def _attention_bwd_dqdkdv_per_sublock_n(dquery, dkey, dvalue, m, sft_d, d,
                                       key, value, desc_query_mask_block_n, desc_do_mask_block_n,
-                                      desc_key_mask_block_n, MASK, offset_m, offset_n, offset):
+                                      desc_key_mask_block_n,
+                                        MASK, offset_m, offset_n, offset, sm_scale):
   query = desc_query_mask_block_n.load([offset,0])
   key_n = desc_key_mask_block_n.load([offset,0])
   max_tensor = tl.load(m+offset_n)
-  qkT = tl.dot(key, tl.trans(query))
-  pT = tl.math.exp2(qkT - max_tensor[None, :])
+  softmax_denominator = tl.load(sft_d+offset_n)
+  kqT = tl.dot(key, tl.trans(query))*sm_scale
   if MASK:
     mask = (offset_n[None, :] >= offset_m[:, None])
-    pT = tl.where(mask, pT, 0.0)
+    kqT += tl.where(mask, 0, -1.0e8)
+  pT = tl.math.exp(kqT - max_tensor[None, :]) / softmax_denominator[None, :]
   do = desc_do_mask_block_n.load([offset, 0]).to(tl.float32)
-  dvalue += tl.dot(pT.to(tl.float32), do)
+  dvalue += tl.dot(pT, do).to(tl.float32)
   delta = tl.load(d+offset_n)
   doT = tl.trans(do)
-  dpT = tl.dot(value.to(tl.float32), doT).to(tl.float32)
+  dpT = tl.dot(value, doT).to(tl.float32)
   dsT = pT * (dpT - delta[None, :])
   dsT = dsT.to(tl.float32)
   dquery += tl.dot(dsT, key_n.to(tl.float32))
