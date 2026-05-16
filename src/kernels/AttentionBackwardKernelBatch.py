@@ -2,8 +2,6 @@
 import triton
 import triton.language as tl
 
-
-
 @triton.jit
 def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
                                batch: tl.constexpr,
@@ -28,12 +26,86 @@ def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
     delta = delta_ptr + batch_idx*heads*n_ctx + head_idx*n_ctx + offs_pre_block
     tl.store(delta, o_do)
 
+@triton.jit
+def _attention_bwd_dkdv(dkey, dvalue, m, d, q, k, v, do,
+                        init_offset, offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False):
+    base_mask = head_idx*n_ctx + batch_idx*num_heads*n_ctx
+    mask_offset_along_m = ctxid*block_m + base_mask + tl.arange(0, block_m)
+    mask_offset_along_n = ctxid*block_m + base_mask + tl.arange(0, block_n)
+    if causal and mask:
+      num_steps = block_m // block_n
+    elif causal and not mask:
+      num_steps = (n_ctx - ctxid*block_m) // block_n
+      num_steps = num_steps - block_m 
+      mask_offset_along_n = ctxid*block_m + block_m + base_mask + tl.arange(0, block_n)
+    else:
+      num_steps = n_ctx // block_n
+    
+    offset_block_n = init_offset + offset_along_n[:, None] + offset_along_h[None, :]
+    offset_block_n_T = init_offset + offset_along_n[None, :] + offset_along_h[:, None]
+    for _ in range(num_steps):
+      queryT = tl.load(q + offset_block_n_T)  # pre-load to L1
+      d_of_o = tl.load(do + offset_block_n)  # pre-load to L1
+      max_tensor = tl.load(m + mask_offset_along_n)  # pre-load to L1
+      kqT = tl.dot(k, queryT)*sm_scale
+      pT = tl.exp(kqT - max_tensor[None,:])
+      if mask:
+        mask_tensor = (mask_offset_along_m[:, None] <= mask_offset_along_n[None, :])
+        pT += tl.where(mask_tensor, 0, 0.0)
+
+      dvalue += tl.dot(pT, d_of_o).to(tl.float32)
+      dpT = tl.dot(v, tl.trans(d_of_o)).to(tl.float32)
+      delta = tl.load(d + mask_offset_along_n)  # pre-load to L1
+      dsT = pT * (dpT - delta[None,:])
+      dkey += tl.dot(dsT, tl.trans(queryT))
+
+      mask_offset_along_n += block_n
+      offset_block_n += block_n*hidden_dim
+      offset_block_n_T += block_n*hidden_dim
+    return dkey, dvalue
+
+@triton.jit
+def _attention_bwd_dq(dquery, m, d, q, k, v, do,
+                        offset_batch_head, offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False):
+    if causal and not mask and ctxid == 0:
+      return dquery
+    base_mask = head_idx*n_ctx + batch_idx*num_heads*n_ctx
+    mask_offset_along_m = ctxid*block_m + base_mask + tl.arange(0, block_m)
+    if causal and mask:
+      num_steps = block_m // block_n
+      mask_offset_along_n = ctxid*block_m + base_mask + tl.arange(0, block_n)
+      offset_block_n_T = ctxid*block_m*hidden_dim + offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
+    elif causal and not mask:
+      num_steps = ctxid*block_m // block_n
+      offset_block_n_T = offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
+    else:
+      num_steps = n_ctx // block_n
+    
+    max_tensor = tl.load(m + mask_offset_along_m)  # pre-load to L1
+    delta = tl.load(d + mask_offset_along_m)  # pre-load to L1
+    
+    for _ in range(num_steps):
+      keyT = tl.load(k + offset_block_n_T)  # pre-load to L1
+      valueT = tl.load(v + offset_block_n_T)  # pre-load to L1
+      qkT = tl.dot(q, keyT)*sm_scale
+      p = tl.exp(qkT - max_tensor[:, None])
+      if mask:
+        mask_tensor = (mask_offset_along_m[:, None] >= mask_offset_along_n[None, :])
+        p += tl.where(mask_tensor, 0, 0.0)
+        # increment only in case of mask
+        mask_offset_along_n += block_n
+      dp = tl.dot(do, valueT).to(tl.float32)
+      ds = p * (dp - delta[:, None])
+      dquery += tl.dot(ds, tl.trans(keyT))
+      offset_block_n_T += block_n*hidden_dim
+    return dquery
+
 @triton.autotune(
     configs=[
         triton.Config({'block_m':32, 'block_n':32}, num_warps=4, num_stages=1),
-        # triton.Config({'block_m':16, 'block_n':32}, num_warps=4, num_stages=1),
         triton.Config({'block_m':32, 'block_n':16}, num_warps=4, num_stages=1),
-        triton.Config({'block_m':16, 'block_n':16}, num_warps=4, num_stages=1)
+        triton.Config({'block_m':64, 'block_n':32}, num_warps=4, num_stages=1),
+        triton.Config({'block_m':64, 'block_n':16}, num_warps=4, num_stages=1)
     ],
     key=['n_ctx', 'hidden_dim'],   # runtime-dependent shapes
 )
@@ -41,118 +113,57 @@ def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
 def _attention_bwd(q, k, v, do, dq, dk, dv, m, d, sft_d,
                    sm_scale: tl.constexpr, batch: tl.constexpr, num_heads: tl.constexpr,
                    n_ctx: tl.constexpr, hidden_dim: tl.constexpr, bulk_slice_factor: tl.constexpr, block_m: tl.constexpr,
-                   block_n: tl.constexpr):
+                   block_n: tl.constexpr, CAUSAL: tl.constexpr = True):
     # LN2 = 0.6931471824645996  # = ln(2)
     # current context block
     ctxid = tl.program_id(0)
     # current head
     hzid = tl.program_id(1)
-    batch_idx = hzid // batch
-    head_idx = hzid % batch
+    batch_idx = hzid // num_heads
+    head_idx = hzid % num_heads
     # init offset can be used for both dkdv & dq
-    init_offset = ctxid*block_m*hidden_dim + head_idx*n_ctx*hidden_dim + batch_idx*num_heads*n_ctx*hidden_dim
-    y_dim:tl.constexpr = batch * num_heads * n_ctx * hidden_dim
+    offset_batch_head = head_idx*n_ctx*hidden_dim + batch_idx*num_heads*n_ctx*hidden_dim
+    init_offset = ctxid*block_m*hidden_dim + offset_batch_head
 
     dvalue = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
     dkey = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
-    dquery = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
-    offset_m = init_offset + tl.arange(0, block_m)
 
-    row_offset_block_m = tl.arange(0, block_m)*hidden_dim
-    col_offset_block_m = tl.arange(0, hidden_dim)
-    offset_block_m = init_offset + row_offset_block_m[:, None] + col_offset_block_m[None, :]
+    offset_along_m = tl.arange(0, block_m)*hidden_dim
+    offset_along_n = tl.arange(0, block_n)*hidden_dim
+    offset_along_h = tl.arange(0, hidden_dim)
+    
+    offset_block_m = init_offset + offset_along_m[:, None] + offset_along_h[None, :]
+    key = tl.load(k + offset_block_m)
+    value = tl.load(v + offset_block_m)
+    assert block_m % block_n == 0, "block_m should be divisible by block_n"
 
-    # pre-load max and softmax denominator for the current block to L1
-    offset_max_and_sft_denominator = ctxid*block_m + head_idx*n_ctx + batch_idx*num_heads*n_ctx
-    row_offset_block_m_of_max_sft_denominator_delta = offset_max_and_sft_denominator + tl.arange(0, block_m)
-    max_tensor = tl.load(m + row_offset_block_m_of_max_sft_denominator_delta)
-    softmax_denominator = tl.load(sft_d + row_offset_block_m_of_max_sft_denominator_delta)
-    delta = tl.load(d+row_offset_block_m_of_max_sft_denominator_delta)
-    # left of mask for non mask regions
-    start = 0
-    end = ctxid*block_m
-    increment = block_n
-    row_offset_block_n = tl.arange(0,hidden_dim)*n_ctx
-    col_offset_block_n = tl.arange(0, block_n)
-    row_offset_block_n_inverted = tl.arange(0, block_n)*hidden_dim
-    col_offset_block_n_inverted = tl.arange(0, hidden_dim)
-    query = tl.load(q + offset_block_m)  # pre-load to L1
-    value = tl.load(v + offset_block_m)  # pre-load to L1
-    MASK = False
-    offset = ctxid*block_m + head_idx*n_ctx*hidden_dim + batch_idx*num_heads*n_ctx*hidden_dim
-    offset_inverted = ctxid*block_m*hidden_dim + head_idx*n_ctx*hidden_dim + batch_idx*num_heads*n_ctx*hidden_dim
-    for sub_block_n in tl.range(start, end, increment):
-      offset += sub_block_n
-      offset_n = offset + tl.arange(0, block_n)
-      offset_block_n = offset + row_offset_block_n[:, None] + col_offset_block_n[None, :]
-      offset_inverted += sub_block_n*hidden_dim
-      offset_block_n_inverted = offset_inverted + row_offset_block_n_inverted[:, None] + col_offset_block_n_inverted[None, :]
-      qkT = tl.dot(query, tl.load(k + offset_block_n))*sm_scale
-      if MASK:
-        mask = (offset_m[:, None] >= offset_n[None, :])
-        qkT += tl.where(mask, 0, -1.0e8)
-      p = tl.math.exp(qkT - max_tensor[:, None]) / softmax_denominator[:, None]
-      dvalue += tl.dot(p,  tl.load(do + offset_block_n_inverted)).to(tl.float32)
-      dp = tl.dot(value.to(tl.float64), tl.load(do + offset_block_n).to(tl.float64)).to(tl.float32)
-      ds = p * (dp - delta[:, None])
-      dquery += tl.dot(ds, tl.load(k + offset_block_n_inverted).to(tl.float32))
-      dkey += tl.dot(ds, tl.load(q + offset_block_n_inverted).to(tl.float32))
-
-    # mask regions
-    mask_block_n:tl.constexpr = block_n // bulk_slice_factor
-    # mask_block_n:tl.constexpr = block_n
-    start = 0
-    end = block_m
-    increment = mask_block_n
-    row_offset_block_n = tl.arange(0,hidden_dim)*n_ctx
-    col_offset_block_n = tl.arange(0, mask_block_n)
-    row_offset_block_n_inverted = tl.arange(0, mask_block_n)*hidden_dim
-    col_offset_block_n_inverted = tl.arange(0, hidden_dim)
-    MASK = True
-    offset = ctxid*block_m + head_idx*n_ctx*hidden_dim + batch_idx*num_heads*n_ctx*hidden_dim
-    offset_inverted = ctxid*block_m*hidden_dim + head_idx*n_ctx*hidden_dim + batch_idx*num_heads*n_ctx*hidden_dim
-    for sub_block_n in tl.range(start, end, increment):
-      offset += sub_block_n
-      offset_n = offset + tl.arange(0, mask_block_n)
-      offset_block_n = offset + row_offset_block_n[:, None] + col_offset_block_n[None, :]
-      offset_inverted += sub_block_n*hidden_dim
-      offset_block_n_inverted = offset_inverted + row_offset_block_n_inverted[:, None] + col_offset_block_n_inverted[None, :]
-      qkT = tl.dot(query, tl.load(k + offset_block_n))*sm_scale
-      if MASK:
-        mask = (offset_m[:, None] >= offset_n[None, :])
-        qkT = qkT + tl.where(mask, 0, -1.0e6)
-      p = tl.math.exp(qkT - max_tensor[:, None]) / softmax_denominator[:, None]
-      dvalue += tl.dot(p,  tl.load(do + offset_block_n_inverted)).to(tl.float32)
-      dp = tl.dot(value.to(tl.float64), tl.load(do + offset_block_n).to(tl.float64)).to(tl.float32)
-      ds = p * (dp - delta[:, None])
-      dquery += tl.dot(ds, tl.load(k + offset_block_n_inverted).to(tl.float32))
-      dkey += tl.dot(ds, tl.load(q + offset_block_n_inverted).to(tl.float32))
-
+    if CAUSAL:
+      # for the mask part of block_m
+      dkey, dvalue = _attention_bwd_dkdv(dkey, dvalue, m, d, q, key, value, do, init_offset,
+                          offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=True, mask=True)
+      # for the non-mask part for data before the mask (past data)
+      dkey, dvalue = _attention_bwd_dkdv(dkey, dvalue, m, d, q, key, value, do, init_offset,
+                          offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=True, mask=False)
+    else:
+      # for non-causal, we feed both the past and future data together as there is no mask
+      dkey, dvalue = _attention_bwd_dkdv(dkey, dvalue, m, d, q, key, value, do, init_offset,
+                          offset_along_n, offset_along_h, block_m,block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False)
+    
     tl.store(dv + offset_block_m, dvalue)
-    tl.store(dk + offset_block_m, dkey)
-    tl.store(dq + offset_block_m, dquery)
+    tl.store(dk + offset_block_m, dkey*sm_scale)
 
-# @triton.jit
-# def _attention_bwd_dqdkdv_per_sublock_n(dquery, dkey, dvalue, m, sft_d, d,
-#                                       key, value, desc_query_mask_block_n, desc_do_mask_block_n,
-#                                       desc_key_mask_block_n,
-#                                         MASK, offset_m, offset_n, offset, sm_scale):
-#   query = desc_query_mask_block_n.load([offset,0])
-#   key_n = desc_key_mask_block_n.load([offset,0])
-#   max_tensor = tl.load(m+offset_n)
-#   softmax_denominator = tl.load(sft_d+offset_n)
-#   kqT = tl.dot(key, tl.trans(query))*sm_scale
-#   if MASK:
-#     mask = (offset_n[None, :] >= offset_m[:, None])
-#     kqT += tl.where(mask, 0, -1.0e8)
-#   pT = tl.math.exp(kqT - max_tensor[None, :]) / softmax_denominator[None, :]
-#   do = desc_do_mask_block_n.load([offset, 0]).to(tl.float32)
-#   dvalue += tl.dot(pT, do).to(tl.float32)
-#   delta = tl.load(d+offset_n)
-#   doT = tl.trans(do)
-#   dpT = tl.dot(value, doT).to(tl.float32)
-#   dsT = pT * (dpT - delta[None, :])
-#   dsT = dsT.to(tl.float32)
-#   dquery += tl.dot(dsT, key_n.to(tl.float32))
-#   dkey += tl.dot(dsT, query.to(tl.float32))
-#   return dquery, dkey, dvalue
+    dquery = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
+    dervative_o = tl.load(do + offset_block_m)
+    query = tl.load(q + offset_block_m)
+    if CAUSAL:
+      # for the mask part of block_m
+      dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
+                          offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=True, mask=True)
+      # for the non-mask part for data before the mask (past data)
+      dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
+                          offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=True, mask=False)
+    else:
+      # for non-causal, we feed both the past and future data together as there is no mask
+      dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
+                          offset_along_n, offset_along_h, block_m,block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False)
+    tl.store(dq + offset_block_m, dquery*sm_scale)
