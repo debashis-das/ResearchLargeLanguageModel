@@ -2,12 +2,11 @@ import threading
 import torch
 import gc
 import torch.distributed as dist
-from kernels.AttentionBackwardKernelBatchFromDoc import _attn_bwd, _attn_bwd_preprocess
 import triton
 import logging
 
 from kernels.AttentionForwardKernelBatch import _attention_forward
-from kernels.AttentionBackwardKernelBatchFromDoc import _attention_bwd_pre_process, _attention_bwd
+from kernels.AttentionBackwardKernelBatchFromDoc import _attn_bwd, _attn_bwd_preprocess
 
 logging.basicConfig(
     level=logging.INFO,
