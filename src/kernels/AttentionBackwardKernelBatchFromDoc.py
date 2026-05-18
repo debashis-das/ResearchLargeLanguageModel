@@ -54,15 +54,15 @@ def _attn_bwd_dkdv(dk, dv,  #
         do = tl.load(do_ptrs)
         # Compute dV.
         ppT = pT
-        ppT = ppT.to(tl.float16)
-        dv += tl.dot(ppT, do.to(tl.float16))
+        ppT = ppT.to(tl.float32)
+        dv += tl.dot(ppT, do).to(tl.float32)
         # D (= delta) is pre-divided by ds_scale.
         Di = tl.load(D + offs_m)
         # Compute dP and dS.
         dpT = tl.dot(v, tl.trans(do)).to(tl.float32)
         dsT = pT * (dpT - Di[None, :])
-        dsT = dsT.to(tl.float16)
-        dk += tl.dot(dsT, tl.trans(qT))
+        dsT = dsT.to(tl.float32)
+        dk += tl.dot(dsT, tl.trans(qT)).to(tl.float32)
         # Increment pointers.
         curr_m += step_m
         qT_ptrs += step_m * stride_tok
