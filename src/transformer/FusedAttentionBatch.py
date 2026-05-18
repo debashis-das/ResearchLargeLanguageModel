@@ -391,7 +391,7 @@ class _attention(torch.autograd.Function):
       BLK_SLICE_FACTOR = 2
       # grid_bwd = (n_ctx//block_m, num_heads*batch, 1)
       # print(f"Grid (bwd) : {grid_bwd}")
-      NUM_WARPS, NUM_STAGES = 4, 5
+      NUM_WARPS, NUM_STAGES = 4, 2
       BLOCK_M1, BLOCK_N1, BLOCK_M2, BLOCK_N2 = 32, 128, 128, 32
       RCP_LN2 = 1.4426950408889634  # = 1.0 / ln(2)
       arg_k = k
