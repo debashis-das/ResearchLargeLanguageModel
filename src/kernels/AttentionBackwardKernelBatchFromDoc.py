@@ -55,7 +55,7 @@ def _attn_bwd_dkdv(dk, dv,  #
         # Compute dV.
         ppT = pT
         ppT = ppT.to(tl.float16)
-        dv += tl.dot(ppT, do)
+        dv += tl.dot(ppT, do.to(tl.float16))
         # D (= delta) is pre-divided by ds_scale.
         Di = tl.load(D + offs_m)
         # Compute dP and dS.
