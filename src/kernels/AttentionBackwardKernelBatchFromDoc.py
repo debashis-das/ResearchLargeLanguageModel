@@ -105,10 +105,10 @@ def _attn_bwd_dq(dq, q, K, V,  #
         # Compute dP and dS.
         dp = tl.dot(do, vT).to(tl.float32)
         ds = p * (dp - Di[:, None])
-        ds = ds.to(tl.float16)
+        ds = ds.to(tl.float32)
         # Compute dQ.
         # NOTE: We need to de-scale dq in the end, because kT was pre-scaled.
-        dq += tl.dot(ds, tl.trans(kT))
+        dq += tl.dot(ds, tl.trans(kT)).to(tl.float32)
         # Increment pointers.
         curr_n += step_n
         kT_ptrs += step_n * stride_tok
