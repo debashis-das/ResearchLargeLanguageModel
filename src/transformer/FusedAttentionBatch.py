@@ -365,6 +365,7 @@ class _attention(torch.autograd.Function):
       N_CTX = q.shape[1]
       # grid_preprocess = (N_CTX//pre_block, N_HEAD*BATCH, 1)
       PRE_BLOCK = 64
+      print(f"Q shape : {q.shape} : N_CTX : {N_CTX}, Pre_block : {PRE_BLOCK}")
       assert N_CTX % PRE_BLOCK == 0
       pre_grid = (N_CTX // PRE_BLOCK, BATCH * N_HEAD)
       delta = torch.empty_like(M)
