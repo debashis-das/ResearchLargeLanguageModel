@@ -258,7 +258,10 @@ class _attention(torch.autograd.Function):
           lower_precision = False
         # grid = (n_ctx//block_m, num_heads*batch, 1)
         # print(f"Grid : {grid}")
-        
+        def alloc_fn(size: int, align: int, _):
+            return torch.empty(size, dtype=torch.int8, device="cuda")
+
+        triton.set_allocator(alloc_fn)
         # Attention forward
         # mask region
         _attention_forward[grid_fwd](sm_scale, M, sft_d, batch, num_heads, n_ctx,
