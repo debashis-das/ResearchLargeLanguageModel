@@ -20,8 +20,8 @@ def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
     do = tl.load(do_ptr + offset)
     o = o.to(tl.float32)
     do = do.to(tl.float32)
-    o = tl.maximum(tl.minimum(o, 1.0e8), -1.0e8)
-    do = tl.maximum(tl.minimum(do, 1.0e8), -1.0e8)
+    # o = tl.maximum(tl.minimum(o, 1.0e8), -1.0e8)
+    # do = tl.maximum(tl.minimum(do, 1.0e8), -1.0e8)
     o_do = tl.sum(o*do, axis=1)
     delta = delta_ptr + batch_idx*heads*n_ctx + head_idx*n_ctx + offs_pre_block
     tl.store(delta, o_do)
@@ -100,19 +100,21 @@ def _attention_bwd_dq(dquery, m, d, q, k, v, do,
       offset_block_n_T += block_n*hidden_dim
     return dquery
 
-@triton.autotune(
-    configs=[
-        triton.Config({'block_m':32, 'block_n':32}, num_warps=4, num_stages=1),
-        triton.Config({'block_m':32, 'block_n':16}, num_warps=4, num_stages=1),
-        triton.Config({'block_m':64, 'block_n':32}, num_warps=4, num_stages=1),
-        triton.Config({'block_m':64, 'block_n':16}, num_warps=4, num_stages=1)
-    ],
-    key=['n_ctx', 'hidden_dim'],   # runtime-dependent shapes
-)
+# @triton.autotune(
+#     configs=[
+#         triton.Config({'block_m':32, 'block_n':32}, num_warps=4, num_stages=1),
+#         triton.Config({'block_m':32, 'block_n':16}, num_warps=4, num_stages=1),
+#         triton.Config({'block_m':64, 'block_n':32}, num_warps=4, num_stages=1),
+#         triton.Config({'block_m':64, 'block_n':16}, num_warps=4, num_stages=1)
+#     ],
+#     key=['n_ctx', 'hidden_dim'],   # runtime-dependent shapes
+# )
+
+  
 @triton.jit
-def _attention_bwd(q, k, v, do, dq, dk, dv, m, d, sft_d,
+def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
                    sm_scale: tl.constexpr, batch: tl.constexpr, num_heads: tl.constexpr,
-                   n_ctx: tl.constexpr, hidden_dim: tl.constexpr, bulk_slice_factor: tl.constexpr, block_m: tl.constexpr,
+                   n_ctx: tl.constexpr, hidden_dim: tl.constexpr, block_m: tl.constexpr,
                    block_n: tl.constexpr, CAUSAL: tl.constexpr = True):
     # LN2 = 0.6931471824645996  # = ln(2)
     # current context block
