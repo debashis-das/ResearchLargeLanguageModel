@@ -35,8 +35,7 @@ def _attention_bwd_dkdv(dkey, dvalue, m, d, q, k, v, do,
     if causal and mask:
       num_steps = block_m // block_n
     elif causal and not mask:
-      num_steps = (n_ctx - ctxid*block_m) // block_n
-      num_steps = num_steps - block_m 
+      num_steps = (n_ctx - (ctxid+1)*block_m) // block_n
       mask_offset_along_n = ctxid*block_m + block_m + base_mask + tl.arange(0, block_n)
     else:
       num_steps = n_ctx // block_n
@@ -57,7 +56,7 @@ def _attention_bwd_dkdv(dkey, dvalue, m, d, q, k, v, do,
       dpT = tl.dot(v, tl.trans(d_of_o)).to(tl.float32)
       delta = tl.load(d + mask_offset_along_n)  # pre-load to L1
       dsT = pT * (dpT - delta[None,:])
-      dkey += tl.dot(dsT, tl.trans(queryT))
+      dkey += tl.dot(dsT, tl.trans(queryT)).to(tl.float32)
 
       mask_offset_along_n += block_n
       offset_block_n += block_n*hidden_dim
