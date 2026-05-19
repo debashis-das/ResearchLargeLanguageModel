@@ -66,8 +66,6 @@ def _attention_bwd_dkdv(dkey, dvalue, m, d, q, k, v, do,
 @triton.jit
 def _attention_bwd_dq(dquery, m, d, q, k, v, do,
                         offset_batch_head, offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False):
-    if causal and not mask and ctxid == 0:
-      return dquery
     base_mask = head_idx*n_ctx + batch_idx*num_heads*n_ctx
     mask_offset_along_m = ctxid*block_m + base_mask + tl.arange(0, block_m)
     if causal and mask:
@@ -75,7 +73,7 @@ def _attention_bwd_dq(dquery, m, d, q, k, v, do,
       mask_offset_along_n = ctxid*block_m + base_mask + tl.arange(0, block_n)
       offset_block_n_T = ctxid*block_m*hidden_dim + offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
     elif causal and not mask:
-      num_steps = ctxid*block_m // block_n
+      num_steps = (ctxid*block_m) // block_n
       offset_block_n_T = offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
     else:
       num_steps = n_ctx // block_n
@@ -95,7 +93,7 @@ def _attention_bwd_dq(dquery, m, d, q, k, v, do,
         mask_offset_along_n += block_n
       dp = tl.dot(do, valueT).to(tl.float32)
       ds = p * (dp - delta[:, None])
-      dquery += tl.dot(ds, tl.trans(keyT))
+      dquery += tl.dot(ds, tl.trans(keyT)).to(tl.float32)
       offset_block_n_T += block_n*hidden_dim
     return dquery
 
@@ -167,4 +165,4 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
       # for non-causal, we feed both the past and future data together as there is no mask
       dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
                           offset_along_n, offset_along_h, block_m,block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False)
-    tl.store(dq + offset_block_m, dquery)
+    tl.store(dq + offset_block_m, dquery*sm_scale)
