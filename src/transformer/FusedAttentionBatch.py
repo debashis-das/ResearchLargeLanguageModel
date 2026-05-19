@@ -407,11 +407,10 @@ class _attention(torch.autograd.Function):
           num_stages=NUM_STAGES,  #
           CAUSAL=True,  #
       )
-      print(dq_doc)
+      print(f'dq : Minumum gradient : {dq_doc.grad.dtype} : {dq_doc.grad.min()}, Maximum gradient : {dq_doc.grad.max()}')
+      print(f'dk : Minumum gradient : {dk_doc.grad.dtype} :{dk_doc.grad.min()}, Maximum gradient : {dk_doc.grad.max()}')
+      print(f'dv : Minumum gradient : {dv_doc.grad.dtype} :{dv_doc.grad.min()}, Maximum gradient : {dv_doc.grad.max()}')
       print("-----------------------------")
-      print(dk_doc)
-      print("-----------------------------")
-      print(dv_doc)
       print("-----------------------------")
       dq = torch.empty_like(q)
       dk = torch.empty_like(k)
@@ -425,11 +424,9 @@ class _attention(torch.autograd.Function):
       _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, BATCH, N_HEAD, N_CTX,
                                HEAD_DIM, BLOCK_M, BLOCK_N, num_warps=NUM_WARPS, num_stages=NUM_STAGES, CAUSAL=CAUSAL)
       torch.set_printoptions(profile="full")
-      print(dq)
-      print("-----------------------------")
-      print(dk)
-      print("-----------------------------")
-      print(dv)
+      print(f'dq : Minumum gradient : {dq.grad.dtype} : {dq.grad.min()}, Maximum gradient : {dq.grad.max()}')
+      print(f'dk : Minumum gradient : {dk.grad.dtype} :{dk.grad.min()}, Maximum gradient : {dk.grad.max()}')
+      print(f'dv : Minumum gradient : {dv.grad.dtype} :{dv.grad.min()}, Maximum gradient : {dv.grad.max()}')
       print("-----------------------------")
       sys.exit()
       # if world_size != 1:
