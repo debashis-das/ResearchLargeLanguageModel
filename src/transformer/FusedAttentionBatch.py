@@ -1,3 +1,4 @@
+import sys
 import threading
 import torch
 import gc
@@ -380,32 +381,41 @@ class _attention(torch.autograd.Function):
       # dq = torch.zeros_like(q)
       # dk = torch.zeros_like(k)
       # dv = torch.zeros_like(v)
-      dq = torch.empty_like(q)
-      dk = torch.empty_like(k)
-      dv = torch.empty_like(v)
+      dq_doc = torch.empty_like(q)
+      dk_doc = torch.empty_like(k)
+      dv_doc = torch.empty_like(v)
       CAUSAL = True
-      # BLK_SLICE_FACTOR = 2
+      BLK_SLICE_FACTOR = 2
       # grid_bwd = (n_ctx//block_m, num_heads*batch, 1)
       # print(f"Grid (bwd) : {grid_bwd}")
       NUM_WARPS, NUM_STAGES = 4, 2
-      # BLOCK_M1, BLOCK_N1, BLOCK_M2, BLOCK_N2 = 32, 128, 128, 32
-      # RCP_LN2 = 1.4426950408889634  # = 1.0 / ln(2)
-      # arg_k = k
-      # arg_k = arg_k * (sm_scale * RCP_LN2)
-      # grid = (N_CTX // BLOCK_N1, 1, BATCH * N_HEAD)
-      # _attn_bwd[grid](
-      #     q, arg_k, v, sm_scale, do, dq, dk, dv,  #
-      #     M, delta,  #
-      #     q.stride(0), q.stride(1), q.stride(2), q.stride(3),  #
-      #     N_HEAD, N_CTX,  #
-      #     BLOCK_M1=BLOCK_M1, BLOCK_N1=BLOCK_N1,  #
-      #     BLOCK_M2=BLOCK_M2, BLOCK_N2=BLOCK_N2,  #
-      #     BLK_SLICE_FACTOR=BLK_SLICE_FACTOR,  #
-      #     HEAD_DIM=HEAD_DIM,  #
-      #     num_warps=NUM_WARPS,  #
-      #     num_stages=NUM_STAGES,  #
-      #     CAUSAL=True,  #
-      # )
+      BLOCK_M1, BLOCK_N1, BLOCK_M2, BLOCK_N2 = 32, 128, 128, 32
+      RCP_LN2 = 1.4426950408889634  # = 1.0 / ln(2)
+      arg_k = k
+      arg_k = arg_k * (sm_scale * RCP_LN2)
+      grid = (N_CTX // BLOCK_N1, 1, BATCH * N_HEAD)
+      _attn_bwd[grid](
+          q, arg_k, v, sm_scale, do, dq_doc, dk_doc, dv_doc,  #
+          M, delta,  #
+          q.stride(0), q.stride(1), q.stride(2), q.stride(3),  #
+          N_HEAD, N_CTX,  #
+          BLOCK_M1=BLOCK_M1, BLOCK_N1=BLOCK_N1,  #
+          BLOCK_M2=BLOCK_M2, BLOCK_N2=BLOCK_N2,  #
+          BLK_SLICE_FACTOR=BLK_SLICE_FACTOR,  #
+          HEAD_DIM=HEAD_DIM,  #
+          num_warps=NUM_WARPS,  #
+          num_stages=NUM_STAGES,  #
+          CAUSAL=True,  #
+      )
+      print(dq_doc)
+      print("-----------------------------")
+      print(dk_doc)
+      print("-----------------------------")
+      print(dv_doc)
+      print("-----------------------------")
+      dq = torch.empty_like(q)
+      dk = torch.empty_like(k)
+      dv = torch.empty_like(v)
       BLOCK_M, BLOCK_N = 128, 32
       grid_bwd = lambda META: (
           triton.cdiv(N_CTX, BLOCK_M),
@@ -414,7 +424,14 @@ class _attention(torch.autograd.Function):
       )
       _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, BATCH, N_HEAD, N_CTX,
                                HEAD_DIM, BLOCK_M, BLOCK_N, num_warps=NUM_WARPS, num_stages=NUM_STAGES, CAUSAL=CAUSAL)
-
+      torch.set_printoptions(profile="full")
+      print(dq)
+      print("-----------------------------")
+      print(dk)
+      print("-----------------------------")
+      print(dv)
+      print("-----------------------------")
+      sys.exit()
       # if world_size != 1:
       #       exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
       #       dist.barrier()
