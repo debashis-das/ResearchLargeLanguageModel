@@ -152,7 +152,7 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
                           offset_along_n, offset_along_h, block_m,block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False)
     
     tl.store(dv + offset_block_m, dvalue)
-    tl.store(dk + offset_block_m, dkey*sm_scale)
+    tl.store(dk + offset_block_m, dkey)
 
     dquery = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
     dervative_o = tl.load(do + offset_block_m)
@@ -168,4 +168,4 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
       # for non-causal, we feed both the past and future data together as there is no mask
       dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
                           offset_along_n, offset_along_h, block_m,block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False)
-    tl.store(dq + offset_block_m, dquery*sm_scale)
+    tl.store(dq + offset_block_m, dquery)
