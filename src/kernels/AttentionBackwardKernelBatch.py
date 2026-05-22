@@ -43,13 +43,13 @@ def _attention_bwd_dkdv(dkey, dvalue, m, d, q, k, v, do,
       offset_block_n_T = block_m*hidden_dim + init_offset + offset_along_n[None, :] + offset_along_h[:, None]  
     else:
       num_steps = n_ctx // block_n
-    for _ in range(num_steps):
+    for idx in range(num_steps):
       if causal and mask:
-        assert init_offset <= offset_block_n_T and offset_block_n_T < init_offset + block_m*hidden_dim + base_mask*hidden_dim, f"[dkdv][Mask : {mask}]offset_block_n_T: {offset_block_n_T}, ctxid: {ctxid}"
-        assert init_offset <= offset_block_n and offset_block_n < init_offset + block_m*hidden_dim + base_mask*hidden_dim, f"[dkdv][Mask : {mask}]offset_block_n: {offset_block_n}, ctxid: {ctxid}"
+        assert init_offset >= offset_block_n_T and offset_block_n_T < init_offset + block_m*hidden_dim + base_mask*hidden_dim, f"[dkdv][Mask : {mask}] idx: {idx}, num_steps: {num_steps}, ctxid: {ctxid}"
+        assert init_offset >= offset_block_n and offset_block_n < init_offset + block_m*hidden_dim + base_mask*hidden_dim, f"[dkdv][Mask : {mask}] idx: {idx}, num_steps: {num_steps}, ctxid: {ctxid}"
       elif causal and not mask:
-        assert init_offset + block_m*hidden_dim < offset_block_n_T and offset_block_n_T <= n_ctx*hidden_dim + base_mask*hidden_dim, f"[dkdv][Mask : {mask}]offset_block_n_T: {offset_block_n_T}, ctxid: {ctxid}"
-        assert init_offset + block_m*hidden_dim < offset_block_n and offset_block_n <= n_ctx*hidden_dim + base_mask*hidden_dim, f"[dkdv][Mask : {mask}]offset_block_n: {offset_block_n}, ctxid: {ctxid}"
+        assert init_offset + block_m*hidden_dim >= offset_block_n_T and offset_block_n_T < n_ctx*hidden_dim + base_mask*hidden_dim, f"[dkdv][Mask : {mask}] idx: {idx}, num_steps: {num_steps}, ctxid: {ctxid}"
+        assert init_offset + block_m*hidden_dim >= offset_block_n and offset_block_n < n_ctx*hidden_dim + base_mask*hidden_dim, f"[dkdv][Mask : {mask}] idx: {idx}, num_steps: {num_steps}, ctxid: {ctxid}"
       queryT = tl.load(q + offset_block_n_T)  # pre-load to L1
       d_of_o = tl.load(do + offset_block_n)  # pre-load to L1
       max_tensor = tl.load(m + mask_offset_along_n)  # pre-load to L1
@@ -87,11 +87,11 @@ def _attention_bwd_dq(dquery, m, d, q, k, v, do,
     max_tensor = tl.load(m + mask_offset_along_m)  # pre-load to L1
     delta = tl.load(d + mask_offset_along_m)  # pre-load to L1
     
-    for _ in range(num_steps):
+    for idx in range(num_steps):
       if causal and mask:
-        assert (ctxid*block_m*hidden_dim + offset_batch_head) <= offset_block_n_T and offset_block_n_T < ((ctxid+1)*block_m*hidden_dim + offset_batch_head), f"[dq][Mask : {mask}]offset_block_n_T: {offset_block_n_T}, ctxid: {ctxid}, block_m: {block_m}"
+        assert (ctxid*block_m*hidden_dim + offset_batch_head) >= offset_block_n_T and offset_block_n_T < ((ctxid+1)*block_m*hidden_dim + offset_batch_head), f"[dq][Mask : {mask}] idx: {idx}, num_steps: {num_steps}, ctxid: {ctxid}, block_m: {block_m}"
       elif causal and not mask:
-        assert offset_batch_head < offset_block_n_T and offset_block_n_T <= (ctxid*block_m*hidden_dim + offset_batch_head), f"[dq][Mask : {mask}]offset_block_n_T: {offset_block_n_T}, ctxid: {ctxid}, block_m: {block_m}"
+        assert offset_batch_head >= offset_block_n_T and offset_block_n_T < (ctxid*block_m*hidden_dim + offset_batch_head), f"[dq][Mask : {mask}] idx: {idx}, num_steps: {num_steps}, ctxid: {ctxid}, block_m: {block_m}"
       keyT = tl.load(k + offset_block_n_T)  # pre-load to L1
       valueT = tl.load(v + offset_block_n_T)  # pre-load to L1
       qkT = tl.dot(q, keyT)
