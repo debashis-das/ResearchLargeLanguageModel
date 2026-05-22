@@ -49,8 +49,8 @@ class TransformerLayer(nn.Module):
         # output = self.attention(q, k, v, is_causal=True)
         # self.exit_on_nan(output, f"NaN in attention output in rank {self.rank}")
         # print(f"Output ({rank},{rank}): {output.shape} : {output[:,:,:10,:10]}")
-        output = output.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu,-1)
-        v = v.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu, -1)
+        output = output.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu,-1).contiguous()
+        v = v.permute(0, 2, 1, 3).reshape(Config.batch, self.tokens_per_gpu, -1).contiguous()
         # print(f"Output after permute & reshape ({rank},{rank}) o:{output.shape}, v:{v.shape}")
         x_residual = output + v
         # print(f"x_residual : {output.shape}, {v.shape}, {x_residual.shape}")
