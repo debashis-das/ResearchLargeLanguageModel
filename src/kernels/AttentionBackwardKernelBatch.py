@@ -164,4 +164,4 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
       # for non-causal, we feed both the past and future data together as there is no mask
       dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
                           offset_along_n, offset_along_h, block_m,block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False)
-    tl.store(dq + offset_block_m, dquery*LN2*sm_scale, mask=store_mask)  # scale the dquery with LN2 and sm_scale as we had scaled the qkT in forward with sm_scale and also the softmax gradient has a implicit scaling with LN2 due to the use of exp2
+    tl.store(dq + offset_block_m, dquery*LN2, mask=store_mask)  # scale the dquery with LN2 and sm_scale as we had scaled the qkT in forward with sm_scale and also the softmax gradient has a implicit scaling with LN2 due to the use of exp2
