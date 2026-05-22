@@ -420,7 +420,7 @@ class _attention(torch.autograd.Function):
           N_HEAD * BATCH,
           1
       )
-      _attention_bwd[grid_bwd](q, k, v, do, dq, dk, dv, M, delta, sm_scale, BATCH, N_HEAD, N_CTX,
+      _attention_bwd[grid_bwd](q, arg_k, v, do, dq, dk, dv, M, delta, sm_scale, BATCH, N_HEAD, N_CTX,
                                HEAD_DIM, BLOCK_M, BLOCK_N, num_warps=NUM_WARPS, num_stages=NUM_STAGES, CAUSAL=CAUSAL)
       logging.info(f'dq : Minumum gradient : {dq.dtype} : {dq.min()}, Maximum gradient : {dq.max()}')
       logging.info(f'dk : Minumum gradient : {dk.dtype} :{dk.min()}, Maximum gradient : {dk.max()}')

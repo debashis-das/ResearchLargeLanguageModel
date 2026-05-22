@@ -91,7 +91,7 @@ def _attention_bwd_dq(dquery, m, d, q, k, v, do,
         mask_offset_along_n += block_n
       dp = tl.dot(do, valueT).to(tl.float32)
       ds = p * (dp - delta[:, None])
-      dquery += tl.dot(ds, tl.trans(keyT)).to(tl.float32)
+      dquery += tl.dot(ds, tl.trans(keyT)*sm_scale).to(tl.float32)
       offset_block_n_T += block_n*hidden_dim
     return dquery
 
