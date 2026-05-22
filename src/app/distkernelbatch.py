@@ -36,7 +36,7 @@ class MultiGPUExecutor(nn.Module):
     self.world_size = world_size
     self.tokens_per_gpu = tokens_per_gpu
     self.embedding = nn.Embedding(Config.total_vocab, Config.hiddens, device=device)
-    self.rms3 = RMSNorm(Config.hiddens, device=device)
+    self.rms3 = RMSNorm(Config.hiddens, device=device, name="After layers RMSNorm3")
     self.dense = nn.LazyLinear(Config.total_vocab, bias=False, device=device)
     self.loss_fn = nn.CrossEntropyLoss(reduction="mean")
     self.model = nn.ModuleList()
