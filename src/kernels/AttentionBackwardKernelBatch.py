@@ -46,8 +46,8 @@ def _attention_bwd_dkdv(dkey, dvalue, m, d, q, k, v, do,
       queryT = tl.load(q + offset_block_n_T)  # pre-load to L1
       d_of_o = tl.load(do + offset_block_n)  # pre-load to L1
       max_tensor = tl.load(m + mask_offset_along_n)  # pre-load to L1
-      kqT = tl.dot(k, queryT)*sm_scale
-      pT = tl.exp(kqT - max_tensor[None,:])
+      kqT = tl.dot(k, queryT)
+      pT = tl.math.exp2(kqT - max_tensor[None,:])
       if mask:
         mask_tensor = (mask_offset_along_m[:, None] <= mask_offset_along_n[None, :])
         pT += tl.where(mask_tensor, 0, 0.0)
@@ -82,8 +82,8 @@ def _attention_bwd_dq(dquery, m, d, q, k, v, do,
     for _ in range(num_steps):
       keyT = tl.load(k + offset_block_n_T)  # pre-load to L1
       valueT = tl.load(v + offset_block_n_T)  # pre-load to L1
-      qkT = tl.dot(q, keyT)*sm_scale
-      p = tl.exp(qkT - max_tensor[:, None])
+      qkT = tl.dot(q, keyT)
+      p = tl.math.exp2(qkT - max_tensor[:, None])
       if mask:
         mask_tensor = (mask_offset_along_m[:, None] >= mask_offset_along_n[None, :])
         p += tl.where(mask_tensor, 0, 0.0)
@@ -111,7 +111,7 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
                    sm_scale: tl.constexpr, batch: tl.constexpr, num_heads: tl.constexpr,
                    n_ctx: tl.constexpr, hidden_dim: tl.constexpr, block_m: tl.constexpr,
                    block_n: tl.constexpr, CAUSAL: tl.constexpr = True):
-    # LN2 = 0.6931471824645996  # = ln(2)
+    LN2 = 0.6931471824645996  # = ln(2)
     # current context block
     ctxid = tl.program_id(0)
     # current head
@@ -163,4 +163,4 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
       # for non-causal, we feed both the past and future data together as there is no mask
       dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
                           offset_along_n, offset_along_h, block_m,block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False)
-    tl.store(dq + offset_block_m, dquery*sm_scale)
+    tl.store(dq + offset_block_m, dquery*LN2)
