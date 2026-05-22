@@ -22,8 +22,8 @@ class TransformerLayer(nn.Module):
         self.rank = rank
         self.tokens_per_gpu = tokens_per_gpu
         self.layer_id = layer_id
-        self.rms1 = RMSNorm(Config.hiddens, device=device)
-        self.rms2 = RMSNorm(Config.hiddens, device=device)
+        self.rms1 = RMSNorm(Config.hiddens, device=device, name=f"layer : {layer_id} : RMSNorm1")
+        self.rms2 = RMSNorm(Config.hiddens, device=device, name=f"layer : {layer_id} : RMSNorm2")
         self.mlp = MLP(Config.hiddens, Config.mlp_intermediate_hidden, device=device)
 
         self.W_q = nn.LazyLinear(Config.hiddens, bias=False, device=device)
