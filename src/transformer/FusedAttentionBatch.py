@@ -2,7 +2,7 @@ import sys
 import threading
 import torch
 import gc
-import torch.distributed as dist
+# import torch.distributed as dist
 import triton
 import logging
 
@@ -241,8 +241,8 @@ class _attention(torch.autograd.Function):
   # Assumption that it is used only for causal case
   @staticmethod
   def forward(ctx, q, k, v, world_size, rank, warp_specialize=True):
-        if world_size != 1:
-            exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
+        # if world_size != 1:
+        #     exe_order_per_rank_v, exe_order_per_rank_h, exe_order_per_rank_unaligned  = identify_nodes_for_qkv(world_size)
         batch, num_heads, n_ctx, hidden_dim = q.shape[0], q.shape[1], q.shape[2], q.shape[3]
         sm_scale = 1.0 / (hidden_dim ** 0.5)
         o = torch.zeros_like(q)
@@ -342,7 +342,7 @@ class _attention(torch.autograd.Function):
         #         o = o*scale_current.unsqueeze(-1)+output_recv*scale_recv.unsqueeze(-1)
         #         M = maximum
         #     o = o / sft_d.unsqueeze(-1)
-        dist.barrier()
+        # dist.barrier()
         ctx.save_for_backward(q,k,v,o,M)
         ctx.sm_scale = sm_scale
         ctx.hidden_dim = hidden_dim
