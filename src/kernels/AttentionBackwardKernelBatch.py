@@ -71,15 +71,20 @@ def _attention_bwd_dq(dquery, m, d, q, k, v, do,
     if causal and mask:
       num_steps = block_m // block_n
       mask_offset_along_n = ctxid*block_m + base_mask + tl.arange(0, block_n)
+      offset_block_n_T = ctxid*block_m*hidden_dim + offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
     elif causal and not mask:
       num_steps = (ctxid*block_m) // block_n
+      offset_block_n_T = offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
     else:
       num_steps = n_ctx // block_n
-    offset_block_n_T = ctxid*block_m*hidden_dim + offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
     max_tensor = tl.load(m + mask_offset_along_m)  # pre-load to L1
     delta = tl.load(d + mask_offset_along_m)  # pre-load to L1
     
     for _ in range(num_steps):
+      if causal and mask:
+        assert (ctxid*block_m*hidden_dim + offset_batch_head) <= offset_block_n_T < ((ctxid+1)*block_m*hidden_dim + offset_batch_head), f"[Mask : {mask}]offset_block_n_T: {offset_block_n_T}, ctxid: {ctxid}, block_m: {block_m}, hidden_dim: {hidden_dim}, offset_batch_head: {offset_batch_head}"
+      elif causal and not mask:
+        assert offset_batch_head < offset_block_n_T <= (ctxid*block_m*hidden_dim + offset_batch_head), f"[Mask : {mask}]offset_block_n_T: {offset_block_n_T}, ctxid: {ctxid}, block_m: {block_m}, hidden_dim: {hidden_dim}, offset_batch_head: {offset_batch_head}"
       keyT = tl.load(k + offset_block_n_T)  # pre-load to L1
       valueT = tl.load(v + offset_block_n_T)  # pre-load to L1
       qkT = tl.dot(q, keyT)
