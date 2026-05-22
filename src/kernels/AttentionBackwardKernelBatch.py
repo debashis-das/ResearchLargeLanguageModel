@@ -133,6 +133,7 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
     key = tl.load(k + offset_block_m)
     value = tl.load(v + offset_block_m)
     assert block_m % block_n == 0, "block_m should be divisible by block_n"
+    store_mask = offset_block_m < (ctxid+1)*block_m*hidden_dim
 
     if CAUSAL:
       # for the mask part of block_m
@@ -146,8 +147,8 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
       dkey, dvalue = _attention_bwd_dkdv(dkey, dvalue, m, d, q, key, value, do, init_offset,
                           offset_along_n, offset_along_h, block_m,block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False)
     
-    tl.store(dv + offset_block_m, dvalue)
-    tl.store(dk + offset_block_m, dkey*sm_scale)  # scale back the dkey as we had scaled the kqT in forward
+    tl.store(dv + offset_block_m, dvalue, mask=store_mask, other=0.0)  # only store the valid part for dv as the dvalue for the masked part is not correct due to the fact that we have not masked the softmax output in forward for those parts as they do not contribute to the output
+    tl.store(dk + offset_block_m, dkey*sm_scale, mask=store_mask, other=0.0)  # scale back the dkey as we had scaled the kqT in forwardrd
 
     dquery = tl.zeros([block_m, hidden_dim], dtype=tl.float32)
     dervative_o = tl.load(do + offset_block_m)
@@ -163,4 +164,4 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
       # for non-causal, we feed both the past and future data together as there is no mask
       dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
                           offset_along_n, offset_along_h, block_m,block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False)
-    tl.store(dq + offset_block_m, dquery*LN2*sm_scale)  # scale the dquery with LN2 and sm_scale as we had scaled the qkT in forward with sm_scale and also the softmax gradient has a implicit scaling with LN2 due to the use of exp2
+    tl.store(dq + offset_block_m, dquery*LN2*sm_scale, mask=store_mask, other=0.0)  # scale the dquery with LN2 and sm_scale as we had scaled the qkT in forward with sm_scale and also the softmax gradient has a implicit scaling with LN2 due to the use of exp2
