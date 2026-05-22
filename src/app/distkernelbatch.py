@@ -38,7 +38,7 @@ class MultiGPUExecutor(nn.Module):
     self.embedding = nn.Embedding(Config.total_vocab, Config.hiddens, device=device)
     self.rms3 = RMSNorm(Config.hiddens, device=device, name="After layers RMSNorm3")
     self.dense = nn.LazyLinear(Config.total_vocab, bias=False, device=device)
-    self.loss_fn = nn.CrossEntropyLoss(reduction="mean")
+    self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
     self.model = nn.ModuleList()
     for i in range(10):
       self.model.append(TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, device=device, layer_id=i))
@@ -171,12 +171,12 @@ def train(base, rank, tokens_per_gpu):
             # print(f"Tokens : {tokens.shape}")
             _, loss = model_per_rank(tokens, step)
             # dist.all_reduce(loss, op=dist.ReduceOp.SUM)
-            # loss = loss / (Config.batch*Config.tokens)
-            # loss = loss / accumulation_steps
+            loss = loss / (Config.batch*Config.tokens)
+            loss = loss / accumulation_steps
             loss.backward()
-            # torch.nn.utils.clip_grad_norm_(model_per_rank.parameters(), 1.0)
-            # if torch.isnan(model_per_rank.embedding.weight.grad).any():
-            #   logging.debug(f"Grad NaN: {torch.isnan(model_per_rank.embedding.weight.grad).any()}")
+            torch.nn.utils.clip_grad_norm_(model_per_rank.parameters(), 1.0)
+            if torch.isnan(model_per_rank.embedding.weight.grad).any():
+              logging.debug(f"Grad NaN: {torch.isnan(model_per_rank.embedding.weight.grad).any()}")
             running_loss += loss.item()*accumulation_steps
             step += 1
             if step % accumulation_steps == 0:
