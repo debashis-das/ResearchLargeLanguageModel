@@ -392,34 +392,34 @@ class _attention(torch.autograd.Function):
       arg_k = k
       arg_k = arg_k * (sm_scale * RCP_LN2)
       grid = (N_CTX // BLOCK_N1, 1, BATCH * N_HEAD)
-      # _attn_bwd[grid](
-      #     q, arg_k, v, sm_scale, do, dq_doc, dk_doc, dv_doc,  #
-      #     M, delta,  #
-      #     q.stride(0), q.stride(1), q.stride(2), q.stride(3),  #
-      #     N_HEAD, N_CTX,  #
-      #     BLOCK_M1=BLOCK_M1, BLOCK_N1=BLOCK_N1,  #
-      #     BLOCK_M2=BLOCK_M2, BLOCK_N2=BLOCK_N2,  #
-      #     BLK_SLICE_FACTOR=BLK_SLICE_FACTOR,  #
-      #     HEAD_DIM=HEAD_DIM,  #
-      #     num_warps=NUM_WARPS,  #
-      #     num_stages=NUM_STAGES,  #
-      #     CAUSAL=True,  #
-      # )
+      _attn_bwd[grid](
+          q, arg_k, v, sm_scale, do, dq_doc, dk_doc, dv_doc,  #
+          M, delta,  #
+          q.stride(0), q.stride(1), q.stride(2), q.stride(3),  #
+          N_HEAD, N_CTX,  #
+          BLOCK_M1=BLOCK_M1, BLOCK_N1=BLOCK_N1,  #
+          BLOCK_M2=BLOCK_M2, BLOCK_N2=BLOCK_N2,  #
+          BLK_SLICE_FACTOR=BLK_SLICE_FACTOR,  #
+          HEAD_DIM=HEAD_DIM,  #
+          num_warps=NUM_WARPS,  #
+          num_stages=NUM_STAGES,  #
+          CAUSAL=True,  #
+      )
       # logging.info(f'dq : Minumum gradient : {dq_doc.dtype} : {dq_doc.min()}, Maximum gradient : {dq_doc.max()}')
       # logging.info(f'dk : Minumum gradient : {dk_doc.dtype} :{dk_doc.min()}, Maximum gradient : {dk_doc.max()}')
       # logging.info(f'dv : Minumum gradient : {dv_doc.dtype} :{dv_doc.min()}, Maximum gradient : {dv_doc.max()}')
       # logging.info("-----------------------------")
-      dq = torch.empty_like(q)
-      dk = torch.empty_like(k)
-      dv = torch.empty_like(v)
-      BLOCK_M, BLOCK_N = 128, 32
-      grid_bwd = lambda META: (
-          triton.cdiv(N_CTX, BLOCK_M),
-          N_HEAD * BATCH,
-          1
-      )
-      _attention_bwd[grid_bwd](q, arg_k, v, do, dq, dk, dv, M, delta, sm_scale, BATCH, N_HEAD, N_CTX,
-                               HEAD_DIM, BLOCK_M, BLOCK_N, num_warps=NUM_WARPS, num_stages=NUM_STAGES, CAUSAL=CAUSAL)
+      # dq = torch.empty_like(q)
+      # dk = torch.empty_like(k)
+      # dv = torch.empty_like(v)
+      # BLOCK_M, BLOCK_N = 128, 32
+      # grid_bwd = lambda META: (
+      #     triton.cdiv(N_CTX, BLOCK_M),
+      #     N_HEAD * BATCH,
+      #     1
+      # )
+      # _attention_bwd[grid_bwd](q, arg_k, v, do, dq, dk, dv, M, delta, sm_scale, BATCH, N_HEAD, N_CTX,
+      #                          HEAD_DIM, BLOCK_M, BLOCK_N, num_warps=NUM_WARPS, num_stages=NUM_STAGES, CAUSAL=CAUSAL)
       # logging.info(f'dq : Minumum gradient : {dq.dtype} : {dq.min()}, Maximum gradient : {dq.max()}')
       # logging.info(f'dk : Minumum gradient : {dk.dtype} :{dk.min()}, Maximum gradient : {dk.max()}')
       # logging.info(f'dv : Minumum gradient : {dv.dtype} :{dv.min()}, Maximum gradient : {dv.max()}')
@@ -499,4 +499,6 @@ class _attention(torch.autograd.Function):
       # logging.debug(f"[Attention] dv: {torch.isnan(dv).any()} : dv.max(): {dv.abs().max()} : dv.min(): {dv.abs().min()}")
       # logging.debug(f"[Attention] dk: {torch.isnan(dk).any()} : dk.max(): {dk.abs().max()} : dk.min(): {dk.abs().min()}")
       # logging.debug(f"[Attention] dq: {torch.isnan(dq).any()} : dq.max(): {dq.abs().max()} : dq.min(): {dq.abs().min()}")
-      return dq, dk, dv, None, None, None, None, None, None, None, None, None
+      # return dq, dk, dv, None, None, None, None, None, None, None, None, None
+      return dq_doc, dk_doc, dv_doc, None, None, None, None, None, None, None, None, None
+  
