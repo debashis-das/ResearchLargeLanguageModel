@@ -28,21 +28,21 @@ def _attention_bwd_pre_process(o_ptr, do_ptr, delta_ptr,
 
 @triton.jit
 def _attention_bwd_dkdv(dkey, dvalue, m, d, q, k, v, do,
-                        init_offset, offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False):
+                        init_offset, offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx: tl.constexpr, ctxid: tl.constexpr, num_heads: tl.constexpr, n_ctx: tl.constexpr, hidden_dim: tl.constexpr, sm_scale: tl.constexpr, causal=False, mask=False):
     base_mask = head_idx*n_ctx + batch_idx*num_heads*n_ctx
     mask_offset_along_m = ctxid*block_m + base_mask + tl.arange(0, block_m)
     mask_offset_along_n = ctxid*block_m + base_mask + tl.arange(0, block_n)
     if causal and mask:
-      num_steps = block_m // block_n
+      num_steps: tl.constexpr = block_m // block_n
       offset_block_n = init_offset + offset_along_n[:, None] + offset_along_h[None, :]
       offset_block_n_T = init_offset + offset_along_n[None, :] + offset_along_h[:, None]
     elif causal and not mask:
-      num_steps = (n_ctx - (ctxid+1)*block_m) // block_n
+      num_steps: tl.constexpr = (n_ctx - (ctxid+1)*block_m) // block_n
       mask_offset_along_n = (ctxid+1)*block_m + base_mask + tl.arange(0, block_n)
       offset_block_n = block_m*hidden_dim + init_offset + offset_along_n[:, None] + offset_along_h[None, :]
       offset_block_n_T = block_m*hidden_dim + init_offset + offset_along_n[None, :] + offset_along_h[:, None]  
     else:
-      num_steps = n_ctx // block_n
+      num_steps: tl.constexpr = n_ctx // block_n
     for idx in range(num_steps):
       if causal and mask:
         assert init_offset >= offset_block_n_T and offset_block_n_T < init_offset + block_m*hidden_dim + base_mask*hidden_dim, f"[dkdv][Mask : {mask}] idx: {idx}, num_steps: {num_steps}, ctxid: {ctxid}"
@@ -72,18 +72,18 @@ def _attention_bwd_dkdv(dkey, dvalue, m, d, q, k, v, do,
 
 @triton.jit
 def _attention_bwd_dq(dquery, m, d, q, k, v, do,
-                        offset_batch_head, offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=False, mask=False):
+                        offset_batch_head, offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx: tl.constexpr, ctxid: tl.constexpr, num_heads: tl.constexpr, n_ctx: tl.constexpr, hidden_dim: tl.constexpr, sm_scale: tl.constexpr, causal=False, mask=False):
     base_mask = head_idx*n_ctx + batch_idx*num_heads*n_ctx
     mask_offset_along_m = ctxid*block_m + base_mask + tl.arange(0, block_m)
     if causal and mask:
-      num_steps = block_m // block_n
+      num_steps: tl.constexpr = block_m // block_n
       mask_offset_along_n = ctxid*block_m + base_mask + tl.arange(0, block_n)
       offset_block_n_T = ctxid*block_m*hidden_dim + offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
     elif causal and not mask:
-      num_steps = (ctxid*block_m) // block_n
+      num_steps: tl.constexpr = (ctxid*block_m) // block_n
       offset_block_n_T = offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
     else:
-      num_steps = n_ctx // block_n
+      num_steps: tl.constexpr = n_ctx // block_n
     max_tensor = tl.load(m + mask_offset_along_m)  # pre-load to L1
     delta = tl.load(d + mask_offset_along_m)  # pre-load to L1
     
