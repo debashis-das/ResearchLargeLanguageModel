@@ -71,13 +71,11 @@ def _attention_bwd_dq(dquery, m, d, q, k, v, do,
     if causal and mask:
       num_steps = block_m // block_n
       mask_offset_along_n = ctxid*block_m + base_mask + tl.arange(0, block_n)
-      offset_block_n_T = ctxid*block_m*hidden_dim + offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
     elif causal and not mask:
       num_steps = (ctxid*block_m) // block_n
-      offset_block_n_T = offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
     else:
       num_steps = n_ctx // block_n
-    
+    offset_block_n_T = ctxid*block_m*hidden_dim + offset_batch_head + offset_along_n[None, :] + offset_along_h[:, None]
     max_tensor = tl.load(m + mask_offset_along_m)  # pre-load to L1
     delta = tl.load(d + mask_offset_along_m)  # pre-load to L1
     
@@ -155,12 +153,12 @@ def _attention_bwd(q, k, v, do, dq, dk, dv, m, d,
     dervative_o = tl.load(do + offset_block_m)
     query = tl.load(q + offset_block_m)
     if CAUSAL:
-      # for the mask part of block_m
-      dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
-                          offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=True, mask=True)
       # for the non-mask part for data before the mask (past data)
       dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
                           offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=True, mask=False)
+      # for the mask part of block_m
+      dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
+                          offset_along_n, offset_along_h, block_m, block_n, batch_idx, head_idx, ctxid, num_heads, n_ctx, hidden_dim, sm_scale, causal=True, mask=True)
     else:
       # for non-causal, we feed both the past and future data together as there is no mask
       dquery = _attention_bwd_dq(dquery, m, d, query, k, v, dervative_o, offset_batch_head,
