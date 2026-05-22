@@ -1,7 +1,7 @@
 import logging
 
 import torch
-import torch.distributed as dist
+# import torch.distributed as dist
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 from transformer.TransformerLayer import TransformerLayer
@@ -169,7 +169,7 @@ def train(base, rank, tokens_per_gpu):
             tokens = torch.stack(batch)
             # print(f"Tokens : {tokens.shape}")
             _, loss = model_per_rank(tokens, step)
-            dist.all_reduce(loss, op=dist.ReduceOp.SUM)
+            # dist.all_reduce(loss, op=dist.ReduceOp.SUM)
             loss = loss / (Config.batch*Config.tokens)
             loss = loss / accumulation_steps
             loss.backward()
@@ -199,7 +199,7 @@ def train(base, rank, tokens_per_gpu):
             torch.cuda.empty_cache()
             batch = []
     finally:
-      dist.destroy_process_group()
+      # dist.destroy_process_group()
       torch.save({
                   'parquet_idx': i,
                   'epoch_per_parquet': index,
@@ -214,12 +214,14 @@ if __name__ == "__main__":
   # device = 'cuda' if torch.cuda.is_available() else 'cpu'
   # per gpu code
   # dist.init_process_group("gloo")
-  dist.init_process_group("nccl")
+  # dist.init_process_group("nccl")
 
-  world_size = dist.get_world_size()
+  # world_size = dist.get_world_size()
+  world_size = 1
   tokens_per_gpu = Config.tokens//world_size
 
-  rank = dist.get_rank()
+  # rank = dist.get_rank()
+  rank = 0
   # model_per_rank = MultiGPUExecutor(world_size, rank, tokens_per_gpu)
   # model_per_rank = model_per_rank.to(DEVICE)
   # optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=8e-6, weight_decay=0.008)
