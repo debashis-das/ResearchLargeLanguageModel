@@ -20,7 +20,7 @@ device = model.device
 
 def sft_train():
     try:
-        batch_size = 8
+        batch_size = 4
         optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-4)
         for i in range(2):
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl.parquet"
