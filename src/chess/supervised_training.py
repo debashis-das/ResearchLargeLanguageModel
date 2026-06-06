@@ -39,7 +39,7 @@ def sft_train():
                     batch_input_ids = torch.stack(batch_stack_input)
                     batch_attention_masks = torch.stack(batch_stack_attention_mask)
                     try:
-                        _, loss = model_with_lora(input_ids=batch_input_ids, attention_mask=batch_attention_masks)
+                        _, loss = model_with_lora(batch_input_ids, attention_mask=batch_attention_masks)
                         loss.backward()
                         optimizer.step()
                         optimizer.zero_grad(set_to_none=True)

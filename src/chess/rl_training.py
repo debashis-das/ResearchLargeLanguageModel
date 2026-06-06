@@ -108,7 +108,7 @@ def rl_train():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=torch.bfloat16, device=device)
                 try:
-                    _, loss = model_with_grpo_reward(input_ids=input_ids, attention_mask=attention_mask)
+                    _, loss = model_with_grpo_reward(input_ids, attention_mask=attention_mask)
                     loss.backward()
                     optimizer.step()
                     optimizer.zero_grad(set_to_none=True)
@@ -122,11 +122,11 @@ def rl_train():
                         torch.save({
                                     'parquet_idx': i,
                                     'epoch_per_parquet': training_timestep,
-                                    'model_state_dict': model_with_lora.state_dict(),
+                                    'model_state_dict': model_with_grpo_reward.state_dict(),
                                     'optimizer_state_dic': optimizer.state_dict(),
                                     'loss': loss
-                                    }, f"model/qwen-0.6b-with-loRA-sft-model-params")
-                        print(f"Model training complete saved with name : qwen-0.6b-with-loRA-sft-model-params")
+                                    }, f"model/qwen-0.6b-with-loRA-rl-model-params")
+                        print(f"Model training complete saved with name : qwen-0.6b-with-loRA-rl-model-params")
                     gc.collect()
                     torch.cuda.empty_cache()
                         
