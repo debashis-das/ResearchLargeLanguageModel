@@ -9,15 +9,15 @@ from chess.chess_validator import ChessGame
 from lora.LoRAFineTuning import LoRAFineTuning
 
 model_path = "/home/model"
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 tokenizer = AutoTokenizer.from_pretrained(model_path)
-
+dtype = torch.float16
 model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            dtype=torch.float16,
+            torch_dtype=dtype,
             device_map="auto"
         )
-model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
+model_with_lora = LoRAFineTuning(model, tokenizer, dtype=dtype, device=model.device)
+device = model.device
 
 def sft_train():
     try:
@@ -29,9 +29,10 @@ def sft_train():
             batch_stack_input = []
             batch_stack_attention_mask = []
             training_timestep = 0
+            loss = None
             for _, row in df_input.iterrows():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
-                attention_mask = torch.tensor(row['attention_mask'], dtype=torch.bfloat16, device=device)
+                attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
                 if len(batch_stack_input) < batch_size:
                     batch_stack_input.append(input_ids)
                     batch_stack_attention_mask.append(attention_mask)
@@ -49,7 +50,7 @@ def sft_train():
                     except Exception as e:
                         print(f"An error occurred during model training: {e}")
                     finally:
-                        if training_timestep % 1000 == 0:
+                        if training_timestep % 1000 == 0 and loss is not None:
                             torch.save({
                                         'parquet_idx': i,
                                         'epoch_per_parquet': training_timestep,

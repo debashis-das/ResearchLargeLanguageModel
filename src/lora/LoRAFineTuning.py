@@ -24,7 +24,7 @@ class LoRAFineTuning(nn.Module):
     def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, 
                  projections=None, 
                  rank=16, alpha=1.0, 
-                 device=torch.device("cuda")):
+                 dtype=torch.float16, device=torch.device("cuda")):
         super().__init__()
         if projections is None:
             projections = self._default_projections
@@ -35,7 +35,7 @@ class LoRAFineTuning(nn.Module):
         self.alpha = alpha
         self.device = device
         self.model = model
-        self.dtype = model.config.dtype
+        self.dtype = dtype
         self.freeze_model_parameters()
         self.create_module_dict_inject_loRA()
         self.loss_function = nn.CrossEntropyLoss()
@@ -63,7 +63,7 @@ class LoRAFineTuning(nn.Module):
         # We need to convert it to the shape [batch, 1, seq_len, seq_len] with -inf for tokens to ignore and 0 for tokens to attend to.
         if attention_mask is None:
             return None
-        min_val = torch.finfo(self.model.config.dtype).min
+        min_val = torch.finfo(self.dtype).min
         mask = []
         for idx, postion in enumerate(attention_mask[-1].tolist()):
             if idx == 0 and postion == 0:
