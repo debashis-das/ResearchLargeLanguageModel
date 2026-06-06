@@ -102,7 +102,7 @@ class LoRAFineTuning(nn.Module):
         batch_size, seq_len = X.shape
         attention_mask = self.qwen_attention_mask(batch_size, attention_mask)
         position_ids = torch.arange(seq_len, device=X.device).unsqueeze(0)
-        input = self.module_dict["model.embed_tokens"](X)
+        input = self.module_dict["model.embed_tokens"](X, dtype=self.dtype)
         position_embeddings = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
         for layer_number in range(self.model.config.num_hidden_layers):
             input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=position_embeddings)
@@ -156,7 +156,7 @@ class LoRAFineTuning(nn.Module):
                 for idx in range(max_new_tokens):
                     cache_position = torch.tensor([init_seq_len + idx], device=X.device)  # Positions for the new token
                     position_ids = cache_position.unsqueeze(0)
-                    next_token = self.module_dict["model.embed_tokens"](next_token)
+                    next_token = self.module_dict["model.embed_tokens"](next_token, dtype=self.dtype)
                     position_embeddings = self.module_dict["model.rotary_emb"](next_token, position_ids)  # (cos, sin)
                     for layer_number in range(self.model.config.num_hidden_layers):
                         next_token = self.action_per_layer(layer_number, next_token, position_embeddings=position_embeddings, cache_position=cache_position, kv_cache=kv_cache)
