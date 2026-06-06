@@ -11,7 +11,7 @@ from chess.chess_validator import ChessGame
 from lora.GRPORewardModel import GRPORewardModel
 from lora.LoRAFineTuning import LoRAFineTuning
 
-model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
+model_path = "/home/model"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # TODO loading of state dict of the model with LoRA parameters
 tokenizer = AutoTokenizer.from_pretrained(model_path)

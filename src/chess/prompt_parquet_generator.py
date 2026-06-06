@@ -15,7 +15,7 @@ class TrainingType(enum.Enum):
     REINFORCEMENT_LEARNING = "rl"
 
 max_paraquet_files_per_training_type = 2
-model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
+model_path = "/home/model"
 df = pd.DataFrame(columns=['input_ids', 'attention_mask'])
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 tokenizer = AutoTokenizer.from_pretrained(model_path)
