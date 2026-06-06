@@ -91,7 +91,8 @@ class LoRAFineTuning(nn.Module):
             o_mlp = self.module_dict[f"model.layers.{current_layer_number}.mlp"](o_projection_norm)
             return o_mlp + o_projection_residual
         except Exception as e:
-            logging.error(f"Error in layer {current_layer_number} : {e}")
+            traceback_info = traceback.format_exc()
+            logging.error(f"Error in layer {current_layer_number} : {e} : {traceback_info}")
             raise
 
     def forward(self, X, attention_mask=None):
