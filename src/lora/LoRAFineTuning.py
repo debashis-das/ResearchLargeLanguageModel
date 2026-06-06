@@ -72,7 +72,7 @@ class LoRAFineTuning(nn.Module):
                 mask.append([0.0] * (idx+1) + [min_val] * (len(attention_mask[-1]) - (idx+1)))
             else:
                 mask.append(mask[-1])
-        final_mask = torch.tensor(mask, device=attention_mask.device)
+        final_mask = torch.tensor(mask, device=attention_mask.device, dtype=self.dtype)
         final_mask = final_mask.unsqueeze(0).unsqueeze(0).repeat_interleave(repeats=batch_size, dim=0)
         return final_mask
 
