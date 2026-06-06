@@ -24,7 +24,7 @@ def sft_train():
         batch_size = 8
         optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-4)
         for i in range(2):
-            current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
+            current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl.parquet"
             df_input = pd.read_parquet(current_paraquet)
             batch_stack_input = []
             batch_stack_attention_mask = []
