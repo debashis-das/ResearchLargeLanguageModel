@@ -48,6 +48,7 @@ def sft_train():
                             print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
                     except Exception as e:
                         print(f"An error occurred during model training: {e}")
+                        raise
                     finally:
                         if training_timestep % 1000 == 0 and loss is not None:
                             torch.save({
@@ -63,7 +64,7 @@ def sft_train():
                         batch_stack_input = []
                         batch_stack_attention_mask = []
     except Exception as e:
-        print(f"An error occurred during Parquet generation test: {e}")
+        print(f"An error occurred during training the model: {e}")
 
 if __name__ == "__main__":
     sft_train()
