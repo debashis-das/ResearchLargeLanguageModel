@@ -107,8 +107,7 @@ class LoRAFineTuning(nn.Module):
         input = self.module_dict["model.embed_tokens"](X)
         position_embeddings = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
         for layer_number in range(self.model.config.num_hidden_layers):
-            input = checkpoint(self.action_per_layer, layer_number, input, attention_mask, position_embeddings, use_reentrant=False)
-            # input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=position_embeddings)
+            input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=position_embeddings)
         input = self.module_dict["model.norm"](input)
         logits_batch = self.module_dict["lm_head"](input)   # [batch, seq_len, vocab_size]
         output_logits = logits_batch[:, :-1, :].contiguous()  # Shift logits for next-token prediction
