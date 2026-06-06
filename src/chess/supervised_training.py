@@ -5,15 +5,14 @@ import pandas as pd
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from chess.chess_validator import ChessGame
 from lora.LoRAFineTuning import LoRAFineTuning
 
 model_path = "/home/model"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
-dtype = torch.float16
+dtype = torch.bfloat16
 model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            torch_dtype=dtype,
+            dtype=dtype,
             device_map="auto"
         )
 model_with_lora = LoRAFineTuning(model, tokenizer, dtype=dtype, device=model.device)
