@@ -13,7 +13,8 @@ dependencies = [
     "torch >= 2.1",
     "transformers",
     "pandas",
-    "pyarrow"
+    "pyarrow",
+    "accelerate"
 ]
 
 [tool.pytest.ini_options]
