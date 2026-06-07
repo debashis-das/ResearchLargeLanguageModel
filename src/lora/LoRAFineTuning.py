@@ -169,7 +169,7 @@ class LoRAFineTuning(nn.Module):
                     generated_ids = torch.cat([generated_ids, next_token], dim=-1)
                     pbar.update(1)
             # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
-            print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
+            # print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
             return torch.cat([input_ids, generated_ids], dim=-1)
         except Exception as e:
             exec_info = traceback.format_exc()
