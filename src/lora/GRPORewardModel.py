@@ -93,7 +93,7 @@ class GRPORewardModel(nn.Module):
         game, _, _, move_no = self.board_state(input_moves, game)
         extract_json_string = output_with_prompt.split("``` Output JSON ```")[-1].strip()
         reward = 0.0
-        jsons = self.extract_jsons(extract_json_string)
+        jsons = self.extract_jsons(extract_json_string+'"}')
         if len(jsons) == 0 or len(jsons) > 1:
             reward -= 5.0
         for extract in jsons:
