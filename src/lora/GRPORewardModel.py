@@ -20,7 +20,7 @@ class GRPORewardModel(nn.Module):
         self.total_generation_length = total_generation_length
         self.generation_evalution_length = generation_evalution_length
         self.softmax = nn.Softmax(dim=-1)
-        self.gamma = 0.2
+        self.gamma = 1.5
 
     
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0):
@@ -165,7 +165,7 @@ class GRPORewardModel(nn.Module):
         nll_batch = torch.stack(nll_batch)
         advantage_batch = torch.stack(advantage_batch)
         print(f"Advantage : {[a.item() for a in advantage_batch]} : Loss : {[loss.item() for loss in nll_batch]}")
-        loss_batch = self.softmax(nll_batch * advantage_batch)
+        loss_batch = nll_batch * advantage_batch
         print(f"Loss batch : {[loss.item() for loss in loss_batch]}")
         return loss_batch.mean()
 
