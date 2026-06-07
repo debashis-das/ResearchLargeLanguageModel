@@ -99,10 +99,10 @@ class GRPORewardModel(nn.Module):
         for extract in jsons:
             try:
                 extracted_json = json.loads(extract)
-                if extracted_json:
-                    reward += 0.5
-                if extracted_json.get("moves", None):
-                    reward += 0.5
+                # if extracted_json:
+                #     reward += 0.5
+                # if extracted_json.get("moves", None):
+                #     reward += 0.5
                 if extracted_json is not None:
                     moves = extracted_json.get("moves").strip()
                     if moves[:len(input_moves)] == input_moves:
@@ -139,26 +139,26 @@ class GRPORewardModel(nn.Module):
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
         attention_mask = attention_mask.unsqueeze(0)
         loss_batch = [] 
-        X = x.unsqueeze(0)
-        for _ in range(self.grpo_batch):
-            # print(f"Input shape : {X.shape}")
-            output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
-            # print(f"Output tensor shape: {output_tensor.shape}")
-            reward_consideration_reverse_idx = (self.total_generation_length - self.generation_evalution_length)*-1
-            tensor_per_generation = output_tensor.squeeze()
-            considered_tensor = tensor_per_generation[...,:reward_consideration_reverse_idx]
-            reward = self.extract_reward(considered_tensor, moves_to_consider=5)
-            value_t_with_k_reward = self.extract_reward(tensor_per_generation, moves_to_consider=20)
-            # print(f"Reward extracted: {reward} : Value function with k reward extracted: {value_t_with_k_reward}")
-            value_t_reward = 0.0
-            mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
-            attention_mask = torch.cat([attention_mask, torch.ones((attention_mask.shape[0], mask_addition), dtype=attention_mask.dtype, device=attention_mask.device)], dim=-1)
-            # print(f"Attention mask shape after concatenation: {attention_mask.shape}")
-            _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=attention_mask)
-            advantage = self.gamma * reward +(value_t_with_k_reward - value_t_reward)
-            loss = nll * advantage
-            print(f"Reward extracted: {reward} : V_t+k: {value_t_with_k_reward} : Advantage : {advantage}, loss : {loss}")
-            loss_batch.append(loss)
+        x = x.unsqueeze(0)
+        X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
+        print(f"Input shape : {X.shape}")
+        output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
+        # print(f"Output tensor shape: {output_tensor.shape}")
+        reward_consideration_reverse_idx = (self.total_generation_length - self.generation_evalution_length)*-1
+        tensor_per_generation = output_tensor.squeeze()
+        considered_tensor = tensor_per_generation[...,:reward_consideration_reverse_idx]
+        reward = self.extract_reward(considered_tensor, moves_to_consider=5)
+        value_t_with_k_reward = self.extract_reward(tensor_per_generation, moves_to_consider=20)
+        # print(f"Reward extracted: {reward} : Value function with k reward extracted: {value_t_with_k_reward}")
+        value_t_reward = 0.0
+        mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
+        attention_mask = torch.cat([attention_mask, torch.ones((attention_mask.shape[0], mask_addition), dtype=attention_mask.dtype, device=attention_mask.device)], dim=-1)
+        # print(f"Attention mask shape after concatenation: {attention_mask.shape}")
+        _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=attention_mask)
+        advantage = self.gamma * reward +(value_t_with_k_reward - value_t_reward)
+        loss = nll * advantage
+        print(f"Reward extracted: {reward} : V_t+k: {value_t_with_k_reward} : Advantage : {advantage}, loss : {loss}")
+        loss_batch.append(loss)
         return self.softmax(torch.stack(loss_batch)).mean()
 
 
