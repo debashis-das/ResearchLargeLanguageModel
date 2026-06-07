@@ -124,7 +124,7 @@ def chess_reward_function(output_with_prompt):
 
 def rl_train(grpo_reward_model):
     try:
-        for i in range(2):
+        for i in range(1,2):
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
             df_input = pd.read_parquet(current_paraquet)
             training_timestep = 0
