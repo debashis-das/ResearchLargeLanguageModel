@@ -7,7 +7,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from lora.LoRAFineTuning import LoRAFineTuning
 
-model_path = "/home/ubuntu/model"
+model_path = "/home/model"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 dtype = torch.bfloat16
 model = AutoModelForCausalLM.from_pretrained(
@@ -25,7 +25,7 @@ def sft_train():
         running_loss = torch.zeros([1], dtype=torch.float32, device=device)
         optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-6)
         for i in range(2):
-            current_paraquet = f"/home/ubuntu/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl.parquet"
+            current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl.parquet"
             df_input = pd.read_parquet(current_paraquet)
             loss = None
             for _, row in df_input.iterrows():

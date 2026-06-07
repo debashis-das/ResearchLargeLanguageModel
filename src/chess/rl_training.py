@@ -11,7 +11,7 @@ from chess.chess_validator import ChessGame
 from lora.GRPORewardModel import GRPORewardModel
 from lora.LoRAFineTuning import LoRAFineTuning
 
-model_path = "/home/ubuntu/model"
+model_path = "/home/model"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 dtype = torch.float16
 model = AutoModelForCausalLM.from_pretrained(
@@ -125,7 +125,7 @@ def chess_reward_function(output_with_prompt):
 def rl_train(grpo_reward_model):
     try:
         for i in range(2):
-            current_paraquet = f"/home/ubuntu/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
+            current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
             df_input = pd.read_parquet(current_paraquet)
             training_timestep = 0
             for _, row in df_input.iterrows():
