@@ -30,13 +30,14 @@ class GRPORewardModel(nn.Module):
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
         x = x.unsqueeze(0)
         attention_mask = attention_mask.unsqueeze(0)
-        X = x.repeat_interleave(self.grpo_batch, dim=0)
-        print(f"Input shape after repeat_interleave: {X.shape}")
-        output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
-        print(f"Output tensor shape: {output_tensor.shape}")
-        reward_consideration_reverse_idx = (self.total_generation_length - self.generation_evalution_length)*-1
         loss_batch = [] 
-        for tensor_per_generation in output_tensor:
+        for _ in range(self.grpo_batch):
+            X = x.repeat_interleave(self.grpo_batch, dim=0)
+            print(f"Input shape after repeat_interleave: {X.shape}")
+            output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
+            print(f"Output tensor shape: {output_tensor.shape}")
+            reward_consideration_reverse_idx = (self.total_generation_length - self.generation_evalution_length)*-1
+            tensor_per_generation = output_tensor.squeeze()
             considered_tensor = tensor_per_generation[...,:reward_consideration_reverse_idx]
             reward = self.extract_reward(considered_tensor)
             value_t_with_k_reward = self.extract_reward(tensor_per_generation)
