@@ -153,9 +153,11 @@ class GRPORewardModel(nn.Module):
             # print(f"Reward extracted: {reward} : Value function with k reward extracted: {value_t_with_k_reward}")
             value_t_reward = 0.0
             mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
-            attention_mask = torch.cat([attention_mask[idx].unsqueeze(0), torch.ones((attention_mask.shape[0], mask_addition).unsqueeze(0), dtype=attention_mask.dtype, device=attention_mask.device)], dim=-1)
-            print(f"Attention mask shape after concatenation: {attention_mask.shape}")
-            _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=attention_mask)
+            attention_mask = attention_mask[idx].unsqueeze(0)
+            extra_mask = torch.ones((attention_mask.shape[0], mask_addition), dtype=attention_mask.dtype, device=attention_mask.device)
+            training_mask = torch.cat([attention_mask, extra_mask], dim=-1)
+            print(f"Attention mask shape after concatenation : {attention_mask.shape} : {extra_mask.shape} : {training_mask.shape}")
+            _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
             advantage = self.gamma * reward +(value_t_with_k_reward - value_t_reward)
             loss = nll * advantage
             loss_batch.append(loss)
