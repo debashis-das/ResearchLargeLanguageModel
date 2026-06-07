@@ -140,15 +140,15 @@ class GRPORewardModel(nn.Module):
     # batch_size provided as input is always 1 
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
         attention_mask = attention_mask.unsqueeze(0)
-        loss_batch = [] 
         x = x.unsqueeze(0)
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
-        print(f"Input shape : {X.shape}")
+        # print(f"Input shape : {X.shape}")
         output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
         # print(f"Output tensor shape: {output_tensor.shape}")
         reward_consideration_reverse_idx = (self.total_generation_length - self.generation_evalution_length)*-1
-        advantage_log = []
-        for idx, tensor_per_generation in enumerate(output_tensor):
+        advantage_batch = []
+        nll_batch = [] 
+        for tensor_per_generation in output_tensor:
             considered_tensor = tensor_per_generation[...,:reward_consideration_reverse_idx]
             reward = self.extract_reward(considered_tensor, moves_to_consider=5)
             value_t_with_k_reward = self.extract_reward(tensor_per_generation, moves_to_consider=20)
@@ -160,11 +160,14 @@ class GRPORewardModel(nn.Module):
             # print(f"Attention mask shape after concatenation : {attention_mask.shape} : {extra_mask.shape} : {training_mask.shape}")
             _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
             advantage = self.gamma * reward +(value_t_with_k_reward - value_t_reward)
-            loss = nll * advantage
-            loss_batch.append(loss)
-            advantage_log.append(advantage)
-        print(f"Advantage : {advantage_log} : Loss : {[loss.item() for loss in loss_batch]}")
-        return self.softmax(torch.stack(loss_batch)).mean()
+            nll_batch.append(nll)
+            advantage_batch.append(advantage)
+        nll_batch = self.softmax(torch.stack(nll_batch))
+        advantage_batch = self.softmax(torch.stack(advantage_batch))
+        print(f"Advantage : {[a.item() for a in advantage_batch]} : Loss : {[loss.item() for loss in nll_batch]}")
+        loss_batch = nll_batch * advantage_batch
+        print(f"Loss batch : {[loss.item() for loss in loss_batch]}")
+        return self.softmax(loss_batch).mean()
 
 
 
