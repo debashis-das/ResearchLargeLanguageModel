@@ -32,8 +32,8 @@ class GRPORewardModel(nn.Module):
         attention_mask = attention_mask.unsqueeze(0)
         loss_batch = [] 
         for _ in range(self.grpo_batch):
-            X = x.repeat_interleave(self.grpo_batch, dim=0)
-            print(f"Input shape after repeat_interleave: {X.shape}")
+            X = x.unsqueeze(0)
+            print(f"Input shape after unsqueeze: {X.shape}")
             output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
             print(f"Output tensor shape: {output_tensor.shape}")
             reward_consideration_reverse_idx = (self.total_generation_length - self.generation_evalution_length)*-1
