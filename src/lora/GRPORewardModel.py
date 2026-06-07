@@ -28,12 +28,11 @@ class GRPORewardModel(nn.Module):
     
     # batch_size provided as input is always 1 
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
-        x = x.unsqueeze(0)
         attention_mask = attention_mask.unsqueeze(0)
         loss_batch = [] 
+        X = x.unsqueeze(0)
         for _ in range(self.grpo_batch):
-            X = x.unsqueeze(0)
-            print(f"Input shape after unsqueeze: {X.shape}")
+            print(f"Input shape : {X.shape}")
             output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
             print(f"Output tensor shape: {output_tensor.shape}")
             reward_consideration_reverse_idx = (self.total_generation_length - self.generation_evalution_length)*-1
