@@ -131,7 +131,7 @@ def rl_train(grpo_reward_model):
             for _, row in df_input.iterrows():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
-                print(f"Tokenizer : {tokenizer.decode(input_ids)}")
+                print(f"Tokenizer : {tokenizer.decode(input_ids, skip_special_tokens=True)}")
                 exit(0)
                 try:
                     _, loss = grpo_reward_model(input_ids, attention_mask=attention_mask)
