@@ -161,7 +161,7 @@ class GRPORewardModel(nn.Module):
             _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
             advantage = self.gamma * reward +(value_t_with_k_reward - value_t_reward)
             nll_batch.append(nll)
-            advantage_batch.append(advantage)
+            advantage_batch.append(torch.tensor(advantage, dtype=self.dtype, device=self.device))
         nll_batch = self.softmax(torch.stack(nll_batch))
         advantage_batch = self.softmax(torch.stack(advantage_batch))
         print(f"Advantage : {[a.item() for a in advantage_batch]} : Loss : {[loss.item() for loss in nll_batch]}")

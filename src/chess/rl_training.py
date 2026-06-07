@@ -2,6 +2,7 @@
 import gc
 import json
 import re
+import traceback
 
 import pandas as pd
 import torch
@@ -43,6 +44,7 @@ def rl_train(grpo_reward_model):
                         print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
                 except Exception as e:
                     print(f"An error occurred during model training: {e}")
+                    traceback.print_exc()
                 finally:
                     if training_timestep % 1000 == 0 and loss is not None:
                         torch.save({
