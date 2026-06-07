@@ -61,5 +61,5 @@ def rl_train(grpo_reward_model):
         print(f"An error occurred during Parquet generation test: {e}")
 
 if __name__ == "__main__":
-    grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=8, device=device, dtype=dtype)
+    grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, device=device, dtype=dtype)
     rl_train(grpo_reward_model)

@@ -145,20 +145,22 @@ class GRPORewardModel(nn.Module):
         output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
         # print(f"Output tensor shape: {output_tensor.shape}")
         reward_consideration_reverse_idx = (self.total_generation_length - self.generation_evalution_length)*-1
-        tensor_per_generation = output_tensor.squeeze()
-        considered_tensor = tensor_per_generation[...,:reward_consideration_reverse_idx]
-        reward = self.extract_reward(considered_tensor, moves_to_consider=5)
-        value_t_with_k_reward = self.extract_reward(tensor_per_generation, moves_to_consider=20)
-        # print(f"Reward extracted: {reward} : Value function with k reward extracted: {value_t_with_k_reward}")
-        value_t_reward = 0.0
-        mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
-        attention_mask = torch.cat([attention_mask, torch.ones((attention_mask.shape[0], mask_addition), dtype=attention_mask.dtype, device=attention_mask.device)], dim=-1)
-        # print(f"Attention mask shape after concatenation: {attention_mask.shape}")
-        _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=attention_mask)
-        advantage = self.gamma * reward +(value_t_with_k_reward - value_t_reward)
-        loss = nll * advantage
-        print(f"Reward extracted: {reward} : V_t+k: {value_t_with_k_reward} : Advantage : {advantage}, loss : {loss}")
-        loss_batch.append(loss)
+        advantage_log = []
+        for idx, tensor_per_generation in enumerate(output_tensor):
+            considered_tensor = tensor_per_generation[...,:reward_consideration_reverse_idx]
+            reward = self.extract_reward(considered_tensor, moves_to_consider=5)
+            value_t_with_k_reward = self.extract_reward(tensor_per_generation, moves_to_consider=20)
+            # print(f"Reward extracted: {reward} : Value function with k reward extracted: {value_t_with_k_reward}")
+            value_t_reward = 0.0
+            mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
+            attention_mask = torch.cat([attention_mask[idx].unsqueeze(0), torch.ones((attention_mask.shape[0], mask_addition).unsqueeze(0), dtype=attention_mask.dtype, device=attention_mask.device)], dim=-1)
+            print(f"Attention mask shape after concatenation: {attention_mask.shape}")
+            _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=attention_mask)
+            advantage = self.gamma * reward +(value_t_with_k_reward - value_t_reward)
+            loss = nll * advantage
+            loss_batch.append(loss)
+            advantage_log.append(advantage)
+        print(f"Advantage : {advantage_log} : Loss : {loss_batch}")
         return self.softmax(torch.stack(loss_batch)).mean()
 
 
