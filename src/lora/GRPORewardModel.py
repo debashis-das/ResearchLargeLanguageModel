@@ -110,7 +110,7 @@ class GRPORewardModel(nn.Module):
                         moves_to_make = moves[processed_idx:]
                         try:
                             _, reward, all_valid, move_no = self.board_state(moves_to_make, game, reward)
-                            print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
+                            # print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
                             if all_valid:
                                 result = moves.rsplit(" ")[-1]
                                 if play_as == "white" and result == "1-0":
@@ -157,7 +157,7 @@ class GRPORewardModel(nn.Module):
             mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
             extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
             training_mask = torch.cat([attention_mask, extra_mask], dim=-1)
-            print(f"Attention mask shape after concatenation : {attention_mask.shape} : {extra_mask.shape} : {training_mask.shape}")
+            # print(f"Attention mask shape after concatenation : {attention_mask.shape} : {extra_mask.shape} : {training_mask.shape}")
             _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
             advantage = self.gamma * reward +(value_t_with_k_reward - value_t_reward)
             loss = nll * advantage
