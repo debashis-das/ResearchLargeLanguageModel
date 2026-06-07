@@ -38,7 +38,7 @@ def rl_train(grpo_reward_model):
                     optimizer.step()
                     optimizer.zero_grad(set_to_none=True)
                     training_timestep += 1
-                    if training_timestep % 100 == 0:
+                    if training_timestep % 1 == 0:
                         print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
                 except Exception as e:
                     print(f"An error occurred during model training: {e}")

@@ -106,7 +106,6 @@ class GRPORewardModel(nn.Module):
                 if extracted_json is not None:
                     moves = extracted_json.get("moves").strip()
                     if moves[:len(input_moves)] == input_moves:
-                        reward += 1.0
                         processed_idx = len(input_moves)
                         moves_to_make = moves[processed_idx:]
                         try:
@@ -125,6 +124,9 @@ class GRPORewardModel(nn.Module):
                         except Exception as e:
                             print(f"An error occurred during move processing: {e}")
                             reward -= 1.0
+                    else:
+                        reward -= 2.0
+                        break
             except json.JSONDecodeError:
                 reward -= 1.0
         return reward
@@ -161,7 +163,7 @@ class GRPORewardModel(nn.Module):
             loss = nll * advantage
             loss_batch.append(loss)
             advantage_log.append(advantage)
-        print(f"Advantage : {advantage_log} : Loss : {loss_batch}")
+        print(f"Advantage : {advantage_log} : Loss : {[loss.item() for loss in loss_batch]}")
         return self.softmax(torch.stack(loss_batch)).mean()
 
 
