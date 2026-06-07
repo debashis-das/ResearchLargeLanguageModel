@@ -111,6 +111,7 @@ class GRPORewardModel(nn.Module):
                         moves_to_make = moves[processed_idx:]
                         try:
                             _, reward, all_valid, move_no = self.board_state(moves_to_make, game, reward)
+                            print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
                             if all_valid:
                                 result = moves.rsplit(" ")[-1]
                                 if play_as == "white" and result == "1-0":
