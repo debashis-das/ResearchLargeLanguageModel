@@ -20,7 +20,7 @@ class GRPORewardModel(nn.Module):
         self.total_generation_length = total_generation_length
         self.generation_evalution_length = generation_evalution_length
         self.softmax = nn.Softmax(dim=-1)
-        self.gamma = 1.5
+        self.gamma = 0.99
 
     
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0):
@@ -159,13 +159,13 @@ class GRPORewardModel(nn.Module):
             training_mask = torch.cat([attention_mask, extra_mask], dim=-1)
             # print(f"Attention mask shape after concatenation : {attention_mask.shape} : {extra_mask.shape} : {training_mask.shape}")
             _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
-            advantage = self.gamma * reward +(value_t_with_k_reward - value_t_reward)
+            advantage = reward +(value_t_with_k_reward - value_t_reward)
             nll_batch.append(nll)
             advantage_batch.append(torch.tensor(advantage, dtype=self.dtype, device=self.device))
         nll_batch = torch.stack(nll_batch)
-        advantage_batch = torch.stack(advantage_batch)
+        advantage_batch = torch.tanh(torch.stack(advantage_batch))
         print(f"Advantage : {[a.item() for a in advantage_batch]} : Loss : {[loss.item() for loss in nll_batch]}")
-        loss_batch = nll_batch * advantage_batch
+        loss_batch = nll_batch * self.gamma * advantage_batch
         print(f"Loss batch : {[loss.item() for loss in loss_batch]}")
         return loss_batch.mean()
 
