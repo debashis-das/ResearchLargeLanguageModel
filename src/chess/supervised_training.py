@@ -24,7 +24,7 @@ def sft_train():
         accumulation_steps = 4
         training_timestep = 0
         running_loss = torch.zeros([1], dtype=torch.float32, device=device)
-        optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-4)
+        optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-6)
         for i in range(2):
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
@@ -43,12 +43,15 @@ def sft_train():
                         optimizer.step()
                         optimizer.zero_grad(set_to_none=True)
                         print(f"Training timestep: {training_timestep}, Loss: {running_loss/accumulation_steps}")
+                        if running_loss/accumulation_steps < 0.5:
+                            print(f"Loss is very low, stopping training at timestep: {training_timestep}, Loss: {running_loss/accumulation_steps}")
+                            return
                         running_loss = torch.zeros([1], dtype=torch.float32, device=device)
                 except Exception as e:
                     print(f"An error occurred during model training: {e}")
                     raise
                 finally:
-                    if training_timestep % 1000 == 0 and loss is not None:
+                    if training_timestep % 100 == 0 and loss is not None:
                         torch.save({
                                     'parquet_idx': i,
                                     'epoch_per_parquet': training_timestep,
