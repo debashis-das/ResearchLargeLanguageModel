@@ -7,8 +7,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from lora.LoRAFineTuning import LoRAFineTuning
 
-model_path = "/home/model"
-# model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
+# model_path = "/home/model"
+model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 dtype = torch.bfloat16
 model = AutoModelForCausalLM.from_pretrained(
@@ -26,13 +26,16 @@ def sft_train():
         running_loss = torch.zeros([1], dtype=torch.float32, device=device)
         optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
         for i in range(2):
-            current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl.parquet"
-            # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
+            # current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl.parquet"
+            current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
             df_input = pd.read_parquet(current_paraquet)
             loss = None
             for _, row in df_input.iterrows():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
+                if training_timestep % 50 == 0:
+                    generated_ids = model_with_lora.generate(input_ids, attention_mask=attention_mask, max_new_tokens=100)
+                    print(f"Generated text: {tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
                 try:
                     _, loss = model_with_lora(input_ids, attention_mask=attention_mask)
                     loss = loss / accumulation_steps
@@ -52,6 +55,7 @@ def sft_train():
                     raise
                 finally:
                     if training_timestep % 100 == 0 and loss is not None:
+                        
                         torch.save({
                                     'parquet_idx': i,
                                     'epoch_per_parquet': training_timestep,
