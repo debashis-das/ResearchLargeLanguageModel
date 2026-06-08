@@ -34,7 +34,7 @@ def sft_train():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
                 if training_timestep % 50 == 0:
-                    generated_ids = model_with_lora.generate(input_ids, attention_mask=attention_mask, max_new_tokens=100)
+                    generated_ids = model_with_lora.generate(input_ids[...,:-10], attention_mask=attention_mask[...,:-10], max_new_tokens=100)
                     print(f"Generated text: {tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
                 try:
                     _, loss = model_with_lora(input_ids, attention_mask=attention_mask)
