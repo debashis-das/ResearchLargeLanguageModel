@@ -149,8 +149,8 @@ class GRPORewardModel(nn.Module):
         advantage_batch = []
         nll_batch = [] 
         for tensor_per_generation in output_tensor:
-            considered_tensor = tensor_per_generation[...,:reward_consideration_reverse_idx]
-            print(f"Generation : {considered_tensor}")
+            # considered_tensor = tensor_per_generation[...,:reward_consideration_reverse_idx]
+            print(f"Generation : {self.tokenizer.decode(tensor_per_generation, skip_special_tokens=True)}")
             continue
         exit(0)
         #     reward = self.extract_reward(considered_tensor, moves_to_consider=5)
