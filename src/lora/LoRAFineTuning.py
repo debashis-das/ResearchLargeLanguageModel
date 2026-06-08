@@ -23,7 +23,7 @@ class LoRAFineTuning(nn.Module):
     ]
     def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, 
                  projections=None, 
-                 rank=32, alpha=64, 
+                 rank=16, alpha=32, 
                  dtype=torch.float16, device=torch.device("cuda")):
         super().__init__()
         if projections is None:
