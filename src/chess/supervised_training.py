@@ -34,10 +34,7 @@ def sft_train():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
                 if training_timestep % 50 == 0:
-                    # print(f"input text ({input_ids.shape}): {tokenizer.decode(input_ids[0][:-2500], skip_special_tokens=True)}")
-                    # exit(0)
                     generated_ids = model_with_lora.generate(input_ids[...,:-2500], attention_mask=attention_mask[...,:-2500], max_new_tokens=100)
-                    # print(f"Generated text: {tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
                 try:
                     _, loss = model_with_lora(input_ids, attention_mask=attention_mask)
                     loss = loss / accumulation_steps
@@ -48,7 +45,7 @@ def sft_train():
                         optimizer.step()
                         optimizer.zero_grad(set_to_none=True)
                         print(f"Training timestep: {training_timestep}, Loss: {running_loss/accumulation_steps}")
-                        if running_loss/accumulation_steps < 0.5:
+                        if running_loss/accumulation_steps < 0.78:
                             print(f"Loss is very low, stopping training at timestep: {training_timestep}, Loss: {running_loss/accumulation_steps}")
                             return
                         running_loss = torch.zeros([1], dtype=torch.float32, device=device)
