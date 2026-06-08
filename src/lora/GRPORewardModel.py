@@ -10,7 +10,7 @@ from lora.LoRAFineTuning import LoRAFineTuning
 
 class GRPORewardModel(nn.Module):
 
-    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, device="cpu", dtype=torch.float16, total_generation_length=500, generation_evalution_length=100):
+    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, device="cpu", dtype=torch.float16, total_generation_length=100, generation_evalution_length=50):
         super(GRPORewardModel, self).__init__()
         self.tokenizer = tokenizer
         self.grpo_batch = grpo_batch
@@ -150,25 +150,28 @@ class GRPORewardModel(nn.Module):
         nll_batch = [] 
         for tensor_per_generation in output_tensor:
             considered_tensor = tensor_per_generation[...,:reward_consideration_reverse_idx]
-            reward = self.extract_reward(considered_tensor, moves_to_consider=5)
-            value_t_with_k_reward = self.extract_reward(tensor_per_generation, moves_to_consider=20)
-            # print(f"Reward extracted: {reward} : Value function with k reward extracted: {value_t_with_k_reward}")
-            value_t_reward = 0.0
-            mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
-            extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
-            training_mask = torch.cat([attention_mask, extra_mask], dim=-1)
-            # print(f"Attention mask shape after concatenation : {attention_mask.shape} : {extra_mask.shape} : {training_mask.shape}")
-            _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
-            advantage = reward +(value_t_with_k_reward - value_t_reward)
-            nll_batch.append(nll)
-            advantage_batch.append(torch.tensor(advantage, dtype=self.dtype, device=self.device))
-        nll_batch = torch.stack(nll_batch)
-        advantage_batch = torch.tanh(torch.stack(advantage_batch))
-        print(f"Advantage : {[a.item() for a in advantage_batch]} : Loss : {[loss.item() for loss in nll_batch]}")
-        loss_batch = nll_batch * self.gamma * advantage_batch
-        print(f"Loss batch : {[loss.item() for loss in loss_batch]}")
-        return loss_batch.mean()
-
+            print(f"Considered tensor shape for reward extraction: {considered_tensor.shape}")
+            continue
+        exit(0)
+        #     reward = self.extract_reward(considered_tensor, moves_to_consider=5)
+        #     value_t_with_k_reward = self.extract_reward(tensor_per_generation, moves_to_consider=20)
+        #     # print(f"Reward extracted: {reward} : Value function with k reward extracted: {value_t_with_k_reward}")
+        #     value_t_reward = 0.0
+        #     mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
+        #     extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
+        #     training_mask = torch.cat([attention_mask, extra_mask], dim=-1)
+        #     # print(f"Attention mask shape after concatenation : {attention_mask.shape} : {extra_mask.shape} : {training_mask.shape}")
+        #     _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
+        #     advantage = reward +(value_t_with_k_reward - value_t_reward)
+        #     nll_batch.append(nll)
+        #     advantage_batch.append(torch.tensor(advantage, dtype=self.dtype, device=self.device))
+        # nll_batch = torch.stack(nll_batch)
+        # advantage_batch = torch.tanh(torch.stack(advantage_batch))
+        # print(f"Advantage : {[a.item() for a in advantage_batch]} : Loss : {[loss.item() for loss in nll_batch]}")
+        # loss_batch = nll_batch * self.gamma * advantage_batch
+        # print(f"Loss batch : {[loss.item() for loss in loss_batch]}")
+        # return loss_batch.mean()
+        return None
 
 
             

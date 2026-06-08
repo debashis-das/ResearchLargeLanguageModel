@@ -24,9 +24,16 @@ model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
 device = model.device
 optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-4)
 
-def rl_train(grpo_reward_model):
+def rl_train(load_path = ""):
     try:
         loss = None
+        if len(load_path) > 0:
+            checkpoint = torch.load(load_path, map_location=device)
+            model_with_lora.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dic'])
+            print(f"Model loaded successfully from {load_path} with loss: {checkpoint['loss']}")
+            grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, device=device, dtype=dtype)
+
         for i in range(1,2):
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
             df_input = pd.read_parquet(current_paraquet)
@@ -64,5 +71,4 @@ def rl_train(grpo_reward_model):
         print(f"An error occurred during Parquet generation test: {e}")
 
 if __name__ == "__main__":
-    grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, device=device, dtype=dtype)
-    rl_train(grpo_reward_model)
+    rl_train(load_path = f"model/qwen-0.6b-with-loRA-rl-model-params")
