@@ -18,13 +18,12 @@ class LoRAFineTuning(nn.Module):
     The forward method implements the forward pass through the model, while the generate method implements text generation using the model with LoRA fine-tuning.
     """
     _default_projections = [
-        "q_proj",
-        "k_proj",
-        "v_proj",
+        "q_proj", "k_proj", "v_proj", "o_proj",   # attention
+        "gate_proj", "up_proj", "down_proj"         # MLP
     ]
     def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, 
                  projections=None, 
-                 rank=16, alpha=1.0, 
+                 rank=32, alpha=64, 
                  dtype=torch.float16, device=torch.device("cuda")):
         super().__init__()
         if projections is None:
@@ -37,27 +36,29 @@ class LoRAFineTuning(nn.Module):
         self.device = device
         self.model = model
         self.dtype = dtype
-        self.freeze_model_parameters()
         self.create_module_dict_inject_loRA()
         self.loss_function = nn.CrossEntropyLoss()
-    
-    def freeze_model_parameters(self):
-        for param in self.model.parameters():
-            param.requires_grad = False
     
     def create_module_dict_inject_loRA(self):
         self.module_dict = {}
         for name, module in self.model.named_modules():
-            self.module_dict[name] = module
-        for name, module in self.model.named_modules():
             if isinstance(module, nn.Linear):
-                if any(name.endswith(projection) for projection in self.projections):
-                    module.requires_grad_(False)
+                module.requires_grad_(False)
+                if any(projection in name for projection in self.projections):
+                    # print(f"Injecting LoRA module into {name} with shape {module.weight.shape}")
                     loRA_linear = loRALinear(module, rank=self.rank, alpha=self.alpha, dtype=self.dtype, device=self.device)
                     parent_path, attr_name = name.rsplit(".", 1)
                     parent_module = self.model.get_submodule(parent_path)
                     setattr(parent_module, attr_name, loRA_linear)
-                    logging.info(f"Injected LoRA module into {name}")
+
+        for name, param in self.model.named_parameters():
+            if param.requires_grad and "loRA" in name:
+                continue
+            else:
+                param.requires_grad_(False)
+
+        for name, module in self.model.named_modules():
+            self.module_dict[name] = module
 
     def qwen_attention_mask(self, batch_size, attention_mask: torch.Tensor| None):
         # Qwen model expects attention mask of shape [batch, seq_len] with 1 for tokens to attend to and 0 for tokens to ignore.

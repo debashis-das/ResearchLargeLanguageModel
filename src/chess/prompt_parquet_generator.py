@@ -1,6 +1,5 @@
 import bz2
 import enum
-import json
 import random
 import pandas as pd
 import re
@@ -15,12 +14,13 @@ class TrainingType(enum.Enum):
     REINFORCEMENT_LEARNING = "rl"
 
 max_paraquet_files_per_training_type = 2
-model_path = "/home/model"
+# model_path = "/home/model"
+model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
 df = pd.DataFrame(columns=['input_ids', 'attention_mask'])
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 
-def prompt_generator(chess_json, training_type=TrainingType.SUPERVISED_LEARNING):
+def prompt_generator(chess_json, training_type):
     # move extraction logic for supervised learning
     def parse_moves(moves, play_as, num_moves_to_parse):
         """Parse PGN into list of (move_no, white, black) tuples."""
@@ -107,10 +107,10 @@ def prompt_generator(chess_json, training_type=TrainingType.SUPERVISED_LEARNING)
     You are a chess player playing as white or black based on "play_as" key and try to defeat your opponent. The moves will be in SAN format. 
     Your task it to predict the next set of moves for both black and white till you win the game. 
     The moves will be provided in the following format:
-    {{
-        "play_as": "<tells you whether to play as white or black>",
-        "moves": "Moves in SAN format with move number and dot separator between white and black moves. For example : 1. e4 e5 2. Nf3 Nc6 3. Bb5 a6",
-    }}
+
+    play_as: "<tells you whether to play as white or black>",
+    moves: "Moves in SAN format with move number and dot separator between white and black moves. For example : 1. e4 e5 2. Nf3 Nc6 3. Bb5 a6",
+
     """
     move_numbers = re.findall(r'(\d+)\.', chess_json["moves"])
     num_moves = int(move_numbers[-1])
@@ -118,33 +118,33 @@ def prompt_generator(chess_json, training_type=TrainingType.SUPERVISED_LEARNING)
         raise ValueError(f"Game has only {num_moves} moves, which is less than the minimum required 10 moves for training.")
     num_moves_to_parse = random.randint((num_moves // 4), (num_moves // 4) * 3)  # Randomly choose to parse between 25% and 75% of the moves
     extracted_moves = parse_moves(chess_json["moves"], chess_json["play_as"], num_moves_to_parse=num_moves_to_parse)
-    input_json = {
-        "play_as": chess_json["play_as"],
-        "moves": extracted_moves
-    }
     if training_type == TrainingType.SUPERVISED_LEARNING:
         prompt += f"""
-        Input JSON:
-        {json.dumps(input_json, indent=4)}
+        Input :
+        play_as: {chess_json["play_as"]}
+        moves: {extracted_moves}
 
+        Generation Instructions:
         Output should be generated in the same input format after the moves provided as input
 
-        ``` Output JSON ``` 
-        {json.dumps(chess_json, indent=4)}
-        ``` Output JSON END```
+        play_as: {chess_json["play_as"]}
+        moves: {chess_json["moves"]}
         """
     if training_type == TrainingType.REINFORCEMENT_LEARNING:
         prompt += f"""
-        Input JSON:
-        {json.dumps(input_json, indent=4)}
+        Input :
+        play_as: {chess_json["play_as"]}
+        moves: {extracted_moves}
 
+        Generation Instructions:
         Output should be generated in the same input format after the moves provided as input
 
-        ``` Output JSON ``` 
+        play_as: {chess_json["play_as"]}
+        moves: {extracted_moves}
         """
     return prompt
 
-def open_bz2_file(file_path, counter, parquet_counter, paraquet_limit, training_type=TrainingType.SUPERVISED_LEARNING):
+def open_bz2_file(file_path, counter, parquet_counter, paraquet_limit, training_type):
     global df, tokenizer
     counter = 0
     with bz2.open(file_path, 'rt', encoding='utf-8') as file:
@@ -189,10 +189,10 @@ def open_bz2_file(file_path, counter, parquet_counter, paraquet_limit, training_
 if __name__ == "__main__":
     # paraquet generation with 10000 data points in each parquet file
     sl_parequet_generated_toggle = False
-    rl_parequet_generated_toggle = True
+    rl_parequet_generated_toggle = False
     parquet_sl_counter = 0
     parquet_rl_counter = 0
-    paraquet_limit = 100000
+    paraquet_limit = 5000
     current_counter = 0
     for i in range(3,13):
         print(f"Processing file : lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2")
@@ -204,6 +204,7 @@ if __name__ == "__main__":
             if parquet_sl_counter >= max_paraquet_files_per_training_type:
                 sl_parequet_generated_toggle = True
                 rl_parequet_generated_toggle = False
+                df = df[0:0]  # Clear the DataFrame to free up memory before starting RL parquet generation
         if not rl_parequet_generated_toggle:
             current_counter, rl_counter = open_bz2_file(f'src\chess\dataset\lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2',current_counter, parquet_rl_counter, paraquet_limit, training_type=TrainingType.REINFORCEMENT_LEARNING)
             parquet_rl_counter += rl_counter
