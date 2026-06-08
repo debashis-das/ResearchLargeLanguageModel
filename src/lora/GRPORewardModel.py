@@ -150,7 +150,7 @@ class GRPORewardModel(nn.Module):
         nll_batch = [] 
         for tensor_per_generation in output_tensor:
             considered_tensor = tensor_per_generation[...,:reward_consideration_reverse_idx]
-            print(f"Considered tensor shape for reward extraction: {considered_tensor.shape}")
+            print(f"Generation : {considered_tensor}")
             continue
         exit(0)
         #     reward = self.extract_reward(considered_tensor, moves_to_consider=5)
