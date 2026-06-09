@@ -38,7 +38,7 @@ def rl_train(load_path = ""):
 
         for i in range(1,2):
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
-            current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
+            # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
             df_input = pd.read_parquet(current_paraquet)
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             training_timestep = 0
