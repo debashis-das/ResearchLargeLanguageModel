@@ -29,8 +29,9 @@ def sft_train():
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
             df_input = pd.read_parquet(current_paraquet)
+            df_shuffled = df_input.sample(frac=1, ignore_index=True)
             loss = None
-            for _, row in df_input.iterrows():
+            for _, row in df_shuffled.iterrows():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
                 if training_timestep % 50 == 0:

@@ -12,8 +12,8 @@ from chess.chess_validator import ChessGame
 from lora.GRPORewardModel import GRPORewardModel
 from lora.LoRAFineTuning import LoRAFineTuning
 
-# model_path = "/home/model"
-model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
+model_path = "/home/model"
+# model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
 
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 dtype = torch.float16
@@ -37,7 +37,7 @@ def rl_train(load_path = ""):
             grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, device=device, dtype=dtype)
 
         for i in range(1,2):
-            # current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
+            current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
             current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
             df_input = pd.read_parquet(current_paraquet)
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
