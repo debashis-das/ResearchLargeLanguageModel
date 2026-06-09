@@ -92,6 +92,7 @@ class GRPORewardModel(nn.Module):
         play_as = (output_with_prompt.rsplit("play_as:")[-1].strip().split("moves:")[0].strip())
         reward = 0.0
         game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
+        generation_move_no = move_no
         try:
             _, reward, all_valid, generation_move_no = self.board_state(generation_moves, game, reward, ignore_moves_till = move_no, play_as=play_as)
             # print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
