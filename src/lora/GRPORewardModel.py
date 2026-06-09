@@ -95,6 +95,7 @@ class GRPORewardModel(nn.Module):
 
     def extract_reward(self, tensor_per_generation: torch.Tensor):
         value_fn_str = self.tokenizer.decode(tensor_per_generation, skip_special_tokens=True)
+        print(f"Value function string :  {value_fn_str}")
         reward = self.chess_reward_function(value_fn_str)
         return reward
     
@@ -110,7 +111,7 @@ class GRPORewardModel(nn.Module):
         advantage_batch = []
         nll_batch = [] 
         for idx, tensor_per_generation in enumerate(output_tensor):
-            considered_tensor = tensor_per_generation[...,:reward_consideration_reverse_idx]
+            considered_tensor = tensor_per_generation
             # self.debug_logs(X, idx, tensor_per_generation)
             reward = self.extract_reward(considered_tensor)
 
