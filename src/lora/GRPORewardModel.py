@@ -44,7 +44,8 @@ class GRPORewardModel(nn.Module):
                 ok, _ = chess_board.push_san(black)
                 if ok:
                     count_valid_moves += 1
-                    print(f"count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
+                    if ignore_moves_till > 0:
+                        print(f"[Init] count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
                 else:
                     print(f"Invalid move for black: {black}")
                     all_valid = False
@@ -54,7 +55,8 @@ class GRPORewardModel(nn.Module):
                 ok, _ = chess_board.push_san(white)
                 if ok:
                     count_valid_moves += 1
-                    print(f"count_valid_moves : {count_valid_moves} : move_no : {move_no} : white move : {white}")
+                    if ignore_moves_till > 0:
+                        print(f"[White] count_valid_moves : {count_valid_moves} : move_no : {move_no} : white move : {white}")
                 else:
                     print(f"Invalid move for white: {white}")
                     all_valid = False
@@ -63,7 +65,8 @@ class GRPORewardModel(nn.Module):
                 ok, _ = chess_board.push_san(black)
                 if ok:
                     count_valid_moves += 1
-                    print(f"count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
+                    if ignore_moves_till > 0:
+                        print(f"[Black] count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
                 else:
                     print(f"Invalid move for black: {black}")
                     all_valid = False
