@@ -147,7 +147,7 @@ class GRPORewardModel(nn.Module):
             advantage_batch.append(torch.tensor(advantage, dtype=self.dtype, device=self.device))
         nll_batch = torch.stack(nll_batch)
         advantage_batch = torch.stack(advantage_batch)
-        advantage_batch = (advantage_batch - advantage_batch.mean()) / (advantage_batch.std() + 1e-8)
+        advantage_batch = (advantage_batch - advantage_batch.mean()) / (advantage_batch.std() + 1e-5)
         print(f"Advantage : {[a.item() for a in advantage_batch]} : Loss : {[loss.item() for loss in nll_batch]}")
         loss_batch = nll_batch * self.gamma * advantage_batch
         print(f"Loss batch : {[loss.item() for loss in loss_batch]}")
