@@ -24,7 +24,7 @@ class GRPORewardModel(nn.Module):
         self.gamma = 0.99
 
     
-    def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0):
+    def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
         # Match: move_number. white_move [black_move]
         pattern = r'(\d+)\.\s+(\S+)(?:\s+(?!\d+\.)(\S+))?'
@@ -33,14 +33,28 @@ class GRPORewardModel(nn.Module):
         move_no = 0
         for m in re.finditer(pattern, moves_clean):
             move_no = int(m.group(1))
-            if move_no <= ignore_moves_till:
+            if move_no < ignore_moves_till:
                 continue
             white   = m.group(2)
             black   = m.group(3)  # None if Black didn't play (resignation)
+
+            if play_as == "white" and move_no == ignore_moves_till:
+                continue
+            if play_as == "black" and move_no == ignore_moves_till:
+                ok, _ = chess_board.push_san(black)
+                if ok:
+                    count_valid_moves += 1
+                    print(f"count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
+                else:
+                    print(f"Invalid move for black: {black}")
+                    all_valid = False
+                    break
+                continue
             if white:
                 ok, _ = chess_board.push_san(white)
                 if ok:
                     count_valid_moves += 1
+                    print(f"count_valid_moves : {count_valid_moves} : move_no : {move_no} : white move : {white}")
                 else:
                     print(f"Invalid move for white: {white}")
                     all_valid = False
@@ -49,6 +63,7 @@ class GRPORewardModel(nn.Module):
                 ok, _ = chess_board.push_san(black)
                 if ok:
                     count_valid_moves += 1
+                    print(f"count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
                 else:
                     print(f"Invalid move for black: {black}")
                     all_valid = False
@@ -69,14 +84,13 @@ class GRPORewardModel(nn.Module):
         # input extraction and create board state based on the input moves
         input_moves =  (output_with_prompt.rsplit("Generation Instructions:")[0].strip().rsplit("moves:")[-1].strip())
         # print(f"Input moves extracted for board state initialization: {input_moves}")
-        game, _, _, move_no = self.board_state(input_moves, game)
-
         generation_moves = (output_with_prompt.rsplit("moves:")[-1].strip())
         # print(f"Generation moves extracted for reward calculation: {generation_moves}")
         play_as = (output_with_prompt.rsplit("play_as:")[-1].strip().split("moves:")[0].strip())
         reward = 0.0
+        game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
         try:
-            _, reward, all_valid, generation_move_no = self.board_state(generation_moves, game, reward, ignore_moves_till = move_no)
+            _, reward, all_valid, generation_move_no = self.board_state(generation_moves, game, reward, ignore_moves_till = move_no, play_as=play_as)
             # print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
             if all_valid:
                 result = generation_moves.rsplit(" ")[-1]
@@ -141,75 +155,75 @@ class GRPORewardModel(nn.Module):
         print("-------------------------------------------------------------")
 
 
-def board_state(moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0):
-        moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
-        # Match: move_number. white_move [black_move]
-        pattern = r'(\d+)\.\s+(\S+)(?:\s+(?!\d+\.)(\S+))?'
-        count_valid_moves = 0
-        all_valid = True
-        move_no = 0
-        for m in re.finditer(pattern, moves_clean):
-            move_no = int(m.group(1))
-            if move_no <= ignore_moves_till:
-                continue
-            white   = m.group(2)
-            black   = m.group(3)  # None if Black didn't play (resignation)
-            if white:
-                ok, _ = chess_board.push_san(white)
-                if ok:
-                    count_valid_moves += 1
-                else:
-                    print(f"Invalid move for white: {white}")
-                    all_valid = False
-                    break
-            if black:
-                ok, _ = chess_board.push_san(black)
-                if ok:
-                    count_valid_moves += 1
-                else:
-                    print(f"Invalid move for black: {black}")
-                    all_valid = False
-                    break
-        if count_valid_moves == 0:
-            reward -= 10.0
-        else:
-            reward += count_valid_moves * 0.5
-        if all_valid:
-            reward += 5.0
-        else:
-            move_no = move_no - 1  # Adjust move number if the last move was invalid
-        return chess_board, reward, all_valid, move_no
+# def board_state(moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0):
+#         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
+#         # Match: move_number. white_move [black_move]
+#         pattern = r'(\d+)\.\s+(\S+)(?:\s+(?!\d+\.)(\S+))?'
+#         count_valid_moves = 0
+#         all_valid = True
+#         move_no = 0
+#         for m in re.finditer(pattern, moves_clean):
+#             move_no = int(m.group(1))
+#             if move_no <= ignore_moves_till:
+#                 continue
+#             white   = m.group(2)
+#             black   = m.group(3)  # None if Black didn't play (resignation)
+#             if white:
+#                 ok, _ = chess_board.push_san(white)
+#                 if ok:
+#                     count_valid_moves += 1
+#                 else:
+#                     print(f"Invalid move for white: {white}")
+#                     all_valid = False
+#                     break
+#             if black:
+#                 ok, _ = chess_board.push_san(black)
+#                 if ok:
+#                     count_valid_moves += 1
+#                 else:
+#                     print(f"Invalid move for black: {black}")
+#                     all_valid = False
+#                     break
+#         if count_valid_moves == 0:
+#             reward -= 10.0
+#         else:
+#             reward += count_valid_moves * 0.5
+#         if all_valid:
+#             reward += 5.0
+#         else:
+#             move_no = move_no - 1  # Adjust move number if the last move was invalid
+#         return chess_board, reward, all_valid, move_no
 
-# reward for proper format of the output
-def chess_reward_function(output_with_prompt, moves_to_consider=10):
-    game = ChessGame()
-    # input extraction and create board state based on the input moves
-    input_moves =  (output_with_prompt.rsplit("Generation Instructions:")[0].strip().rsplit("moves:")[-1].strip())
-    print(f"Input moves extracted for board state initialization: {input_moves}")
-    game, _, _, move_no = board_state(input_moves, game)
+# # reward for proper format of the output
+# def chess_reward_function(output_with_prompt, moves_to_consider=10):
+#     game = ChessGame()
+#     # input extraction and create board state based on the input moves
+#     input_moves =  (output_with_prompt.rsplit("Generation Instructions:")[0].strip().rsplit("moves:")[-1].strip())
+#     print(f"Input moves extracted for board state initialization: {input_moves}")
+#     game, _, _, move_no = board_state(input_moves, game)
 
-    generation_moves = (output_with_prompt.rsplit("moves:")[-1].strip())
-    print(f"Generation moves extracted for reward calculation: {generation_moves}")
-    play_as = (output_with_prompt.rsplit("play_as:")[-1].strip().split("moves:")[0].strip())
-    reward = 0.0
-    try:
-        _, reward, all_valid, generation_move_no = board_state(generation_moves, game, reward, ignore_moves_till = move_no)
-        # print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
-        if all_valid:
-            result = generation_moves.rsplit(" ")[-1]
-            if play_as == "white" and "1-0" in generation_moves:
-                reward += 10.0
-            elif play_as == "black" and "0-1" in generation_moves:
-                reward += 10.0
-            elif play_as in ["white", "black"] and "1/2-1/2" in generation_moves:                            
-                reward += 5.0
-    except Exception as e:
-        print(f"An error occurred during move processing: {e}")
-        reward -= 1.0
-    print(f"Reward after processing input moves: {move_no} and play as {play_as}")
-    print(game.board_string())
-    print(f"Generated new moves : {generation_move_no - move_no} : Reward : {reward}")
-    return reward
+#     generation_moves = (output_with_prompt.rsplit("moves:")[-1].strip())
+#     print(f"Generation moves extracted for reward calculation: {generation_moves}")
+#     play_as = (output_with_prompt.rsplit("play_as:")[-1].strip().split("moves:")[0].strip())
+#     reward = 0.0
+#     try:
+#         _, reward, all_valid, generation_move_no = board_state(generation_moves, game, reward, ignore_moves_till = move_no)
+#         # print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
+#         if all_valid:
+#             result = generation_moves.rsplit(" ")[-1]
+#             if play_as == "white" and "1-0" in generation_moves:
+#                 reward += 10.0
+#             elif play_as == "black" and "0-1" in generation_moves:
+#                 reward += 10.0
+#             elif play_as in ["white", "black"] and "1/2-1/2" in generation_moves:                            
+#                 reward += 5.0
+#     except Exception as e:
+#         print(f"An error occurred during move processing: {e}")
+#         reward -= 1.0
+#     print(f"Reward after processing input moves: {move_no} and play as {play_as}")
+#     print(game.board_string())
+#     print(f"Generated new moves : {generation_move_no - move_no} : Reward : {reward}")
+#     return reward
 
 
 # if __name__ == "__main__":
