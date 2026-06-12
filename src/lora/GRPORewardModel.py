@@ -25,7 +25,7 @@ class GRPORewardModel(nn.Module):
         self.epsilon = 1e-6
         self.beta = 1.0
         # base model initalization
-        self.base_model = copy.deepcopy(model.base_model)
+        self.base_model = copy.deepcopy(model)
         for param in self.base_model.parameters():
             param.requires_grad = False
         self.base_model.eval()
