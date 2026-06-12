@@ -35,7 +35,7 @@ def rl_train(load_path = ""):
             optimizer.load_state_dict(checkpoint['optimizer_state_dic'])
             print(f"Model loaded successfully from {load_path} with loss: {checkpoint['loss']}")
 
-        grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=20, device=device, dtype=dtype)
+        grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=10, device=device, dtype=dtype)
         for i in range(1,2):
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
