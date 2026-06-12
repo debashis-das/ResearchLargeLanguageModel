@@ -1,5 +1,5 @@
-import json
 import re
+import copy
 
 from torch import nn
 import torch
@@ -22,8 +22,14 @@ class GRPORewardModel(nn.Module):
         self.value_fn_moves = 10
         self.softmax = nn.Softmax(dim=-1)
         self.gamma = 0.99
+        self.epsilon = 1e-6
+        self.beta = 1.0
+        # base model initalization
+        self.base_model = copy.deepcopy(model.base_model)
+        for param in self.base_model.parameters():
+            param.requires_grad = False
+        self.base_model.eval()
 
-    
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
         # Match: move_number. white_move [black_move]
@@ -119,39 +125,37 @@ class GRPORewardModel(nn.Module):
         reward = self.chess_reward_function(value_fn_str)
         return reward
     
-    # batch_size provided as input is always 1 
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
         attention_mask = attention_mask.unsqueeze(0)
         x = x.unsqueeze(0)
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
-        # print(f"Input shape : {X.shape}")
         output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
-        # print(f"Output tensor shape: {output_tensor.shape}")
-        advantage_batch = []
-        nll_batch = [] 
-        for idx, tensor_per_generation in enumerate(output_tensor):
+        reward_batch = []
+        probs_ratio_batch = []
+        for tensor_per_generation in output_tensor:
             considered_tensor = tensor_per_generation
-            # self.debug_logs(X, idx, tensor_per_generation)
             reward = self.extract_reward(considered_tensor)
-        #     value_t_with_k_reward = self.extract_reward(tensor_per_generation, moves_to_consider=20)
-        #     # print(f"Reward extracted: {reward} : Value function with k reward extracted: {value_t_with_k_reward}")
-        #     value_t_reward = 0.0
             mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
             extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
-            training_mask = torch.cat([attention_mask, extra_mask], dim=-1)
-        #     # print(f"Attention mask shape after concatenation : {attention_mask.shape} : {extra_mask.shape} : {training_mask.shape}")
-            _, nll = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
-            # advantage = reward +(value_t_with_k_reward - value_t_reward)
-            advantage = reward
-            nll_batch.append(nll)
-            advantage_batch.append(torch.tensor(advantage, dtype=self.dtype, device=self.device))
-        nll_batch = torch.stack(nll_batch)
-        advantage_batch = torch.stack(advantage_batch)
-        advantage_batch = (advantage_batch - advantage_batch.mean()) / (advantage_batch.std() + 1e-5)
-        print(f"Advantage : {[a.item() for a in advantage_batch]} : Loss : {[loss.item() for loss in nll_batch]}")
-        loss_batch = nll_batch * self.gamma * advantage_batch
-        print(f"Loss batch : {[loss.item() for loss in loss_batch]}")
-        return loss_batch.mean()
+            training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
+            logits, _ = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
+            probs = torch.nn.functional.softmax(logits, dim=-1)
+            base_logits, _ = self.base_model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
+            base_probs = torch.nn.functional.softmax(base_logits, dim=-1)
+            probs_ratio = probs / (base_probs + 1e-8)
+            divergence = torch.nn.functional.log_softmax(logits, dim=-1) - torch.nn.functional.log_softmax(base_logits, dim=-1)
+            # reward to be calculated per token
+            reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
+            probs_ratio_batch.append(probs_ratio)
+        print(f"Reward batch : {reward_batch}")
+        print(f"Probs ratio batch : {probs_ratio_batch}")
+        reward_batch = torch.stack(reward_batch)
+        probs_ratio_batch = torch.stack(probs_ratio_batch)
+        advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5)
+        loss = torch.min(probs_ratio_batch*advantage, torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage) - self.beta * divergence
+        return loss.mean()
+
+
 
     def debug_logs(self, X, idx, tensor_per_generation):
         print(f"Input      : {self.tokenizer.decode(X[idx], skip_special_tokens=True)}")
