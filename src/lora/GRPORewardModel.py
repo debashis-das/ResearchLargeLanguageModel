@@ -101,10 +101,15 @@ class GRPORewardModel(nn.Module):
             same_generations = 0
             moves_generation = []
             moves_generations_with_extra_text = generation.split("moves:")
-            print(f"Generation moves extracted for reward calculation: {moves}")
             for m in range(1, len(moves_generations_with_extra_text), 2):
                 moves_generation.append(moves_generations_with_extra_text[m].strip())
             reward = 0.0
+            
+            if play_as == "white" and "play_as: black" in generation:
+                reward -= -10.0
+            if play_as == "black" and "play_as: white" in generation:
+                reward -= -10.0
+
             for moves in moves_generation:
                 current_reward = 0.0
                 same_generations += 1
