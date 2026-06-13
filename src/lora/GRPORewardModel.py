@@ -169,6 +169,7 @@ class GRPORewardModel(nn.Module):
         attention_mask = attention_mask.unsqueeze(0)
         x = x.unsqueeze(0)
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
+        self.use_finetuned_model()
         output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
         reward_batch = []
         probs_ratio_batch = []
@@ -178,14 +179,15 @@ class GRPORewardModel(nn.Module):
             mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
             extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
             training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
+            
+            self.use_finetuned_model()
             logits, _ = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
-            probs = torch.nn.functional.softmax(logits, dim=-1)
 
             self.use_base_model()
             with torch.no_grad():
                 base_logits, _ = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
-            self.use_finetuned_model()
-
+            
+            probs = torch.nn.functional.softmax(logits, dim=-1)
             base_probs = torch.nn.functional.softmax(base_logits, dim=-1)
             probs_ratio = probs / (base_probs + 1e-8)
             divergence = torch.nn.functional.log_softmax(logits, dim=-1) - torch.nn.functional.log_softmax(base_logits, dim=-1)
