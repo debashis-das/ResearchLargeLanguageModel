@@ -5,7 +5,7 @@ import traceback
 
 from torch import nn
 import torch
-from transformers import AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from chess.chess_validator import ChessGame
 from lora.LoRAFineTuning import LoRAFineTuning
@@ -16,7 +16,6 @@ class GRPORewardModel(nn.Module):
         super(GRPORewardModel, self).__init__()
         self.tokenizer = tokenizer
         self.grpo_batch = grpo_batch
-        self.model = model
         self.device = device
         self.dtype = dtype
         self.total_generation_length = total_generation_length
@@ -27,10 +26,20 @@ class GRPORewardModel(nn.Module):
         self.epsilon = 1e-6
         self.beta = 1.0
         # base model initalization
-        self.base_model = copy.deepcopy(model)
-        for param in self.base_model.parameters():
-            param.requires_grad = False        
+        self.base_state = copy.deepcopy(model.state_dict())
+        self.currest_state = model.state_dict()
         self.base_model.to("cpu")
+        model_path = "/home/model"
+        # model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
+
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        dtype = torch.float16
+        qwen = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    dtype=dtype,
+                    device_map="auto"
+                )
+        self.model = LoRAFineTuning(qwen, tokenizer, device=device)
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
@@ -147,15 +156,13 @@ class GRPORewardModel(nn.Module):
         return reward
 
     def use_base_model(self):
-        self.model.to("cpu")
-        self.base_model.to(self.device)
+        self.model.load_state_dict(self.base_state)
         self.base_model.eval()
         gc.collect()
         torch.cuda.empty_cache()
     
     def use_finetuned_model(self):
-        self.base_model.to("cpu")
-        self.model.to(self.device)
+        self.model.load_state_dict(self.currest_state)
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -176,9 +183,10 @@ class GRPORewardModel(nn.Module):
             probs = torch.nn.functional.softmax(logits, dim=-1)
 
             self.use_base_model()
-            base_logits, _ = self.base_model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
+            with torch.no_grad():
+                base_logits, _ = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
             self.use_finetuned_model()
-            
+
             base_probs = torch.nn.functional.softmax(base_logits, dim=-1)
             probs_ratio = probs / (base_probs + 1e-8)
             divergence = torch.nn.functional.log_softmax(logits, dim=-1) - torch.nn.functional.log_softmax(base_logits, dim=-1)
