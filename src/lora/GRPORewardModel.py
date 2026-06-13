@@ -92,6 +92,7 @@ class GRPORewardModel(nn.Module):
     def chess_reward_function(self, output_with_prompt):
         try:
             game = ChessGame()
+            print(f"Processing output for reward calculation: {output_with_prompt}")
             # input extraction and create board state based on the input moves
             input_moves =  (output_with_prompt.rsplit("Generation Instructions:")[0].strip().rsplit("moves:")[-1].strip())
             print(f"Input moves extracted for board state initialization: {input_moves}")
