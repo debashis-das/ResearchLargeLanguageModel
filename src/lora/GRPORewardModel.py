@@ -28,7 +28,6 @@ class GRPORewardModel(nn.Module):
         # base model initalization
         self.base_state = copy.deepcopy(model.state_dict())
         self.currest_state = model.state_dict()
-        self.base_model.to("cpu")
         model_path = "/home/model"
         # model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
 
@@ -157,7 +156,7 @@ class GRPORewardModel(nn.Module):
 
     def use_base_model(self):
         self.model.load_state_dict(self.base_state)
-        self.base_model.eval()
+        self.model.eval()
         gc.collect()
         torch.cuda.empty_cache()
     
