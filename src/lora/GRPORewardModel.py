@@ -1,5 +1,6 @@
 import re
 import copy
+import traceback
 
 from torch import nn
 import torch
@@ -112,6 +113,7 @@ class GRPORewardModel(nn.Module):
                     reward += 5.0
         except Exception as e:
             print(f"An error occurred during move processing: {e}")
+            traceback.print_exc()
             reward -= 1.0
         if generation_move_no - move_no > 0:
             print(game.board_string())
