@@ -89,17 +89,17 @@ class GRPORewardModel(nn.Module):
 
     # reward for proper format of the output
     def chess_reward_function(self, output_with_prompt):
-        game = ChessGame()
-        # input extraction and create board state based on the input moves
-        input_moves =  (output_with_prompt.rsplit("Generation Instructions:")[0].strip().rsplit("moves:")[-1].strip())
-        # print(f"Input moves extracted for board state initialization: {input_moves}")
-        generation_moves = (output_with_prompt.rsplit("moves:")[-1].strip())
-        # print(f"Generation moves extracted for reward calculation: {generation_moves}")
-        play_as = (output_with_prompt.rsplit("play_as:")[-1].strip().split("moves:")[0].strip())
-        reward = 0.0
-        game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
-        generation_move_no = move_no
         try:
+            game = ChessGame()
+            # input extraction and create board state based on the input moves
+            input_moves =  (output_with_prompt.rsplit("Generation Instructions:")[0].strip().rsplit("moves:")[-1].strip())
+            print(f"Input moves extracted for board state initialization: {input_moves}")
+            generation_moves = (output_with_prompt.rsplit("moves:")[-1].strip())
+            print(f"Generation moves extracted for reward calculation: {generation_moves}")
+            play_as = (output_with_prompt.rsplit("play_as:")[-1].strip().split("moves:")[0].strip())
+            reward = 0.0
+            game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
+            generation_move_no = move_no
             _, reward, all_valid, generation_move_no = self.board_state(generation_moves, game, reward, ignore_moves_till = move_no, play_as=play_as)
             # print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
             if all_valid:
