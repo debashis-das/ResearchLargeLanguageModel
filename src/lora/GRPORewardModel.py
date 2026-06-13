@@ -1,3 +1,4 @@
+import gc
 import re
 import copy
 import traceback
@@ -149,10 +150,14 @@ class GRPORewardModel(nn.Module):
         self.model.to("cpu")
         self.base_model.to(self.device)
         self.base_model.eval()
+        gc.collect()
+        torch.cuda.empty_cache()
     
     def use_finetuned_model(self):
         self.base_model.to("cpu")
         self.model.to(self.device)
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
         attention_mask = attention_mask.unsqueeze(0)
