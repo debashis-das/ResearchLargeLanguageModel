@@ -11,7 +11,7 @@ from lora.LoRAFineTuning import LoRAFineTuning
 
 class GRPORewardModel(nn.Module):
 
-    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, device="cpu", dtype=torch.float16, total_generation_length=500):
+    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, device="cpu", dtype=torch.float16, total_generation_length=400):
         super(GRPORewardModel, self).__init__()
         self.tokenizer = tokenizer
         self.grpo_batch = grpo_batch
@@ -89,29 +89,35 @@ class GRPORewardModel(nn.Module):
         return chess_board, reward, all_valid, move_no
 
     # reward for proper format of the output
-    def chess_reward_function(self, output_with_prompt):
+    def chess_reward_function(self, prompt, generation):
         try:
             game = ChessGame()
-            print(f"Processing output for reward calculation: {output_with_prompt}")
+            print(f"Processing output for reward calculation: {prompt} | {generation}")
             # input extraction and create board state based on the input moves
-            input_moves =  (output_with_prompt.rsplit("Generation Instructions:")[0].strip().rsplit("moves:")[-1].strip())
+            input_moves =  (prompt.rsplit("Generation Instructions:")[0].strip().rsplit("moves:")[-1].strip())
             print(f"Input moves extracted for board state initialization: {input_moves}")
-            generation_moves = (output_with_prompt.rsplit("moves:")[-1].strip())
-            print(f"Generation moves extracted for reward calculation: {generation_moves}")
-            play_as = (output_with_prompt.rsplit("play_as:")[-1].strip().split("moves:")[0].strip())
-            reward = 0.0
             game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
-            generation_move_no = move_no
-            _, reward, all_valid, generation_move_no = self.board_state(generation_moves, game, reward, ignore_moves_till = move_no, play_as=play_as)
-            # print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
-            if all_valid:
-                result = generation_moves.rsplit(" ")[-1]
-                if play_as == "white" and "1-0" in generation_moves:
-                    reward += 10.0
-                elif play_as == "black" and "0-1" in generation_moves:
-                    reward += 10.0
-                elif play_as in ["white", "black"] and "1/2-1/2" in generation_moves:                            
-                    reward += 5.0
+            same_generations = 0
+            for moves in generation.split("moves:"):
+                same_generations += 1
+                if same_generations > 1:
+                    reward -= 10.0
+                    print(f"Multiple generations detected. Penalizing reward. Current reward: {reward}")
+                moves = moves.strip()
+                print(f"Generation moves extracted for reward calculation: {moves}")
+                play_as = (generation.rsplit("play_as:")[-1].strip().split("moves:")[0].strip())
+                reward = 0.0
+                generation_move_no = move_no
+                _, reward, all_valid, generation_move_no = self.board_state(moves, game, reward, ignore_moves_till = move_no, play_as=play_as)
+                # print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
+                if all_valid:
+                    result = moves.rsplit(" ")[-1]
+                    if play_as == "white" and "1-0" in moves:
+                        reward += 10.0
+                    elif play_as == "black" and "0-1" in moves:
+                        reward += 10.0
+                    elif play_as in ["white", "black"] and "1/2-1/2" in moves:                            
+                        reward += 5.0
         except Exception as e:
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
@@ -122,10 +128,10 @@ class GRPORewardModel(nn.Module):
         return reward
 
 
-    def extract_reward(self, tensor_per_generation: torch.Tensor):
-        value_fn_str = self.tokenizer.decode(tensor_per_generation, skip_special_tokens=True)
-        # print(f"Value function string :  {value_fn_str}")
-        reward = self.chess_reward_function(value_fn_str)
+    def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
+        prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
+        generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
+        reward = self.chess_reward_function(prompt, generation)
         return reward
     
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
@@ -137,7 +143,7 @@ class GRPORewardModel(nn.Module):
         probs_ratio_batch = []
         for tensor_per_generation in output_tensor:
             considered_tensor = tensor_per_generation
-            reward = self.extract_reward(considered_tensor)
+            reward = self.extract_reward(considered_tensor, input_sequence_length=x.shape[-1])
             mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
             extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
             training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
