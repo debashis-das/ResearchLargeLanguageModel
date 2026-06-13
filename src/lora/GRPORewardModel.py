@@ -92,11 +92,11 @@ class GRPORewardModel(nn.Module):
     def chess_reward_function(self, prompt, generation):
         try:
             game = ChessGame()
-            print(f"Processing output for reward calculation: {prompt} | {generation}")
+            # print(f"Processing output for reward calculation: {prompt} | {generation}")
             # input extraction and create board state based on the input moves
             input_moves =  (prompt.rsplit("Generation Instructions:")[0].strip().rsplit("moves:")[-1].strip())
             play_as = (prompt.split("play_as:")[1].strip().split("moves:")[0].strip())
-            print(f"Input moves extracted for board state initialization: {input_moves}")
+            # print(f"Input moves extracted for board state initialization: {input_moves}")
             game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
             same_generations = 0
             moves_generation = []
@@ -144,7 +144,15 @@ class GRPORewardModel(nn.Module):
         generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
         reward = self.chess_reward_function(prompt, generation)
         return reward
+
+    def use_base_model(self):
+        self.model.to("cpu")
+        self.base_model.to(self.device)
     
+    def use_finetuned_model(self):
+        self.base_model.to("cpu")
+        self.model.to(self.device)
+
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
         attention_mask = attention_mask.unsqueeze(0)
         x = x.unsqueeze(0)
@@ -160,7 +168,11 @@ class GRPORewardModel(nn.Module):
             training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
             logits, _ = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
             probs = torch.nn.functional.softmax(logits, dim=-1)
+
+            self.use_base_model()
             base_logits, _ = self.base_model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
+            self.use_finetuned_model()
+            
             base_probs = torch.nn.functional.softmax(base_logits, dim=-1)
             probs_ratio = probs / (base_probs + 1e-8)
             divergence = torch.nn.functional.log_softmax(logits, dim=-1) - torch.nn.functional.log_softmax(base_logits, dim=-1)
