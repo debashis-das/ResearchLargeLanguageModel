@@ -95,13 +95,13 @@ class GRPORewardModel(nn.Module):
             print(f"Processing output for reward calculation: {prompt} | {generation}")
             # input extraction and create board state based on the input moves
             input_moves =  (prompt.rsplit("Generation Instructions:")[0].strip().rsplit("moves:")[-1].strip())
+            play_as = (prompt.split("play_as:")[1].strip().split("moves:")[0].strip())
             print(f"Input moves extracted for board state initialization: {input_moves}")
             game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
             same_generations = 0
             moves_generation = []
             moves_generations_with_extra_text = generation.split("moves:")
             print(f"Generation moves extracted for reward calculation: {moves}")
-            play_as = (generation.split("play_as:")[-1].strip().split("moves:")[0].strip())
             for m in range(1, len(moves_generations_with_extra_text), 2):
                 moves_generation.append(moves_generations_with_extra_text[m].strip())
             reward = 0.0
