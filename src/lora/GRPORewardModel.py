@@ -29,6 +29,8 @@ class GRPORewardModel(nn.Module):
         self.base_model = copy.deepcopy(model)
         for param in self.base_model.parameters():
             param.requires_grad = False
+        self.base_model.to("cpu")
+        
         self.base_model.eval()
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
