@@ -28,10 +28,8 @@ class GRPORewardModel(nn.Module):
         # base model initalization
         self.base_model = copy.deepcopy(model)
         for param in self.base_model.parameters():
-            param.requires_grad = False
+            param.requires_grad = False        
         self.base_model.to("cpu")
-        
-        self.base_model.eval()
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
@@ -150,6 +148,7 @@ class GRPORewardModel(nn.Module):
     def use_base_model(self):
         self.model.to("cpu")
         self.base_model.to(self.device)
+        self.base_model.eval()
     
     def use_finetuned_model(self):
         self.base_model.to("cpu")
