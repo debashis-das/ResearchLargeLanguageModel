@@ -98,26 +98,32 @@ class GRPORewardModel(nn.Module):
             print(f"Input moves extracted for board state initialization: {input_moves}")
             game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
             same_generations = 0
-            for moves in generation.split("moves:"):
+            moves_generation = []
+            moves_generations_with_extra_text = generation.split("moves:")
+            print(f"Generation moves extracted for reward calculation: {moves}")
+            play_as = (generation.split("play_as:")[-1].strip().split("moves:")[0].strip())
+            for m in range(1, len(moves_generations_with_extra_text), 2):
+                moves_generation.append(moves_generations_with_extra_text[m].strip())
+            reward = 0.0
+            for moves in moves_generation:
+                current_reward = 0.0
                 same_generations += 1
                 if same_generations > 1:
-                    reward -= 10.0
-                    print(f"Multiple generations detected. Penalizing reward. Current reward: {reward}")
+                    current_reward -= 10.0
+                    print(f"Multiple generations detected. Penalizing reward. Current reward: {current_reward}")
                 moves = moves.strip()
-                print(f"Generation moves extracted for reward calculation: {moves}")
-                play_as = (generation.rsplit("play_as:")[-1].strip().split("moves:")[0].strip())
-                reward = 0.0
                 generation_move_no = move_no
-                _, reward, all_valid, generation_move_no = self.board_state(moves, game, reward, ignore_moves_till = move_no, play_as=play_as)
+                _, current_reward, all_valid, generation_move_no = self.board_state(moves, game, current_reward, ignore_moves_till = move_no, play_as=play_as)
                 # print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
                 if all_valid:
                     result = moves.rsplit(" ")[-1]
                     if play_as == "white" and "1-0" in moves:
-                        reward += 10.0
+                        current_reward += 10.0
                     elif play_as == "black" and "0-1" in moves:
-                        reward += 10.0
+                        current_reward += 10.0
                     elif play_as in ["white", "black"] and "1/2-1/2" in moves:                            
-                        reward += 5.0
+                        current_reward += 5.0
+                reward = max(reward, current_reward)  # Ensure reward does not go below -10
         except Exception as e:
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
