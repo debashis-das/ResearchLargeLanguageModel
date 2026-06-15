@@ -53,7 +53,7 @@ class GRPORewardModel(nn.Module):
         move_no = 0
         for m in re.finditer(pattern, moves_clean):
             move_no = int(m.group(1))
-            if move_no < ignore_moves_till:
+            if move_no <= ignore_moves_till:
                 continue
             white   = m.group(2)
             black   = m.group(3)  # None if Black didn't play (resignation)
@@ -115,44 +115,48 @@ class GRPORewardModel(nn.Module):
             same_generations = 0
             moves_generation = []
             moves_generations_with_extra_text = generation.split("moves:")
-            for m in range(1, len(moves_generations_with_extra_text), 2):
-                moves_generation.append(moves_generations_with_extra_text[m].strip())
+            dont_consider = False
             reward = 0.0
-            
-            if play_as == "white" and "play_as: black" in generation:
-                reward -= -10.0
-            if play_as == "black" and "play_as: white" in generation:
-                reward -= -10.0
-            max_generation_move_no = -1
             reward_list = []
-            for moves in moves_generation:
-                current_reward = 0.0
-                same_generations += 1
-                if same_generations > 1:
-                    current_reward -= 10.0
-                    print(f"Multiple generations detected. Penalizing reward. Current reward: {current_reward}")
-                moves = moves.strip()
-                generation_move_no = move_no
-                _, current_reward, all_valid, generation_move_no = self.board_state(moves, game, current_reward, ignore_moves_till = move_no, play_as=play_as)
-                # print(f"Reward after processing moves: {reward}, all_valid: {all_valid}, move_no: {move_no}")
-                if all_valid:
-                    result = moves.rsplit(" ")[-1]
-                    if play_as == "white" and "1-0" in moves:
-                        current_reward += 10.0
-                    elif play_as == "black" and "0-1" in moves:
-                        current_reward += 10.0
-                    elif play_as in ["white", "black"] and "1/2-1/2" in moves:                            
-                        current_reward += 5.0
-                reward_list.append((current_reward, generation_move_no))    
+            for m in range(0, len(moves_generations_with_extra_text)):
+                if m%2 == 0:
+                    if play_as == "white" and "play_as: black" in moves_generations_with_extra_text[m]:
+                        reward -= 10.0
+                        dont_consider = True
+                    elif play_as == "black" and "play_as: white" in moves_generations_with_extra_text[m]:
+                        reward -= 10.0
+                        dont_consider = True
+                    else:
+                        dont_consider = False
+                elif m%2 == 1 and not dont_consider:
+                    moves = moves_generations_with_extra_text[m].strip()
+                    current_reward = 0.0
+                    same_generations += 1
+                    if same_generations > 1:
+                        current_reward -= 10.0
+                        print(f"Multiple generations detected. Penalizing reward. Current reward: {current_reward}")
+                    moves = moves.strip()
+                    generation_move_no = move_no
+                    _, current_reward, all_valid, generation_move_no = self.board_state(moves, game, current_reward, ignore_moves_till = move_no, play_as=play_as)
+                    if all_valid:
+                        result = moves.rsplit(" ")[-1]
+                        if play_as == "white" and "1-0" in moves:
+                            current_reward += 10.0
+                        elif play_as == "black" and "0-1" in moves:
+                            current_reward += 10.0
+                        elif play_as in ["white", "black"] and "1/2-1/2" in moves:                            
+                            current_reward += 5.0
+                    reward_list.append((current_reward, generation_move_no))    
         except Exception as e:
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
             reward -= 1.0
-        print(f"Reward list for all generations(init : {move_no}): {reward_list}")
-        max_generation_move_no = max([gen[1] for gen in reward_list], default=move_no)
-        reward = max([gen[0] for gen in reward_list], default=0.0)
-        print(f"Generated new moves : {max_generation_move_no - move_no} : Reward : {reward}")
-        return reward
+        max_move_with_reward = reward_list[0]
+        for gen in reward_list:
+            if gen[1] > max_move_with_reward[1]:
+                max_move_with_reward = gen
+        print(f"Generated new moves ({reward_list}) : {max_move_with_reward[1] - move_no} : Reward : {max_move_with_reward[0]}")
+        return max_move_with_reward[0]
 
     def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
         prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
