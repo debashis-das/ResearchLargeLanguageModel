@@ -51,7 +51,7 @@ class GRPORewardModel(nn.Module):
         count_valid_moves = 0
         all_valid = True
         move_no = 0
-        print(f"-----------> PLay as : {play_as}")
+        # print(f"-----------> PLay as : {play_as}")
         for m in re.finditer(pattern, moves_clean):
             move_no = int(m.group(1))
             if move_no < ignore_moves_till:
@@ -73,7 +73,7 @@ class GRPORewardModel(nn.Module):
                     break
                 continue
             if white:
-                print(f"Processing move number {move_no} : White move : {white}")
+                # print(f"Processing move number {move_no} : White move : {white}")
                 ok, _ = chess_board.push_san(white)
                 if ok:
                     count_valid_moves += 1
@@ -84,7 +84,7 @@ class GRPORewardModel(nn.Module):
                     all_valid = False
                     break
             if black:
-                print(f"Processing move number {move_no} : Black move : {black}")
+                # print(f"Processing move number {move_no} : Black move : {black}")
                 ok, _ = chess_board.push_san(black)
                 if ok:
                     count_valid_moves += 1
@@ -124,7 +124,7 @@ class GRPORewardModel(nn.Module):
             reward = 0.0
             reward_list = []
             for m in range(0, len(moves_generations_with_extra_text)):
-                print(f"Processing generation segment : {moves_generations_with_extra_text[m]}")
+                # print(f"Processing generation segment : {moves_generations_with_extra_text[m]}")
                 if m%2 == 0:
                     if play_as == "white" and "play_as: black" in moves_generations_with_extra_text[m]:
                         reward -= 10.0
