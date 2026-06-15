@@ -53,7 +53,7 @@ class GRPORewardModel(nn.Module):
         move_no = 0
         for m in re.finditer(pattern, moves_clean):
             move_no = int(m.group(1))
-            if move_no <= ignore_moves_till:
+            if move_no < ignore_moves_till:
                 continue
             white   = m.group(2)
             black   = m.group(3)  # None if Black didn't play (resignation)
