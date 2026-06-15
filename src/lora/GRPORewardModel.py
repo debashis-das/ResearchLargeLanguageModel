@@ -78,9 +78,9 @@ class GRPORewardModel(nn.Module):
                 if ok:
                     count_valid_moves += 1
                     if ignore_moves_till > 0:
-                        print(f"[White] count_valid_moves : {count_valid_moves} : move_no : {move_no} : white move : {white}")
+                        print(f"[White] base moves : {ignore_moves_till} count_valid_moves : {count_valid_moves} : move_no : {move_no} : white move : {white}")
                 else:
-                    print(f"Invalid move for white: {white}")
+                    # print(f"Invalid move for white: {white}")
                     all_valid = False
                     break
             if black and black is not None:
@@ -89,9 +89,9 @@ class GRPORewardModel(nn.Module):
                 if ok:
                     count_valid_moves += 1
                     if ignore_moves_till > 0:
-                        print(f"[Black] count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
+                        print(f"[Black] base moves : {ignore_moves_till} count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
                 else:
-                    print(f"Invalid move for black: {black}")
+                    # print(f"Invalid move for black: {black}")
                     all_valid = False
                     break
             if black is None or white is None:
@@ -203,6 +203,7 @@ class GRPORewardModel(nn.Module):
         probs_ratio_batch = torch.stack(probs_ratio_batch)
         advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5)
         loss = torch.min(probs_ratio_batch*advantage, torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage) - self.beta * divergence
+        print(f"Loss mean: {loss.mean()}")
         return loss.mean()
 
     def debug_logs(self, X, idx, tensor_per_generation):
