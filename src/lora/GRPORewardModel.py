@@ -41,7 +41,8 @@ class GRPORewardModel(nn.Module):
         self.base_model.eval()
         with torch.no_grad():
             base_logits = self.base_model(tokens.to("cpu"), attention_mask=attention_mask.to("cpu")).logits
-        return base_logits
+        base_logits = base_logits[:, :-1, :].contiguous()  # Shift logits for next-token prediction
+        return base_logits.to(self.device)
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
