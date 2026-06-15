@@ -72,7 +72,7 @@ class GRPORewardModel(nn.Module):
                     all_valid = False
                     break
                 continue
-            if white:
+            if white and white is not None:
                 # print(f"Processing move number {move_no} : White move : {white}")
                 ok, _ = chess_board.push_san(white)
                 if ok:
@@ -83,7 +83,7 @@ class GRPORewardModel(nn.Module):
                     print(f"Invalid move for white: {white}")
                     all_valid = False
                     break
-            if black:
+            if black and black is not None:
                 # print(f"Processing move number {move_no} : Black move : {black}")
                 ok, _ = chess_board.push_san(black)
                 if ok:
@@ -94,6 +94,8 @@ class GRPORewardModel(nn.Module):
                     print(f"Invalid move for black: {black}")
                     all_valid = False
                     break
+            if black is None or white is None:
+                break
         if count_valid_moves == 0:
             reward -= 10.0
         else:
