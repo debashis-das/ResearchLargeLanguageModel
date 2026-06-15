@@ -122,7 +122,7 @@ class GRPORewardModel(nn.Module):
                 reward -= -10.0
             if play_as == "black" and "play_as: white" in generation:
                 reward -= -10.0
-
+            max_generation_move_no = -1
             for moves in moves_generation:
                 current_reward = 0.0
                 same_generations += 1
@@ -142,13 +142,14 @@ class GRPORewardModel(nn.Module):
                     elif play_as in ["white", "black"] and "1/2-1/2" in moves:                            
                         current_reward += 5.0
                 reward = max(reward, current_reward)  # Ensure reward does not go below -10
+                max_generation_move_no = max(max_generation_move_no, generation_move_no)  # Ensure max_generation_move_no is not less than generation_move_no
         except Exception as e:
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
             reward -= 1.0
-        if generation_move_no - move_no > 0:
+        if max_generation_move_no - move_no > 0:
             print(game.board_string())
-        print(f"Generated new moves : {generation_move_no - move_no} : Reward : {reward}")
+        print(f"Generated new moves : {max_generation_move_no - move_no} : Reward : {reward}")
         return reward
 
     def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
