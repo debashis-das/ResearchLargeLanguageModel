@@ -116,13 +116,14 @@ class GRPORewardModel(nn.Module):
             moves_generations_with_extra_text = generation.split("moves:")
             for m in range(1, len(moves_generations_with_extra_text), 2):
                 moves_generation.append(moves_generations_with_extra_text[m].strip())
-            reward = 10e-6
+            reward = 0.0
             
             if play_as == "white" and "play_as: black" in generation:
                 reward -= -10.0
             if play_as == "black" and "play_as: white" in generation:
                 reward -= -10.0
             max_generation_move_no = -1
+            reward_list = []
             for moves in moves_generation:
                 current_reward = 0.0
                 same_generations += 1
@@ -141,14 +142,13 @@ class GRPORewardModel(nn.Module):
                         current_reward += 10.0
                     elif play_as in ["white", "black"] and "1/2-1/2" in moves:                            
                         current_reward += 5.0
-                reward = max(reward, current_reward)  # Ensure reward does not go below -10
-                max_generation_move_no = max(max_generation_move_no, generation_move_no)  # Ensure max_generation_move_no is not less than generation_move_no
+                reward_list.append((current_reward, generation_move_no))    
         except Exception as e:
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
             reward -= 1.0
-        if max_generation_move_no - move_no > 0:
-            print(game.board_string())
+        max_generation_move_no = max([gen[1] for gen in reward_list], default=move_no)
+        reward = max([gen[0] for gen in reward_list], default=0.0)
         print(f"Generated new moves : {max_generation_move_no - move_no} : Reward : {reward}")
         return reward
 
