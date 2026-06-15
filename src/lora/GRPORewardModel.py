@@ -98,14 +98,12 @@ class GRPORewardModel(nn.Module):
             reward += count_valid_moves * 0.5
         if all_valid:
             reward += 5.0
-        else:
-            move_no = move_no - 1  # Adjust move number if the last move was invalid
         return chess_board, reward, all_valid, move_no
 
     # reward for proper format of the output
     def chess_reward_function(self, prompt, generation):
         try:
-            print(f"{prompt} \n\n\n -------\n {generation}")
+            print(f"{prompt} \n\n\n-------------------------------\n\n\n")
             game = ChessGame()
             # print(f"Processing output for reward calculation: {prompt} | {generation}")
             # input extraction and create board state based on the input moves
@@ -134,6 +132,7 @@ class GRPORewardModel(nn.Module):
                     else:
                         dont_consider = False
                 elif m%2 == 1 and not dont_consider:
+                    print(f"Processing generation segment : {moves_generations_with_extra_text[m]}")
                     moves = moves_generations_with_extra_text[m].strip()
                     current_reward = 0.0
                     same_generations += 1
