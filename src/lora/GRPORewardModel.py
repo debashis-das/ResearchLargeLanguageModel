@@ -104,6 +104,7 @@ class GRPORewardModel(nn.Module):
     # reward for proper format of the output
     def chess_reward_function(self, prompt, generation):
         try:
+            print(f"{prompt} \n\n\n -------\n {generation}")
             game = ChessGame()
             # print(f"Processing output for reward calculation: {prompt} | {generation}")
             # input extraction and create board state based on the input moves
