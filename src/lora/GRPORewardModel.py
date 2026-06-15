@@ -193,6 +193,8 @@ class GRPORewardModel(nn.Module):
             # reward to be calculated per token
             reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
             probs_ratio_batch.append(probs_ratio)
+            gc.collect()
+            torch.cuda.empty_cache()
         print(f"Reward batch : {reward_batch}")
         print(f"Probs ratio batch : {probs_ratio_batch}")
         reward_batch = torch.stack(reward_batch)
