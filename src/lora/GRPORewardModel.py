@@ -208,7 +208,11 @@ class GRPORewardModel(nn.Module):
         reward_batch = torch.stack(reward_batch)
         probs_ratio_batch = torch.stack(probs_ratio_batch)
         advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5)
-        loss = torch.min(probs_ratio_batch*advantage, torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage) - self.beta * divergence
+        print(f"Advantage batch : {advantage.shape}")
+        print(f"Probs ratio batch shape : {probs_ratio_batch.shape}")
+        product = probs_ratio_batch * advantage.unsqueeze(-1).unsqueeze(-1)
+        product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage.unsqueeze(-1).unsqueeze(-1)
+        loss = torch.min(product, product_with_clipping) - self.beta * divergence
         print(f"Loss mean: {loss.mean()}")
         return loss.mean()
 
