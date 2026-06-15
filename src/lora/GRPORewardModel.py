@@ -157,7 +157,7 @@ class GRPORewardModel(nn.Module):
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
             reward -= 1.0
-        max_move_with_reward = reward_list[0]
+        max_move_with_reward = reward_list[0] if len(reward_list) > 0 else (0.0, move_no)
         for gen in reward_list:
             if gen[1] > max_move_with_reward[1]:
                 max_move_with_reward = gen
