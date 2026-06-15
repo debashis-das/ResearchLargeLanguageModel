@@ -122,6 +122,7 @@ class GRPORewardModel(nn.Module):
             reward = 0.0
             reward_list = []
             for m in range(0, len(moves_generations_with_extra_text)):
+                print(f"Processing generation segment : {moves_generations_with_extra_text[m]}")
                 if m%2 == 0:
                     if play_as == "white" and "play_as: black" in moves_generations_with_extra_text[m]:
                         reward -= 10.0
@@ -132,8 +133,7 @@ class GRPORewardModel(nn.Module):
                     else:
                         dont_consider = False
                 elif m%2 == 1 and not dont_consider:
-                    print(f"Processing generation segment : {moves_generations_with_extra_text[m]}")
-                    moves = moves_generations_with_extra_text[m].strip()
+                    moves = moves_generations_with_extra_text[m]
                     current_reward = 0.0
                     same_generations += 1
                     if same_generations > 1:
