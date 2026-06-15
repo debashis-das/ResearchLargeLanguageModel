@@ -113,8 +113,12 @@ class GRPORewardModel(nn.Module):
             # print(f"Input moves extracted for board state initialization: {input_moves}")
             game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
             same_generations = 0
-            moves_generation = []
             moves_generations_with_extra_text = generation.split("moves:")
+            if len(moves_generations_with_extra_text) == 0:
+                current_reward = 10.0
+                _, current_reward, all_valid, generation_move_no = self.board_state(generation.strip(), game, current_reward, ignore_moves_till = move_no, play_as=play_as)
+                print(f"[Ideal case] Generated new moves : {generation_move_no - move_no} : Reward : {current_reward}")
+                return current_reward
             dont_consider = False
             reward = 0.0
             reward_list = []
