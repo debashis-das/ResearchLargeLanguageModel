@@ -73,6 +73,7 @@ class GRPORewardModel(nn.Module):
                     break
                 continue
             if white:
+                print(f"Processing move number {move_no} : White move : {white}")
                 ok, _ = chess_board.push_san(white)
                 if ok:
                     count_valid_moves += 1
@@ -83,6 +84,7 @@ class GRPORewardModel(nn.Module):
                     all_valid = False
                     break
             if black:
+                print(f"Processing move number {move_no} : Black move : {black}")
                 ok, _ = chess_board.push_san(black)
                 if ok:
                     count_valid_moves += 1
