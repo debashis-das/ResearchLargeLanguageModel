@@ -116,7 +116,7 @@ class GRPORewardModel(nn.Module):
             moves_generations_with_extra_text = generation.split("moves:")
             for m in range(1, len(moves_generations_with_extra_text), 2):
                 moves_generation.append(moves_generations_with_extra_text[m].strip())
-            reward = 0.0
+            reward = 10e-6
             
             if play_as == "white" and "play_as: black" in generation:
                 reward -= -10.0
