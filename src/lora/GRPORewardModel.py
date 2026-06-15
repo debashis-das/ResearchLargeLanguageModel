@@ -51,6 +51,7 @@ class GRPORewardModel(nn.Module):
         count_valid_moves = 0
         all_valid = True
         move_no = 0
+        print(f"-----------> PLay as : {play_as}")
         for m in re.finditer(pattern, moves_clean):
             move_no = int(m.group(1))
             if move_no < ignore_moves_till:
