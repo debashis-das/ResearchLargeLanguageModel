@@ -26,7 +26,7 @@ class GRPORewardModel(nn.Module):
         self.beta = 1.0
         # base model initalization
         self.model = model
-        base_model_path = "/home/ubuntu/model"
+        base_model_path = "/home/model"
         # base_model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
         dtype = torch.float16
         self.base_model = AutoModelForCausalLM.from_pretrained(
