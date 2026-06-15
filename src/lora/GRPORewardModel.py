@@ -147,6 +147,7 @@ class GRPORewardModel(nn.Module):
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
             reward -= 1.0
+        print(f"Reward list for all generations: {reward_list}")
         max_generation_move_no = max([gen[1] for gen in reward_list], default=move_no)
         reward = max([gen[0] for gen in reward_list], default=0.0)
         print(f"Generated new moves : {max_generation_move_no - move_no} : Reward : {reward}")
