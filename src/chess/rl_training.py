@@ -40,7 +40,7 @@ def rl_train(load_path = ""):
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-rl.parquet"
             df_input = pd.read_parquet(current_paraquet)
-            df_shuffled = df_input.sample(frac=1, ignore_index=True, random_state=100)
+            df_shuffled = df_input.sample(frac=1, ignore_index=True)
             training_timestep = 0
             for _, row in df_shuffled.iterrows():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
