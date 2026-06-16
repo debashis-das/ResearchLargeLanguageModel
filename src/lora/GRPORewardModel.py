@@ -215,7 +215,7 @@ class GRPORewardModel(nn.Module):
         product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
         print(f"product : {torch.isnan(product).any()} : product_with_clipping : {torch.isnan(product_with_clipping).any()} : divergence : {torch.isnan(divergence).any()}")
         loss = torch.min(product, product_with_clipping) - self.beta * divergence
-        print(f"Loss mean: {loss.mean()}")
+        print(f"Loss mean: {loss}")
         return loss.mean()
 
     def debug_logs(self, X, idx, tensor_per_generation):
