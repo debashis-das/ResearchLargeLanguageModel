@@ -1,3 +1,4 @@
+from copy import deepcopy
 import gc
 import re
 import traceback
@@ -23,22 +24,14 @@ class GRPORewardModel(nn.Module):
         self.beta = 1.0
         # base model initalization
         self.model = model
-        base_model_path = "/home/model"
-        # base_model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
-        dtype = torch.float16
-        self.base_model = AutoModelForCausalLM.from_pretrained(
-                    base_model_path,
-                    dtype=dtype,
-                    device_map=device
-                )
+        self.base_model = deepcopy(model)
         for param in self.base_model.parameters():
             param.requires_grad = False 
 
     def use_base_model(self, tokens, attention_mask):
         self.base_model.eval()
         with torch.no_grad():
-            base_logits = self.base_model(tokens, attention_mask=attention_mask).logits
-        base_logits = base_logits[:, :-1, :].contiguous()  # Shift logits for next-token prediction
+            base_logits, _ = self.base_model(tokens, attention_mask=attention_mask)
         return base_logits
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
