@@ -209,8 +209,8 @@ class GRPORewardModel(nn.Module):
             reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
         # print(f"Probs ratio batch : {probs_ratio_batch}")
         reward_batch = torch.stack(reward_batch)
-        advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5)
-        print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
+        advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5) + 1e-5
+        # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
         product = probs_ratio_batch * advantage
