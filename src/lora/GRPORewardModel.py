@@ -179,38 +179,33 @@ class GRPORewardModel(nn.Module):
         return reward
 
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
-        attention_mask = attention_mask.unsqueeze(0)
+        attention_mask = attention_mask.unsqueeze(0)  # Add batch dimension
         x = x.unsqueeze(0)
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
+        attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
         output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
+        mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
+        extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
+        extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
+        training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
+        
+        logits, _ = self.model(output_tensor, attention_mask=training_mask)
+        base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
+        
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+        base_probs = torch.nn.functional.softmax(base_logits, dim=-1)
+        probs_ratio_batch = probs / (base_probs + 1e-8)
+        divergence = torch.nn.functional.log_softmax(logits, dim=-1) - torch.nn.functional.log_softmax(base_logits, dim=-1)
         reward_batch = []
-        probs_ratio_batch = []
         for tensor_per_generation in output_tensor:
             considered_tensor = tensor_per_generation
             reward = self.extract_reward(considered_tensor, input_sequence_length=x.shape[-1])
-            mask_addition = considered_tensor.shape[-1] - attention_mask.shape[-1]
-            extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
-            training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
-            logits, _ = self.model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
-            base_logits = self.use_base_model(considered_tensor.unsqueeze(0), attention_mask=training_mask)
-
-            probs = torch.nn.functional.softmax(logits, dim=-1)
-            base_probs = torch.nn.functional.softmax(base_logits, dim=-1)
-            probs_ratio = probs / (base_probs + 1e-8)
-            divergence = torch.nn.functional.log_softmax(logits, dim=-1) - torch.nn.functional.log_softmax(base_logits, dim=-1)
             # reward to be calculated per token
             reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
-            probs_ratio_batch.append(probs_ratio)
-            gc.collect()
-            torch.cuda.empty_cache()
-        # print(f"Reward batch : {reward_batch}")
         # print(f"Probs ratio batch : {probs_ratio_batch}")
         reward_batch = torch.stack(reward_batch)
-        probs_ratio_batch = torch.cat(probs_ratio_batch)
         advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5)
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
-        print(f"Advantage batch : {advantage.shape}")
-        print(f"Probs ratio batch shape : {probs_ratio_batch.shape}")
         product = probs_ratio_batch * advantage
         product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
         loss = torch.min(product, product_with_clipping) - self.beta * divergence
