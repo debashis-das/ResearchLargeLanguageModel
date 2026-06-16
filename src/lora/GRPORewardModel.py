@@ -190,8 +190,8 @@ class GRPORewardModel(nn.Module):
         logits, _ = self.model(output_tensor, attention_mask=training_mask)
         base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
         
-        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
-        base_log_probs = torch.nn.functional.log_softmax(base_logits, dim=-1)
+        log_probs = torch.nn.functional.log_softmax(logits.to(torch.float32), dim=-1)
+        base_log_probs = torch.nn.functional.log_softmax(base_logits.to(torch.float32), dim=-1)
         probs_ratio_batch = torch.exp(log_probs - base_log_probs)
         divergence = log_probs - base_log_probs
 
