@@ -18,9 +18,6 @@ class GRPORewardModel(nn.Module):
         self.device = device
         self.dtype = dtype
         self.total_generation_length = total_generation_length
-        self.reward_moves = 5
-        self.value_fn_moves = 10
-        self.softmax = nn.Softmax(dim=-1)
         self.gamma = 0.99
         self.epsilon = 1e-6
         self.beta = 1.0

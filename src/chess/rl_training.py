@@ -1,4 +1,7 @@
 
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 import gc
 import json
 import re
@@ -28,7 +31,6 @@ optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-4)
 
 def rl_train(load_path = ""):
     try:
-        loss = None
         if len(load_path) > 0:
             checkpoint = torch.load(load_path, map_location=device)
             model_with_lora.load_state_dict(checkpoint['model_state_dict'])
