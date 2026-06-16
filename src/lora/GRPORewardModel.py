@@ -213,7 +213,7 @@ class GRPORewardModel(nn.Module):
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         product = probs_ratio_batch * advantage
         product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
-        # print(f"product : {torch.isnan(product).any()} : product_with_clipping : {torch.isnan(product_with_clipping).any()} : divergence : {torch.isnan(divergence).any()}")
+        print(f"product : {torch.is_nonzero(product).any()} : product_with_clipping : {torch.is_nonzero(product_with_clipping).any()} : divergence : {torch.is_nonzero(divergence).any()}")
         loss = torch.min(product, product_with_clipping) - self.beta * divergence
         del reward_batch
         del advantage
