@@ -192,6 +192,15 @@ class GRPORewardModel(nn.Module):
         logits, _ = self.model(output_tensor, attention_mask=training_mask)
         base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
         
+        del attention_mask
+        del mask_addition
+        del extra_mask
+        del training_mask
+        del X
+        del x
+        gc.collect()
+        torch.cuda.empty_cache()
+
         probs = torch.nn.functional.softmax(logits, dim=-1)
         base_probs = torch.nn.functional.softmax(base_logits, dim=-1)
         probs_ratio_batch = probs / (base_probs + 1e-8)
