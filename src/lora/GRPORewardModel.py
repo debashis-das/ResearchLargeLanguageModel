@@ -59,7 +59,7 @@ class GRPORewardModel(nn.Module):
 
                 if play_as == "white" and move_no == ignore_moves_till:
                     continue
-                if play_as == "black" and move_no == ignore_moves_till:
+                if play_as == "black" and move_no == ignore_moves_till and black is not None:
                     ok, _ = chess_board.push_san(black)
                     if ok:
                         count_valid_moves += 1
@@ -190,19 +190,22 @@ class GRPORewardModel(nn.Module):
         logits, _ = self.model(output_tensor, attention_mask=training_mask)
         base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
         
+        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+        base_log_probs = torch.nn.functional.log_softmax(base_logits, dim=-1)
+        probs_ratio_batch = torch.exp(log_probs - base_log_probs)
+        divergence = log_probs - base_log_probs
+
         del attention_mask
         del mask_addition
         del extra_mask
         del training_mask
         del X
         del x
+        del log_probs
+        del base_log_probs
         gc.collect()
         torch.cuda.empty_cache()
 
-        probs = torch.nn.functional.softmax(logits, dim=-1)
-        base_probs = torch.nn.functional.softmax(base_logits, dim=-1)
-        probs_ratio_batch = probs / (base_probs + 1e-8)
-        divergence = torch.nn.functional.log_softmax(logits, dim=-1) - torch.nn.functional.log_softmax(base_logits, dim=-1)
         reward_batch = []
         for tensor_per_generation in output_tensor:
             considered_tensor = tensor_per_generation
