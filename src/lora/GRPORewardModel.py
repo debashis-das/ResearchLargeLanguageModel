@@ -192,6 +192,8 @@ class GRPORewardModel(nn.Module):
         
         log_probs = torch.nn.functional.log_softmax(logits.to(torch.float32), dim=-1)
         base_log_probs = torch.nn.functional.log_softmax(base_logits.to(torch.float32), dim=-1)
+        print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
+
         probs_ratio_batch = torch.exp(log_probs - base_log_probs)
         divergence = log_probs - base_log_probs
 
@@ -205,7 +207,7 @@ class GRPORewardModel(nn.Module):
         del base_log_probs
         gc.collect()
         torch.cuda.empty_cache()
-
+        print(f"probs_ratio_batch : {torch.isnan(probs_ratio_batch).any()} : divergence : {torch.isnan(divergence).any()}")
         reward_batch = []
         for tensor_per_generation in output_tensor:
             considered_tensor = tensor_per_generation
@@ -218,6 +220,7 @@ class GRPORewardModel(nn.Module):
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         product = probs_ratio_batch * advantage
         product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
+        print(f"product : {torch.isnan(product).any()} : product_with_clipping : {torch.isnan(product_with_clipping).any()} : divergence : {torch.isnan(divergence).any()}")
         loss = torch.min(product, product_with_clipping) - self.beta * divergence
         print(f"Loss mean: {loss.mean()}")
         return loss.mean()
