@@ -157,7 +157,7 @@ class LoRAFineTuning(nn.Module):
             ) as pbar:
                 # generate new tokens one by one.
                 for idx in range(max_new_tokens):
-                    cache_position = torch.tensor([init_seq_len + idx], device=X.device)  # Positions for the new token
+                    cache_position = torch.tensor([init_seq_len + idx], device=self.device)  # Positions for the new token
                     position_ids = cache_position.unsqueeze(0)
                     next_token = self.module_dict["model.embed_tokens"](next_token)
                     position_embeddings = self.module_dict["model.rotary_emb"](next_token, position_ids)  # (cos, sin)
