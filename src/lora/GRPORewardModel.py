@@ -175,59 +175,62 @@ class GRPORewardModel(nn.Module):
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
         output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
-        mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
-        extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
-        extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
-        training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
+        # mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
+        # extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
+        # extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
+        # training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
         
-        logits, _ = self.model(output_tensor, attention_mask=training_mask)
-        base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
+        # logits, _ = self.model(output_tensor, attention_mask=training_mask)
+        # base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
         
-        log_probs = torch.nn.functional.log_softmax(logits.to(torch.float32), dim=-1)
-        base_log_probs = torch.nn.functional.log_softmax(base_logits.to(torch.float32), dim=-1)
-        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
+        # log_probs = torch.nn.functional.log_softmax(logits.to(torch.float32), dim=-1)
+        # base_log_probs = torch.nn.functional.log_softmax(base_logits.to(torch.float32), dim=-1)
+        # # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
 
-        probs_ratio_batch = torch.exp(log_probs - base_log_probs)
-        divergence = log_probs - base_log_probs
+        # probs_ratio_batch = torch.exp(log_probs - base_log_probs)
+        # divergence = log_probs - base_log_probs
 
-        del attention_mask
-        del mask_addition
-        del extra_mask
-        del training_mask
-        del X
-        del x
-        del log_probs
-        del base_log_probs
-        gc.collect()
-        torch.cuda.empty_cache()
-        # print(f"probs_ratio_batch : {torch.isnan(probs_ratio_batch).any()} : divergence : {torch.isnan(divergence).any()}")
-        reward_batch = []
+        # del attention_mask
+        # del mask_addition
+        # del extra_mask
+        # del training_mask
+        # del X
+        # del x
+        # del log_probs
+        # del base_log_probs
+        # gc.collect()
+        # torch.cuda.empty_cache()
+        # # print(f"probs_ratio_batch : {torch.isnan(probs_ratio_batch).any()} : divergence : {torch.isnan(divergence).any()}")
+        # reward_batch = []
         for tensor_per_generation in output_tensor:
-            considered_tensor = tensor_per_generation
-            reward = self.extract_reward(considered_tensor, input_sequence_length=input_sequence_length)
+            # considered_tensor = tensor_per_generation
+            print(f"Generation : {self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)}")
+            # reward = self.extract_reward(considered_tensor, input_sequence_length=input_sequence_length)
             # reward to be calculated per token
-            reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
+            # reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
+        exit(0)
         # print(f"Probs ratio batch : {probs_ratio_batch}")
-        reward_batch = torch.stack(reward_batch)
-        advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5) + 1e-5
-        # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
-        advantage = advantage.unsqueeze(-1).unsqueeze(-1)
+        # reward_batch = torch.stack(reward_batch)
+        # advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5)
+        # # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
+        # advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
-        product = probs_ratio_batch * advantage
-        product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
-        print(f"product : {product.max()} : product_with_clipping : {product_with_clipping.max()} : divergence : {divergence.max()}")
-        print(f"product : {product.min()} : product_with_clipping : {product_with_clipping.min()} : divergence : {divergence.min()}")
-        print(f"product : {product.mean()} : product_with_clipping : {product_with_clipping.mean()} : divergence : {divergence.mean()}")
-        loss = torch.min(product, product_with_clipping) - self.beta * divergence
-        del reward_batch
-        del advantage
-        del product
-        del product_with_clipping
-        del divergence
-        gc.collect()
-        torch.cuda.empty_cache()
-        print(f"Loss : {loss.shape} : {loss.max()} : {loss.min()} : {loss.mean()}")
-        return loss.mean()
+        # product = probs_ratio_batch * advantage
+        # product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
+        # print(f"product : {product.max()} : product_with_clipping : {product_with_clipping.max()} : divergence : {divergence.max()}")
+        # print(f"product : {product.min()} : product_with_clipping : {product_with_clipping.min()} : divergence : {divergence.min()}")
+        # print(f"product : {product.mean()} : product_with_clipping : {product_with_clipping.mean()} : divergence : {divergence.mean()}")
+        # loss = torch.min(product, product_with_clipping) - self.beta * divergence
+        # del reward_batch
+        # del advantage
+        # del product
+        # del product_with_clipping
+        # del divergence
+        # gc.collect()
+        # torch.cuda.empty_cache()
+        # print(f"Loss : {loss.shape} : {loss.max()} : {loss.min()} : {loss.mean()}")
+        # return loss.mean()
+        return None
 
     def debug_logs(self, X, idx, tensor_per_generation):
         print(f"Input      : {self.tokenizer.decode(X[idx], skip_special_tokens=True)}")
