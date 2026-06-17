@@ -123,7 +123,7 @@ class LoRAFineTuning(nn.Module):
         return output_logits, loss
     
     @torch.no_grad()
-    def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=1.0):
+    def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=0.0):
         try:
             self.eval()  # Set the model to evaluation mode
             kv_cache = DynamicCache(config=self.model.config)  
@@ -166,8 +166,11 @@ class LoRAFineTuning(nn.Module):
                     next_token = self.module_dict["model.norm"](next_token)
                     logits = self.module_dict["lm_head"](next_token)   # [batch, seq_len, vocab_size]
                     next_token_logits = logits[:, -1, :]   # [batch, vocab_size]
-                    next_token_logits = torch.nn.functional.softmax(next_token_logits / temperature, dim=-1)  # Apply temperature scaling
-                    next_token = torch.multinomial(next_token_logits, num_samples=1)  # Sample from the distribution
+                    if temperature == 0.0:
+                        next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
+                    else:
+                        next_token_logits = torch.nn.functional.softmax(next_token_logits / temperature, dim=-1)  # Apply temperature scaling
+                        next_token = torch.multinomial(next_token_logits, num_samples=1)  # Sample from the distribution
                     generated_ids = torch.cat([generated_ids, next_token], dim=-1)
                     pbar.update(1)
             # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
