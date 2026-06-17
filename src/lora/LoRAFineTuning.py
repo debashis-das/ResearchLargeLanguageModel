@@ -166,8 +166,7 @@ class LoRAFineTuning(nn.Module):
                     next_token = self.module_dict["model.norm"](next_token)
                     logits = self.module_dict["lm_head"](next_token)   # [batch, seq_len, vocab_size]
                     next_token_logits = logits[:, -1, :]   # [batch, vocab_size]
-                    topk_probs, _ = torch.topk(next_token_logits, k=10, dim=-1)
-                    next_token = torch.multinomial(topk_probs, num_samples=1)  # Sampling decoding
+                    next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding for the initial sequence
                     generated_ids = torch.cat([generated_ids, next_token], dim=-1)
                     pbar.update(1)
             # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
