@@ -24,9 +24,9 @@ class GRPORewardModel(nn.Module):
         self.beta = 1.0
         # base model initalization
         self.model = model
-        self.base_model = deepcopy(model)
-        for param in self.base_model.parameters():
-            param.requires_grad = False 
+        # self.base_model = deepcopy(model)
+        # for param in self.base_model.parameters():
+        #     param.requires_grad = False 
 
     def use_base_model(self, tokens, attention_mask):
         self.base_model.eval()
@@ -174,7 +174,7 @@ class GRPORewardModel(nn.Module):
         input_sequence_length = x.shape[-1]
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
-        output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length)
+        output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length, temperature=5.0)
         # mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         # extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
         # extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
@@ -208,7 +208,7 @@ class GRPORewardModel(nn.Module):
             # reward = self.extract_reward(considered_tensor, input_sequence_length=input_sequence_length)
             # reward to be calculated per token
             # reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
-        exit(0)
+        exit()
         # print(f"Probs ratio batch : {probs_ratio_batch}")
         # reward_batch = torch.stack(reward_batch)
         # advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5)
