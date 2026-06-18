@@ -170,10 +170,12 @@ class LoRAFineTuning(nn.Module):
                         next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
                     else:
                         next_token_logits = next_token_logits / temperature  # Apply temperature scaling
-                        print(f"Next token logits before clamping: {next_token_logits.max()} : {next_token_logits.min()}")  # Debugging line to check logits before clamping
-                        next_token_logits = torch.clamp(next_token_logits, min=-1e2, max=1e3)  # Clamp logits to avoid extreme values
+                        next_token_logits = torch.nan_to_num(next_token_logits, nan=0.0, posinf=1e4, neginf=-1e4)
+                        next_token_logits = torch.clamp(next_token_logits, min=-50, max=50)  # Clamp logits to avoid extreme values
+                        next_token_logits = next_token_logits.float()  # Ensure logits are in float32 for softmax
                         next_token_logits = torch.nn.functional.softmax(next_token_logits, dim=-1)  # Apply temperature scaling
-                        
+                        next_token_logits = torch.nan_to_num(next_token_logits, nan=0.0)
+                        next_token_logits = next_token_logits / next_token_logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
                         next_token = torch.multinomial(next_token_logits, num_samples=1)  # Sample from the distribution
                     generated_ids = torch.cat([generated_ids, next_token], dim=-1)
                     pbar.update(1)
