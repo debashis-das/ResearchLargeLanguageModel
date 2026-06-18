@@ -1,3 +1,4 @@
+import gc
 import traceback
 import logging
 
@@ -194,7 +195,8 @@ class LoRAFineTuning(nn.Module):
         next_token_logits = torch.nan_to_num(next_token_logits, nan=0.0)
         next_token_logits = next_token_logits / next_token_logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
         next_token = torch.distributions.Categorical(next_token_logits).sample((batch_size,))  # Sample from the distribution
-        print(f"Next token shape : {next_token.shape}")
+        del next_token_logits
+        gc.collect()
         return next_token
     
 if __name__ == "__main__":

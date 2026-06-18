@@ -5,7 +5,7 @@ import traceback
 
 from torch import nn
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer
 
 from chess.chess_validator import ChessGame
 from lora.LoRAFineTuning import LoRAFineTuning
@@ -153,7 +153,6 @@ class GRPORewardModel(nn.Module):
                     generation_move_no = move_no
                     _, current_reward, all_valid, generation_move_no = self.board_state(moves, game, current_reward, ignore_moves_till = move_no, play_as=play_as)
                     if all_valid:
-                        result = moves.rsplit(" ")[-1]
                         if play_as == "white" and "1-0" in moves:
                             current_reward += 10.0
                         elif play_as == "black" and "0-1" in moves:
@@ -181,8 +180,7 @@ class GRPORewardModel(nn.Module):
     def sanatize_logits(self, logits: torch.Tensor):
         logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
         logits = torch.clamp(logits, min=-50, max=50)  # Clamp logits to avoid extreme values
-        logits = logits.float()  # Ensure logits are in float32 for softmax
-        logits = torch.nn.functional.softmax(logits, dim=-1)  
+        logits = torch.nn.functional.softmax(logits.float(), dim=-1)  
         logits = torch.nan_to_num(logits, nan=0.0)
         logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
         return logits
@@ -206,8 +204,6 @@ class GRPORewardModel(nn.Module):
         base_logits = self.sanatize_logits(base_logits)
 
         actions = output_tensor[..., 1:]
-        print(f"Logits shape : {logits.shape} : Base logits shape : {base_logits.shape}")
-        print(f"output_tensor shape : {actions.shape} : training_mask shape : {training_mask.shape}")
         if torch.isnan(logits).any():
             print("NaN in logits!")
             exit()
@@ -215,11 +211,14 @@ class GRPORewardModel(nn.Module):
             print("NaN in base_logits!")
             exit()
 
-        log_probs = torch.nn.functional.log_softmax(logits.to(torch.float32), dim=-1).float()
-        base_log_probs = torch.nn.functional.log_softmax(base_logits.to(torch.float32), dim=-1).float()        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
+        log_probs_all = torch.nn.functional.log_softmax(logits, dim=-1).float()
+        base_log_probs_all = torch.nn.functional.log_softmax(base_logits, dim=-1).float()        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
 
-        log_probs = torch.gather(log_probs, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
-        base_log_probs = torch.gather(base_log_probs, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
+        log_probs = torch.gather(log_probs_all, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
+        base_log_probs = torch.gather(base_log_probs_all, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
+        
+        del log_probs_all
+        del base_log_probs_all
 
         ratio_clamp = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
         probs_ratio_batch = torch.exp(ratio_clamp)
@@ -233,6 +232,7 @@ class GRPORewardModel(nn.Module):
         del x
         del log_probs
         del base_log_probs
+        del ratio_clamp
         gc.collect()
         torch.cuda.empty_cache()
         # print(f"probs_ratio_batch : {torch.isnan(probs_ratio_batch).any()} : divergence : {torch.isnan(divergence).any()}")
