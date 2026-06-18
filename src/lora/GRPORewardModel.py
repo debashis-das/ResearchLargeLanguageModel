@@ -21,7 +21,7 @@ class GRPORewardModel(nn.Module):
         self.total_generation_length = total_generation_length
         self.gamma = 0.99
         self.epsilon = 0.05
-        self.beta = 0.01
+        self.beta = 0.02
         self.target_kl = 0.01
 
         # base model initalization
@@ -231,11 +231,8 @@ class GRPORewardModel(nn.Module):
             reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
         # print(f"Probs ratio batch : {probs_ratio_batch}")
         reward_batch = torch.stack(reward_batch).float()
-        if training_timestep < 1000:
-            advantage = reward_batch - reward_batch.mean()
-        else:
-            advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5)
-
+        advantage = reward_batch
+        
         print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
