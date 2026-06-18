@@ -24,9 +24,9 @@ class GRPORewardModel(nn.Module):
         self.beta = 1.0
         # base model initalization
         self.model = model
-        # self.base_model = deepcopy(model)
-        # for param in self.base_model.parameters():
-        #     param.requires_grad = False 
+        self.base_model = deepcopy(model)
+        for param in self.base_model.parameters():
+            param.requires_grad = False 
 
     def use_base_model(self, tokens, attention_mask):
         self.base_model.eval()
@@ -181,14 +181,14 @@ class GRPORewardModel(nn.Module):
         training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
         
         logits, _ = self.model(output_tensor, attention_mask=training_mask)
-        # base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
+        base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
         
         log_probs = torch.nn.functional.log_softmax(logits.to(torch.float32), dim=-1)
-        # base_log_probs = torch.nn.functional.log_softmax(base_logits.to(torch.float32), dim=-1)
+        base_log_probs = torch.nn.functional.log_softmax(base_logits.to(torch.float32), dim=-1)
         # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
 
-        # probs_ratio_batch = torch.exp(log_probs - base_log_probs)
-        # divergence = log_probs - base_log_probs
+        probs_ratio_batch = torch.exp(log_probs - base_log_probs)
+        divergence = log_probs - base_log_probs
 
         del attention_mask
         del mask_addition
@@ -197,7 +197,7 @@ class GRPORewardModel(nn.Module):
         del X
         del x
         del log_probs
-        # del base_log_probs
+        del base_log_probs
         gc.collect()
         torch.cuda.empty_cache()
         # print(f"probs_ratio_batch : {torch.isnan(probs_ratio_batch).any()} : divergence : {torch.isnan(divergence).any()}")
@@ -211,7 +211,7 @@ class GRPORewardModel(nn.Module):
         reward_batch = torch.stack(reward_batch)
         advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5)
         print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
-        exit()
+        # exit()
 
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
