@@ -242,11 +242,6 @@ class GRPORewardModel(nn.Module):
         print(f"product : {product.min()} : product_with_clipping : {product_with_clipping.min()} : divergence : {divergence.min()}")
         print(f"product : {product.mean()} : product_with_clipping : {product_with_clipping.mean()} : divergence : {divergence.mean()}")
         
-        beta = self.beta
-        if divergence > self.target_kl:
-            beta *= 1.5
-        else:
-            beta *= 0.9
         loss = -torch.min(product, product_with_clipping) + self.beta * divergence
         del reward_batch
         del advantage
@@ -256,7 +251,6 @@ class GRPORewardModel(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
         print(f"Loss : {loss.shape} : {loss.max()} : {loss.min()} : {loss.mean()}")
-
 
         if torch.isnan(loss).any():
             print("NaN in loss!")
