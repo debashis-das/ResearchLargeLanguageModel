@@ -20,8 +20,10 @@ class GRPORewardModel(nn.Module):
         self.dtype = dtype
         self.total_generation_length = total_generation_length
         self.gamma = 0.99
-        self.epsilon = 1e-6
+        self.epsilon = 0.05
         self.beta = 0.01
+        self.target_kl = 0.01
+
         # base model initalization
         self.model = model
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
@@ -189,15 +191,18 @@ class GRPORewardModel(nn.Module):
         actions = output_tensor[..., 1:]
         print(f"Logits shape : {logits.shape} : Base logits shape : {base_logits.shape}")
         print(f"output_tensor shape : {actions.shape} : training_mask shape : {training_mask.shape}")
-
         if torch.isnan(logits).any():
             print("NaN in logits!")
             exit()
         if torch.isnan(base_logits).any():
             print("NaN in base_logits!")
             exit()
+
         log_probs = torch.nn.functional.log_softmax(logits.to(torch.float32), dim=-1).float()
         base_log_probs = torch.nn.functional.log_softmax(base_logits.to(torch.float32), dim=-1).float()        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
+
+        log_probs = torch.gather(log_probs, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
+        base_log_probs = torch.gather(base_log_probs, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
 
         ratio_clamp = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
         probs_ratio_batch = torch.exp(ratio_clamp)
@@ -230,13 +235,19 @@ class GRPORewardModel(nn.Module):
         print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
-        product = probs_ratio_batch * advantage
+        product = advantage * probs_ratio_batch
         product = torch.nan_to_num(product, 0.0)
         product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
         print(f"product : {product.max()} : product_with_clipping : {product_with_clipping.max()} : divergence : {divergence.max()}")
         print(f"product : {product.min()} : product_with_clipping : {product_with_clipping.min()} : divergence : {divergence.min()}")
         print(f"product : {product.mean()} : product_with_clipping : {product_with_clipping.mean()} : divergence : {divergence.mean()}")
-        loss = torch.min(product, product_with_clipping) - self.beta * divergence
+        
+        beta = self.beta
+        if divergence > self.target_kl:
+            beta *= 1.5
+        else:
+            beta *= 0.9
+        loss = -torch.min(product, product_with_clipping) + self.beta * divergence
         del reward_batch
         del advantage
         del product
