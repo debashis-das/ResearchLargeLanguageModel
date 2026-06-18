@@ -26,7 +26,7 @@ class GRPORewardModel(nn.Module):
         self.model = model
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
         for p in self.model.parameters():
-            p.data += 0.05 * torch.randn_like(p)    
+            p.data += 0.01 * torch.randn_like(p)    
 
         self.base_model = deepcopy(model)
         for param in self.base_model.parameters():
@@ -189,6 +189,7 @@ class GRPORewardModel(nn.Module):
         actions = output_tensor[..., 1:]
         print(f"Logits shape : {logits.shape} : Base logits shape : {base_logits.shape}")
         print(f"output_tensor shape : {actions.shape} : training_mask shape : {training_mask.shape}")
+
         if torch.isnan(logits).any():
             print("NaN in logits!")
             exit()
