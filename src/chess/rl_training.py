@@ -38,17 +38,17 @@ def rl_train(load_path = ""):
             print(f"Model loaded successfully from {load_path} with loss: {checkpoint['loss']}")
 
         grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, device=device, dtype=dtype)
+        training_timestep = 0
         for i in range(1,2):
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-rl.parquet"
             df_input = pd.read_parquet(current_paraquet)
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
-            training_timestep = 0
             for _, row in df_shuffled.iterrows():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
                 try:
-                    loss = grpo_reward_model(input_ids, attention_mask=attention_mask)
+                    loss = grpo_reward_model(input_ids, attention_mask=attention_mask, training_timestep=training_timestep)
                     loss.backward()
                     optimizer.step()
                     optimizer.zero_grad(set_to_none=True)

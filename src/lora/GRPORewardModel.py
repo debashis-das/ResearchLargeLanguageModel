@@ -21,9 +21,13 @@ class GRPORewardModel(nn.Module):
         self.total_generation_length = total_generation_length
         self.gamma = 0.99
         self.epsilon = 1e-6
-        self.beta = 1.0
+        self.beta = 0.01
         # base model initalization
         self.model = model
+        # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
+        for p in self.model.parameters():
+            p.data += 0.01 * torch.randn_like(p)    
+
         self.base_model = deepcopy(model)
         for param in self.base_model.parameters():
             param.requires_grad = False 
@@ -168,7 +172,7 @@ class GRPORewardModel(nn.Module):
         reward = self.chess_reward_function(prompt, generation)
         return reward
 
-    def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
+    def forward(self, x: torch.Tensor, attention_mask: torch.Tensor, training_timestep: int):
         attention_mask = attention_mask.unsqueeze(0)  # Add batch dimension
         x = x.unsqueeze(0)
         input_sequence_length = x.shape[-1]
@@ -209,10 +213,12 @@ class GRPORewardModel(nn.Module):
             reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
         # print(f"Probs ratio batch : {probs_ratio_batch}")
         reward_batch = torch.stack(reward_batch)
-        advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5)
-        print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
-        # exit()
+        if training_timestep < 1000:
+            advantage = reward_batch - reward_batch.mean()
+        else:
+            advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-5)
 
+        print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
         product = probs_ratio_batch * advantage
