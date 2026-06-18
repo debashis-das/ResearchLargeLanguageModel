@@ -186,12 +186,19 @@ class GRPORewardModel(nn.Module):
         
         logits, _ = self.model(output_tensor, attention_mask=training_mask)
         base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
-        
-        log_probs = torch.nn.functional.log_softmax(logits.to(torch.float32), dim=-1)
-        base_log_probs = torch.nn.functional.log_softmax(base_logits.to(torch.float32), dim=-1)
-        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
+        print(f"Logits shape : {logits.shape} : Base logits shape : {base_logits.shape}")
+        print(f"output_tensor shape : {output_tensor.shape} : training_mask shape : {training_mask.shape}")
+        if torch.isnan(logits).any():
+            print("NaN in logits!")
+            exit()
+        if torch.isnan(base_logits).any():
+            print("NaN in base_logits!")
+            exit()
+        log_probs = torch.nn.functional.log_softmax(logits.to(torch.float32), dim=-1).float()
+        base_log_probs = torch.nn.functional.log_softmax(base_logits.to(torch.float32), dim=-1).float()        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
 
-        probs_ratio_batch = torch.exp(log_probs - base_log_probs)
+        ratio_clamp = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
+        probs_ratio_batch = torch.exp(ratio_clamp)
         divergence = log_probs - base_log_probs
 
         del attention_mask
@@ -212,7 +219,7 @@ class GRPORewardModel(nn.Module):
             # reward to be calculated per token
             reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
         # print(f"Probs ratio batch : {probs_ratio_batch}")
-        reward_batch = torch.stack(reward_batch)
+        reward_batch = torch.stack(reward_batch).float()
         if training_timestep < 1000:
             advantage = reward_batch - reward_batch.mean()
         else:
@@ -222,6 +229,7 @@ class GRPORewardModel(nn.Module):
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
         product = probs_ratio_batch * advantage
+        product = torch.nan_to_num(product, 0.0)
         product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
         print(f"product : {product.max()} : product_with_clipping : {product_with_clipping.max()} : divergence : {divergence.max()}")
         print(f"product : {product.min()} : product_with_clipping : {product_with_clipping.min()} : divergence : {divergence.min()}")
@@ -235,6 +243,11 @@ class GRPORewardModel(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
         print(f"Loss : {loss.shape} : {loss.max()} : {loss.min()} : {loss.mean()}")
+
+
+        if torch.isnan(loss).any():
+            print("NaN in loss!")
+            exit()
         return loss.mean()
 
     def debug_logs(self, X, idx, tensor_per_generation):
