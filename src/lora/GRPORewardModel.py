@@ -178,6 +178,15 @@ class GRPORewardModel(nn.Module):
         reward = self.chess_reward_function(prompt, generation)
         return reward
 
+    def sanatize_logits(self, logits: torch.Tensor):
+        logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
+        logits = torch.clamp(logits, min=-50, max=50)  # Clamp logits to avoid extreme values
+        logits = logits.float()  # Ensure logits are in float32 for softmax
+        logits = torch.nn.functional.softmax(logits, dim=-1)  
+        logits = torch.nan_to_num(logits, nan=0.0)
+        logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
+        return logits
+    
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor, training_timestep: int):
         attention_mask = attention_mask.unsqueeze(0)  # Add batch dimension
         x = x.unsqueeze(0)
@@ -192,6 +201,10 @@ class GRPORewardModel(nn.Module):
         
         logits, _ = self.model(output_tensor, attention_mask=training_mask)
         base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
+
+        logits = self.sanatize_logits(logits)
+        base_logits = self.sanatize_logits(base_logits)
+
         actions = output_tensor[..., 1:]
         print(f"Logits shape : {logits.shape} : Base logits shape : {base_logits.shape}")
         print(f"output_tensor shape : {actions.shape} : training_mask shape : {training_mask.shape}")

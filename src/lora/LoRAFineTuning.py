@@ -133,19 +133,22 @@ class LoRAFineTuning(nn.Module):
             X = input_ids
             if len(X.shape) == 1:
                 X = X.unsqueeze(0)
-            _, init_seq_len = input_ids.shape
+            batch, init_seq_len = input_ids.shape
             # prefill
             cache_position = torch.arange(init_seq_len, device=X.device)  # Positions for the initial sequence
             position_ids = cache_position.unsqueeze(0)
             X = self.module_dict["model.embed_tokens"](X)
             position_embeddings = self.module_dict["model.rotary_emb"](X, position_ids)  # (cos, sin)
-            attention_mask = self.qwen_attention_mask(batch_size=X.shape[0], attention_mask=attention_mask) if attention_mask is not None else None
+            attention_mask = self.qwen_attention_mask(batch_size=batch, attention_mask=attention_mask) if attention_mask is not None else None
             for layer_number in range(self.model.config.num_hidden_layers):
                 X = self.action_per_layer(layer_number, X, attention_mask=attention_mask, position_embeddings=position_embeddings, cache_position=cache_position, kv_cache=kv_cache)
             X = self.module_dict["model.norm"](X)
             logits = self.module_dict["lm_head"](X)   # [batch, seq_len, vocab_size]
             next_token_logits = logits[:, -1, :]   # [batch, vocab_size]
-            next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding for the initial sequence
+            if temperature == 0.0:
+                next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
+            else:
+                next_token = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
             generated_ids = next_token
             with tqdm(
                 total       = max_new_tokens,
@@ -169,15 +172,8 @@ class LoRAFineTuning(nn.Module):
                     if temperature == 0.0:
                         next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
                     else:
-                        next_token_logits = next_token_logits / temperature  # Apply temperature scaling
-                        next_token_logits = torch.nan_to_num(next_token_logits, nan=0.0, posinf=1e4, neginf=-1e4)
-                        next_token_logits = torch.clamp(next_token_logits, min=-50, max=50)  # Clamp logits to avoid extreme values
-                        next_token_logits = next_token_logits.float()  # Ensure logits are in float32 for softmax
-                        next_token_logits = torch.nn.functional.softmax(next_token_logits, dim=-1)  # Apply temperature scaling
-                        next_token_logits = torch.nan_to_num(next_token_logits, nan=0.0)
-                        next_token_logits = next_token_logits / next_token_logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
-                        next_token = torch.multinomial(next_token_logits, num_samples=1)  # Sample from the distribution
-                    generated_ids = torch.cat([generated_ids, next_token], dim=-1)
+                        next_token = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
+                        generated_ids = torch.cat([generated_ids, next_token], dim=-1)
                     pbar.update(1)
             # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
             # print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
@@ -187,7 +183,19 @@ class LoRAFineTuning(nn.Module):
             logging.error(f"Error during text generation {exec_info}")
             raise e
         finally:
-            self.train()  # Set the model back to training mode after generation
+            self.train() 
+
+    def temperature_sampling(self, temperature, next_token_logits, batch_size):
+        next_token_logits = next_token_logits / temperature  # Apply temperature scaling
+        next_token_logits = torch.nan_to_num(next_token_logits, nan=0.0, posinf=1e4, neginf=-1e4)
+        next_token_logits = torch.clamp(next_token_logits, min=-50, max=50)  # Clamp logits to avoid extreme values
+        next_token_logits = next_token_logits.float()  # Ensure logits are in float32 for softmax
+        next_token_logits = torch.nn.functional.softmax(next_token_logits, dim=-1)  
+        next_token_logits = torch.nan_to_num(next_token_logits, nan=0.0)
+        next_token_logits = next_token_logits / next_token_logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
+        next_token = torch.distributions.Categorical(next_token_logits).sample((batch_size,))  # Sample from the distribution
+        print(f"Next token shape : {next_token.shape}")
+        return next_token
     
 if __name__ == "__main__":
     model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
