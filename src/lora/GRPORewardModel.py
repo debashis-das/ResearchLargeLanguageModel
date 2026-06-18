@@ -186,8 +186,9 @@ class GRPORewardModel(nn.Module):
         
         logits, _ = self.model(output_tensor, attention_mask=training_mask)
         base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
+        actions = output_tensor[..., 1:]
         print(f"Logits shape : {logits.shape} : Base logits shape : {base_logits.shape}")
-        print(f"output_tensor shape : {output_tensor.shape} : training_mask shape : {training_mask.shape}")
+        print(f"output_tensor shape : {actions.shape} : training_mask shape : {training_mask.shape}")
         if torch.isnan(logits).any():
             print("NaN in logits!")
             exit()
