@@ -26,7 +26,6 @@ class GRPORewardModel(nn.Module):
 
         # base model initalization
         self.model = model
-        self.model.gradient_checkpointing_enable()
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
         for p in self.model.parameters():
             p.data += 0.001 * torch.randn_like(p)    
