@@ -26,6 +26,7 @@ class GRPORewardModel(nn.Module):
 
         # base model initalization
         self.model = model
+        self.model.gradient_checkpointing_enable()
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
         for p in self.model.parameters():
             p.data += 0.001 * torch.randn_like(p)    
@@ -41,7 +42,7 @@ class GRPORewardModel(nn.Module):
             tokens = tokens.to(self.base_model_device)
             attention_mask = attention_mask.to(self.base_model_device)
             base_logits, _ = self.base_model(tokens, attention_mask=attention_mask)
-        return base_logits
+        return base_logits.detach()
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
@@ -186,7 +187,7 @@ class GRPORewardModel(nn.Module):
         logits = torch.nn.functional.softmax(logits.float(), dim=-1)  
         logits = torch.nan_to_num(logits, nan=0.0)
         logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
-        return logits
+        return logits.half()  # Convert back to half precision
     
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor, training_timestep: int):
         attention_mask = attention_mask.unsqueeze(0)  # Add batch dimension
@@ -214,8 +215,8 @@ class GRPORewardModel(nn.Module):
             print("NaN in base_logits!")
             exit()
 
-        log_probs_all = torch.nn.functional.log_softmax(logits, dim=-1).float()
-        base_log_probs_all = torch.nn.functional.log_softmax(base_logits, dim=-1).float()        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
+        log_probs_all = torch.nn.functional.log_softmax(logits.float(), dim=-1).half()
+        base_log_probs_all = torch.nn.functional.log_softmax(base_logits.float(), dim=-1).half()        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
 
         log_probs = torch.gather(log_probs_all, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
         base_log_probs = torch.gather(base_log_probs_all, dim=-1, index=actions.to(self.base_model_device).unsqueeze(-1)).squeeze(-1)
@@ -247,14 +248,16 @@ class GRPORewardModel(nn.Module):
             # reward to be calculated per token
             reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
         # print(f"Probs ratio batch : {probs_ratio_batch}")
-        reward_batch = torch.stack(reward_batch).float()
+        reward_batch = torch.stack(reward_batch)
         advantage = reward_batch
         
         # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
-        product = advantage * probs_ratio_batch
+        product = advantage.float() * probs_ratio_batch.float()
         product = torch.nan_to_num(product, 0.0)
+        product = product.half()
+
         product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
         # print(f"product : {product.max()} : product_with_clipping : {product_with_clipping.max()} : divergence : {divergence.max()}")
         # print(f"product : {product.min()} : product_with_clipping : {product_with_clipping.min()} : divergence : {divergence.min()}")
