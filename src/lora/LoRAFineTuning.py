@@ -131,9 +131,7 @@ class LoRAFineTuning(nn.Module):
         attention_mask = self.qwen_attention_mask(batch_size, attention_mask)
         position_ids = torch.arange(seq_len, device=X.device).unsqueeze(0)
         input = self.module_dict["model.embed_tokens"](X)
-        (cos, sin) = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
-        print(f"Postion embeddings shape {type(cos)}: {cos.shape}")
-        print(f"Postion embeddings shape {type(sin)}: {sin.shape}")
+        cos, sin = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
         for layer_number in range(self.model.config.num_hidden_layers):
             if layer_number%2 == 0:
                 input = input.to("cuda:0")
