@@ -39,6 +39,13 @@ class LoRAFineTuning(nn.Module):
         self.dtype = dtype
         self.create_module_dict_inject_loRA()
         self.loss_function = nn.CrossEntropyLoss()
+        self.layers = self.model.config.num_hidden_layers
+        self.multi_gpu_dict = {}
+        for i in range(self.layers):
+            if i%2 == 0:
+                self.multi_gpu_dict["model.layers." + str(i)] = "cuda:0"
+            else:
+                self.multi_gpu_dict["model.layers." + str(i)] = "cuda:1"        
     
     def create_module_dict_inject_loRA(self):
         self.module_dict = {}
@@ -63,16 +70,15 @@ class LoRAFineTuning(nn.Module):
         
     def multi_gpu_spread(self, single_gpu=False, default_device="cuda:0"):
         if not single_gpu:
-            for i in range(self.model.config.num_hidden_layers):
-                if i%2 == 0:
-                    self.model.layers[i].to("cuda:0")
-                    self.model.layers[i].gradient_checkpointing = True
-                else:
-                    self.model.layers[i].to("cuda:1")
-                    self.model.layers[i].gradient_checkpointing = True
+            for name, module in self.model.named_modules():
+                self.module_dict[name] = module
+                if name in self.multi_gpu_dict:
+                    module.to(self.multi_gpu_dict[name])
         else:
-            for i in range(self.model.config.num_hidden_layers):
-                self.model.layers[i].to(default_device)
+            for name, module in self.model.named_modules():
+                self.module_dict[name] = module
+                if name in self.multi_gpu_dict:
+                    module.to(default_device)
             
 
     def qwen_attention_mask(self, batch_size, attention_mask: torch.Tensor| None):
