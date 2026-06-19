@@ -30,7 +30,6 @@ class GRPORewardModel(nn.Module):
         for p in self.model.parameters():
             p.data += 0.001 * torch.randn_like(p)    
         self.base_model = deepcopy(model)
-        self.base_model.to(self.base_model_device)
         for param in self.base_model.parameters():
             param.requires_grad = False 
 
@@ -215,7 +214,7 @@ class GRPORewardModel(nn.Module):
         base_log_probs_all = torch.nn.functional.log_softmax(base_logits.float(), dim=-1).half()        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
 
         log_probs = torch.gather(log_probs_all, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
-        base_log_probs = torch.gather(base_log_probs_all, dim=-1, index=actions.to(self.base_model_device).unsqueeze(-1)).squeeze(-1)
+        base_log_probs = torch.gather(base_log_probs_all, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
         
         del log_probs_all
         del base_log_probs_all
