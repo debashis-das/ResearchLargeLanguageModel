@@ -41,7 +41,7 @@ class GRPORewardModel(nn.Module):
             tokens = tokens.to(self.base_model_device)
             attention_mask = attention_mask.to(self.base_model_device)
             base_logits, _ = self.base_model(tokens, attention_mask=attention_mask)
-        return base_logits.to(self.device)
+        return base_logits
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
@@ -223,7 +223,7 @@ class GRPORewardModel(nn.Module):
         del log_probs_all
         del base_log_probs_all
 
-        ratio_clamp = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
+        ratio_clamp = torch.clamp(log_probs - base_log_probs.to(self.device), min=-10, max=10)
         probs_ratio_batch = torch.exp(ratio_clamp)
         divergence = log_probs - base_log_probs
 
