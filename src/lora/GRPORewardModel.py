@@ -191,7 +191,7 @@ class GRPORewardModel(nn.Module):
         input_sequence_length = x.shape[-1]
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
-        output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length, temperature=0.7)
+        output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length, temperature=0.6)
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
@@ -200,8 +200,8 @@ class GRPORewardModel(nn.Module):
         logits, _ = self.model(output_tensor, attention_mask=training_mask)
         base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
 
-        logits = self.sanatize_logits(logits)
-        base_logits = self.sanatize_logits(base_logits)
+        logits = self.sanatize_logits(logits.detach())
+        base_logits = self.sanatize_logits(base_logits.detach())
 
         actions = output_tensor[..., 1:]
         if torch.isnan(logits).any():
