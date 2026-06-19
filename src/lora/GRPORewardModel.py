@@ -122,7 +122,7 @@ class GRPORewardModel(nn.Module):
                 print(f"No moves generated. Penalizing reward. Generation: {generation}")
                 return -10.0
             moves_generations_with_extra_text = generation.split("moves:")
-            print(f"moves_generations_with_extra_text : {len(moves_generations_with_extra_text)} : {moves_generations_with_extra_text}")
+            # print(f"moves_generations_with_extra_text : {len(moves_generations_with_extra_text)} : {moves_generations_with_extra_text}")
             if len(moves_generations_with_extra_text) == 0:
                 current_reward = 10.0
                 _, current_reward, all_valid, generation_move_no = self.board_state(generation.strip(), game, current_reward, ignore_moves_till = move_no, play_as=play_as)
@@ -246,17 +246,19 @@ class GRPORewardModel(nn.Module):
         reward_batch = torch.stack(reward_batch).float()
         advantage = reward_batch
         
-        print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
+        # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
         product = advantage * probs_ratio_batch
         product = torch.nan_to_num(product, 0.0)
         product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
-        print(f"product : {product.max()} : product_with_clipping : {product_with_clipping.max()} : divergence : {divergence.max()}")
-        print(f"product : {product.min()} : product_with_clipping : {product_with_clipping.min()} : divergence : {divergence.min()}")
-        print(f"product : {product.mean()} : product_with_clipping : {product_with_clipping.mean()} : divergence : {divergence.mean()}")
+        # print(f"product : {product.max()} : product_with_clipping : {product_with_clipping.max()} : divergence : {divergence.max()}")
+        # print(f"product : {product.min()} : product_with_clipping : {product_with_clipping.min()} : divergence : {divergence.min()}")
+        # print(f"product : {product.mean()} : product_with_clipping : {product_with_clipping.mean()} : divergence : {divergence.mean()}")
         
         loss = -torch.min(product, product_with_clipping) + self.beta * divergence
+        print(f"Loss : {loss.mean()} : Advantage : {advantage.mean()} : Product : {product.mean()} : Product with clipping : {product_with_clipping.mean()} : Divergence : {divergence.mean()}")
+
         del reward_batch
         del advantage
         del product
@@ -264,7 +266,6 @@ class GRPORewardModel(nn.Module):
         del divergence
         gc.collect()
         torch.cuda.empty_cache()
-        print(f"Loss : {loss.shape} : {loss.max()} : {loss.min()} : {loss.mean()}")
 
         if torch.isnan(loss).any():
             print("NaN in loss!")
