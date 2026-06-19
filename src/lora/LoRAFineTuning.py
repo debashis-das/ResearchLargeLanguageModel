@@ -47,7 +47,7 @@ class LoRAFineTuning(nn.Module):
                 module.requires_grad_(False)
                 if any(projection in name for projection in self.projections):
                     # print(f"Injecting LoRA module into {name} with shape {module.weight.shape}")
-                    loRA_linear = loRALinear(module, rank=self.rank, alpha=self.alpha, dtype=self.dtype, device=self.device)
+                    loRA_linear = loRALinear(module, rank=self.rank, alpha=self.alpha, dtype=self.dtype, device=module.device)
                     parent_path, attr_name = name.rsplit(".", 1)
                     parent_module = self.model.get_submodule(parent_path)
                     setattr(parent_module, attr_name, loRA_linear)
@@ -57,9 +57,23 @@ class LoRAFineTuning(nn.Module):
                 continue
             else:
                 param.requires_grad_(False)
-
+        
         for name, module in self.model.named_modules():
             self.module_dict[name] = module
+        
+    def multi_gpu_spread(self, single_gpu=False, default_device="cuda:0"):
+        if not single_gpu:
+            for i in range(self.model.config.num_hidden_layers):
+                if i%2 == 0:
+                    self.model.layers[i].to("cuda:0")
+                    self.model.layers[i].gradient_checkpointing = True
+                else:
+                    self.model.layers[i].to("cuda:1")
+                    self.model.layers[i].gradient_checkpointing = True
+        else:
+            for i in range(self.model.config.num_hidden_layers):
+                self.model.layers[i].to(default_device)
+            
 
     def qwen_attention_mask(self, batch_size, attention_mask: torch.Tensor| None):
         # Qwen model expects attention mask of shape [batch, seq_len] with 1 for tokens to attend to and 0 for tokens to ignore.
@@ -97,10 +111,14 @@ class LoRAFineTuning(nn.Module):
             logging.error(f"Error in layer {current_layer_number} : {e} : {traceback_info}")
             raise
 
-    def forward(self, X, attention_mask=None):
+    def forward(self, X, attention_mask=None, is_multi_gpu_spread=False):
         assert len(X.shape) in (1, 2), (
             f"Expected input_ids of shape [seq_len] or [batch, seq_len], got {X.shape}"
         )
+
+        if is_multi_gpu_spread:
+            self.multi_gpu_spread()
+
         if len(X.shape) == 1:
             X = X.unsqueeze(0)
         batch_size, seq_len = X.shape
@@ -109,7 +127,17 @@ class LoRAFineTuning(nn.Module):
         input = self.module_dict["model.embed_tokens"](X)
         position_embeddings = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
         for layer_number in range(self.model.config.num_hidden_layers):
-            input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=position_embeddings)
+            if layer_number%2 == 0:
+                input = input.to("cuda:0")
+                attention_mask = attention_mask.to("cuda:0")
+                position_embeddings = position_embeddings.to("cuda:0")
+                input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=position_embeddings)
+            else:
+                input = input.to("cuda:1")
+                attention_mask = attention_mask.to("cuda:1")
+                position_embeddings = position_embeddings.to("cuda:1")
+                input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=position_embeddings)
+        input = input.to("cuda:0")
         input = self.module_dict["model.norm"](input)
         logits_batch = self.module_dict["lm_head"](input)   # [batch, seq_len, vocab_size]
         output_logits = logits_batch[:, :-1, :].contiguous()  # Shift logits for next-token prediction
@@ -126,6 +154,7 @@ class LoRAFineTuning(nn.Module):
     @torch.no_grad()
     def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=0.0):
         try:
+            self.multi_gpu_spread(single_gpu=True)
             self.eval()  # Set the model to evaluation mode
             kv_cache = DynamicCache(config=self.model.config)  
             assert len(input_ids.shape) in (1, 2), (
