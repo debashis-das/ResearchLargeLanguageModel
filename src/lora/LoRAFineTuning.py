@@ -132,6 +132,7 @@ class LoRAFineTuning(nn.Module):
         position_ids = torch.arange(seq_len, device=X.device).unsqueeze(0)
         input = self.module_dict["model.embed_tokens"](X)
         position_embeddings = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
+        print(f"Postion embeddings shape {type(position_embeddings)}: {position_embeddings.shape}")
         for layer_number in range(self.model.config.num_hidden_layers):
             if layer_number%2 == 0:
                 input = input.to("cuda:0")
