@@ -29,7 +29,7 @@ class GRPORewardModel(nn.Module):
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
         for p in self.model.parameters():
             p.data += 0.001 * torch.randn_like(p)    
-        self.base_model_device = "cuda:1"
+        self.base_model_device = "cuda:0"
         self.base_model = deepcopy(model)
         self.base_model.to(self.base_model_device)
         for param in self.base_model.parameters():
