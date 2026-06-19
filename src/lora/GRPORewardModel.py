@@ -119,7 +119,7 @@ class GRPORewardModel(nn.Module):
             game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
             same_generations = 0
             if "moves:" not in generation:
-                print(f"No moves generated. Penalizing reward. Generation: {generation}")
+                print(f"No moves generated. Penalizing reward.")
                 return -10.0
             moves_generations_with_extra_text = generation.split("moves:")
             # print(f"moves_generations_with_extra_text : {len(moves_generations_with_extra_text)} : {moves_generations_with_extra_text}")
@@ -191,7 +191,7 @@ class GRPORewardModel(nn.Module):
         input_sequence_length = x.shape[-1]
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
-        output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length, temperature=0.8)
+        output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length, temperature=0.7)
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
