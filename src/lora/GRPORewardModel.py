@@ -223,7 +223,8 @@ class GRPORewardModel(nn.Module):
         del log_probs_all
         del base_log_probs_all
 
-        ratio_clamp = torch.clamp(log_probs - base_log_probs.to(self.device), min=-10, max=10)
+        base_log_probs = base_log_probs.to(self.device)
+        ratio_clamp = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
         probs_ratio_batch = torch.exp(ratio_clamp)
         divergence = log_probs - base_log_probs
 
