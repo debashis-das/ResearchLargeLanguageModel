@@ -47,7 +47,7 @@ class LoRAFineTuning(nn.Module):
                 module.requires_grad_(False)
                 if any(projection in name for projection in self.projections):
                     # print(f"Injecting LoRA module into {name} with shape {module.weight.shape}")
-                    loRA_linear = loRALinear(module, rank=self.rank, alpha=self.alpha, dtype=self.dtype, device=module.device)
+                    loRA_linear = loRALinear(module, rank=self.rank, alpha=self.alpha, dtype=self.dtype, device=self.device)
                     parent_path, attr_name = name.rsplit(".", 1)
                     parent_module = self.model.get_submodule(parent_path)
                     setattr(parent_module, attr_name, loRA_linear)
