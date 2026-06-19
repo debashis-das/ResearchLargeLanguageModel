@@ -200,8 +200,8 @@ class GRPORewardModel(nn.Module):
         logits, _ = self.model(output_tensor, attention_mask=training_mask)
         base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
 
-        logits = self.sanatize_logits(logits.detach())
-        base_logits = self.sanatize_logits(base_logits.detach())
+        logits = self.sanatize_logits(logits)
+        base_logits = self.sanatize_logits(base_logits)
 
         actions = output_tensor[..., 1:]
         if torch.isnan(logits).any():
