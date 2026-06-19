@@ -33,10 +33,10 @@ class GRPORewardModel(nn.Module):
         for param in self.base_model.parameters():
             param.requires_grad = False 
 
-    def use_base_model(self, tokens, attention_mask, mult_gpu_spread=False):
+    def use_base_model(self, tokens, attention_mask, is_multi_gpu_spread=False):
         self.base_model.eval()
         with torch.no_grad():
-            base_logits, _ = self.base_model(tokens, attention_mask=attention_mask, is_mult_gpu_spread=mult_gpu_spread)
+            base_logits, _ = self.base_model(tokens, attention_mask=attention_mask, is_multi_gpu_spread=is_multi_gpu_spread)
         return base_logits.detach()
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
@@ -196,8 +196,8 @@ class GRPORewardModel(nn.Module):
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
         training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
         
-        logits, _ = self.model(output_tensor, attention_mask=training_mask, mult_gpu_spread=True)
-        base_logits = self.use_base_model(output_tensor, attention_mask=training_mask, mult_gpu_spread=True)
+        logits, _ = self.model(output_tensor, attention_mask=training_mask, is_multi_gpu_spread=True)
+        base_logits = self.use_base_model(output_tensor, attention_mask=training_mask, is_multi_gpu_spread=True)
 
         logits = self.sanatize_logits(logits)
         base_logits = self.sanatize_logits(base_logits)
