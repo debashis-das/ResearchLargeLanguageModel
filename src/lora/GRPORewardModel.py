@@ -184,7 +184,7 @@ class GRPORewardModel(nn.Module):
         logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
         return logits.half()  # Convert back to half precision
     
-    def forward(self, x: torch.Tensor, attention_mask: torch.Tensor, training_timestep: int):
+    def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
         attention_mask = attention_mask.unsqueeze(0)  # Add batch dimension
         x = x.unsqueeze(0)
         input_sequence_length = x.shape[-1]
@@ -244,10 +244,7 @@ class GRPORewardModel(nn.Module):
             reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
         # print(f"Probs ratio batch : {probs_ratio_batch}")
         reward_batch = torch.stack(reward_batch)
-        if training_timestep < 1000 == 0:
-            advantage = reward_batch
-        else:
-            advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-8)
+        advantage = reward_batch
         
         # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)

@@ -48,7 +48,7 @@ def rl_train(load_path = ""):
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
                 try:
-                    loss = grpo_reward_model(input_ids, attention_mask=attention_mask, training_timestep=training_timestep)
+                    loss = grpo_reward_model(input_ids, attention_mask=attention_mask)
                     loss.backward()
                     optimizer.step()
                     optimizer.zero_grad(set_to_none=True)
