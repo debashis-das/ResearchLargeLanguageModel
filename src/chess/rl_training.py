@@ -23,7 +23,7 @@ dtype = torch.float16
 model = AutoModelForCausalLM.from_pretrained(
             model_path,
             dtype=dtype,
-            device_map="auto"
+            device_map="cuda:0"
         )
 model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
 device = model.device
