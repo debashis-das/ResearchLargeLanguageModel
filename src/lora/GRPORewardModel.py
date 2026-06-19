@@ -22,7 +22,6 @@ class GRPORewardModel(nn.Module):
         self.gamma = 0.99
         self.epsilon = 0.05
         self.beta = 0.02
-        self.target_kl = 0.01
 
         # base model initalization
         self.model = model
@@ -190,7 +189,7 @@ class GRPORewardModel(nn.Module):
         input_sequence_length = x.shape[-1]
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
-        output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length, temperature=0.6)
+        output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length, temperature=0.4)
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size

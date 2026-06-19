@@ -39,11 +39,19 @@ def rl_train(load_path = ""):
 
         grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, device=device, dtype=dtype)
         training_timestep = 0
+        recover = False
         for i in range(1,2):
+            if recover:
+                checkpoint = torch.load(f"model/qwen-0.6b-with-loRA-rl-model-params", map_location=device)
+                model_with_lora.load_state_dict(checkpoint['model_state_dict'])
+                optimizer.load_state_dict(checkpoint['optimizer_state_dic'])
+                training_timestep = checkpoint['epoch_per_parquet']
+                print(f"Model recovered successfully from qwen-0.6b-with-loRA-rl-model-params with loss: {checkpoint['loss']}")
+                recover = False
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-rl.parquet"
             df_input = pd.read_parquet(current_paraquet)
-            df_shuffled = df_input.sample(frac=1, ignore_index=True)
+            df_shuffled = df_input.sample(frac=1, ignore_index=True, random_state=1024)
             for _, row in df_shuffled.iterrows():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
@@ -58,6 +66,15 @@ def rl_train(load_path = ""):
                 except Exception as e:
                     print(f"An error occurred during model training: {e}")
                     traceback.print_exc()
+                    torch.save({
+                                'parquet_idx': i,
+                                'epoch_per_parquet': training_timestep,
+                                'model_state_dict': grpo_reward_model.state_dict(),
+                                'optimizer_state_dic': optimizer.state_dict(),
+                                'loss': loss
+                                }, f"model/qwen-0.6b-with-loRA-rl-model-params")
+                    print(f"Model training complete saved with name : qwen-0.6b-with-loRA-rl-model-params")
+                    recover = True
                 finally:
                     for i in range(torch.cuda.device_count()):
                         print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
