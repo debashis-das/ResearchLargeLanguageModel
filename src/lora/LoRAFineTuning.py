@@ -131,19 +131,22 @@ class LoRAFineTuning(nn.Module):
         attention_mask = self.qwen_attention_mask(batch_size, attention_mask)
         position_ids = torch.arange(seq_len, device=X.device).unsqueeze(0)
         input = self.module_dict["model.embed_tokens"](X)
-        position_embeddings = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
-        print(f"Postion embeddings shape {type(position_embeddings)}: {position_embeddings.shape}")
+        (cos, sin) = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
+        print(f"Postion embeddings shape {type(cos)}: {cos.shape}")
+        print(f"Postion embeddings shape {type(sin)}: {sin.shape}")
         for layer_number in range(self.model.config.num_hidden_layers):
             if layer_number%2 == 0:
                 input = input.to("cuda:0")
                 attention_mask = attention_mask.to("cuda:0")
-                position_embeddings = position_embeddings.to("cuda:0")
-                input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=position_embeddings)
+                cos = cos.to("cuda:0")
+                sin = sin.to("cuda:0")
+                input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=(cos, sin))
             else:
                 input = input.to("cuda:1")
                 attention_mask = attention_mask.to("cuda:1")
-                position_embeddings = position_embeddings.to("cuda:1")
-                input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=position_embeddings)
+                cos = cos.to("cuda:1")
+                sin = sin.to("cuda:1")
+                input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=(cos, sin))
         input = input.to("cuda:0")
         input = self.module_dict["model.norm"](input)
         logits_batch = self.module_dict["lm_head"](input)   # [batch, seq_len, vocab_size]
