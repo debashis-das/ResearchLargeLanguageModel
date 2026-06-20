@@ -18,7 +18,6 @@ class GRPORewardModel(nn.Module):
         self.grpo_batch = grpo_batch
         self.model_device = model_device
         self.loss_device = loss_device
-        self.loss_device = loss_device
         self.dtype = dtype
         self.total_generation_length = total_generation_length
         self.gamma = 0.99
