@@ -27,7 +27,7 @@ model = AutoModelForCausalLM.from_pretrained(
         )
 model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
 device = model.device
-optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-6)
+optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
 
 def rl_train(load_path = ""):
     try:
