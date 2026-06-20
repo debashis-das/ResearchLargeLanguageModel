@@ -12,11 +12,13 @@ from lora.LoRAFineTuning import LoRAFineTuning
 
 class GRPORewardModel(nn.Module):
 
-    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, device="cpu", dtype=torch.float16, total_generation_length=400):
+    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, model_device="cpu", loss_device="cpu", dtype=torch.float16, total_generation_length=400):
         super(GRPORewardModel, self).__init__()
         self.tokenizer = tokenizer
         self.grpo_batch = grpo_batch
-        self.device = device
+        self.model_device = model_device
+        self.loss_device = loss_device
+        self.loss_device = loss_device
         self.dtype = dtype
         self.total_generation_length = total_generation_length
         self.gamma = 0.99
@@ -32,10 +34,10 @@ class GRPORewardModel(nn.Module):
         for param in self.base_model.parameters():
             param.requires_grad = False 
 
-    def use_base_model(self, tokens, attention_mask, is_multi_gpu_spread=False):
+    def use_base_model(self, tokens, attention_mask):
         self.base_model.eval()
         with torch.no_grad():
-            base_logits, _ = self.base_model(tokens, attention_mask=attention_mask, is_multi_gpu_spread=is_multi_gpu_spread)
+            base_logits, _ = self.base_model(tokens, attention_mask=attention_mask)
         return base_logits.detach()
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
@@ -189,17 +191,18 @@ class GRPORewardModel(nn.Module):
         input_sequence_length = x.shape[-1]
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
-        output_tensor = self.model.generate(X, max_new_tokens=self.total_generation_length, temperature=0.2)
+        output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.2)
+        output_tensor = output_tensor.to(self.loss_device)
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
         training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
         
-        logits, _ = self.model(output_tensor, attention_mask=training_mask, is_multi_gpu_spread=True)
-        base_logits = self.use_base_model(output_tensor, attention_mask=training_mask, is_multi_gpu_spread=True)
+        logits, _ = self.model(output_tensor.to(self.model_device), attention_mask=training_mask.to(self.model_device), is_multi_gpu_spread=True)
+        base_logits = self.use_base_model(output_tensor.to(self.model_device), attention_mask=training_mask.to(self.model_device))
 
-        logits = self.sanatize_logits(logits)
-        base_logits = self.sanatize_logits(base_logits)
+        logits = self.sanatize_logits(logits.to(self.loss_device))
+        base_logits = self.sanatize_logits(base_logits.to(self.loss_device))
 
         actions = output_tensor[..., 1:]
         if torch.isnan(logits).any():
@@ -218,7 +221,6 @@ class GRPORewardModel(nn.Module):
         del log_probs_all
         del base_log_probs_all
 
-        base_log_probs = base_log_probs.to(self.device)
         ratio_clamp = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
         probs_ratio_batch = torch.exp(ratio_clamp)
         divergence = log_probs - base_log_probs
@@ -240,7 +242,7 @@ class GRPORewardModel(nn.Module):
             considered_tensor = tensor_per_generation
             reward = self.extract_reward(considered_tensor, input_sequence_length=input_sequence_length)
             # reward to be calculated per token
-            reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.device))
+            reward_batch.append(torch.tensor(reward, dtype=self.dtype))
         # print(f"Probs ratio batch : {probs_ratio_batch}")
         reward_batch = torch.stack(reward_batch)
         advantage = reward_batch

@@ -40,13 +40,8 @@ class LoRAFineTuning(nn.Module):
         self.create_module_dict_inject_loRA()
         self.loss_function = nn.CrossEntropyLoss()
         self.layers = self.model.config.num_hidden_layers
-        self.multi_gpu_dict = {}
-        self.default_device = "cuda:1"
-        for i in range(self.layers):
-            if i > 27:
-                self.multi_gpu_dict["model.layers." + str(i)] = "cuda:0"
-            else:
-                self.multi_gpu_dict["model.layers." + str(i)] = "cuda:1"        
+        self.multi_gpu_dict = {}  
+        self.model.gradient_checkpointing_enable()  # Enable gradient checkpointing for memory efficiency     
     
     def create_module_dict_inject_loRA(self):
         self.module_dict = {}
@@ -68,23 +63,6 @@ class LoRAFineTuning(nn.Module):
         
         for name, module in self.model.named_modules():
             self.module_dict[name] = module
-        
-    def multi_gpu_spread(self, single_gpu=False):
-        if not single_gpu:
-            for name, module in self.model.named_modules():
-                self.module_dict[name] = module
-                if name in self.multi_gpu_dict:
-                    module.to(self.multi_gpu_dict[name])
-                if name == "model.embed_tokens" or name == "model.rotary_emb" or name == "model.norm" or name == "lm_head":
-                    module.to(self.device)
-        else:
-            for name, module in self.model.named_modules():
-                self.module_dict[name] = module
-                if name in self.multi_gpu_dict:
-                    module.to(self.default_device)
-                if name == "model.embed_tokens" or name == "model.rotary_emb" or name == "model.norm" or name == "lm_head":
-                    module.to(self.default_device)
-            
 
     def qwen_attention_mask(self, batch_size, attention_mask: torch.Tensor| None):
         # Qwen model expects attention mask of shape [batch, seq_len] with 1 for tokens to attend to and 0 for tokens to ignore.
@@ -138,19 +116,7 @@ class LoRAFineTuning(nn.Module):
         input = self.module_dict["model.embed_tokens"](X)
         cos, sin = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
         for layer_number in range(self.model.config.num_hidden_layers):
-            if layer_number > 27:
-                input = input.to("cuda:0")
-                attention_mask = attention_mask.to("cuda:0")
-                cos = cos.to("cuda:0")
-                sin = sin.to("cuda:0")
-                input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=(cos, sin))
-            else:
-                input = input.to("cuda:1")
-                attention_mask = attention_mask.to("cuda:1")
-                cos = cos.to("cuda:1")
-                sin = sin.to("cuda:1")
-                input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=(cos, sin))
-        input = input.to("cuda:0")
+            input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=(cos, sin))
         input = self.module_dict["model.norm"](input)
         logits_batch = self.module_dict["lm_head"](input)   # [batch, seq_len, vocab_size]
         output_logits = logits_batch[:, :-1, :].contiguous()  # Shift logits for next-token prediction
@@ -167,10 +133,10 @@ class LoRAFineTuning(nn.Module):
     @torch.no_grad()
     def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=0.0):
         try:
-            input_ids = input_ids.to(self.default_device)
+            input_ids = input_ids.to(self.device)
             if attention_mask is not None:
-                attention_mask = attention_mask.to(self.default_device)
-            self.multi_gpu_spread(single_gpu=True)
+                attention_mask = attention_mask.to(self.device)
+            # self.multi_gpu_spread(single_gpu=True)
             self.eval()  # Set the model to evaluation mode
             kv_cache = DynamicCache(config=self.model.config)  
             assert len(input_ids.shape) in (1, 2), (
@@ -206,7 +172,7 @@ class LoRAFineTuning(nn.Module):
             ) as pbar: 
                 # generate new tokens one by one.
                 for idx in range(max_new_tokens):
-                    cache_position = torch.tensor([init_seq_len + idx], device=self.default_device)  # Positions for the new token
+                    cache_position = torch.tensor([init_seq_len + idx], device=self.device)  # Positions for the new token
                     position_ids = cache_position.unsqueeze(0)
                     next_token = self.module_dict["model.embed_tokens"](next_token)
                     position_embeddings = self.module_dict["model.rotary_emb"](next_token, position_ids)  # (cos, sin)
@@ -223,8 +189,7 @@ class LoRAFineTuning(nn.Module):
                     pbar.update(1)
             # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
             # print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
-            total_tokens = torch.cat([input_ids, generated_ids], dim=-1)
-            return total_tokens.to(self.device)
+            return torch.cat([input_ids, generated_ids], dim=-1)
         except Exception as e:
             exec_info = traceback.format_exc()
             logging.error(f"Error during text generation {exec_info}")
