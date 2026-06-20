@@ -80,7 +80,7 @@ class LoRAFineTuning(nn.Module):
                 self.module_dict[name] = module
                 if name in self.multi_gpu_dict:
                     module.to(self.default_device)
-                if name == "model.embed_tokens" or name == "model.rotary_emb":
+                if name == "model.embed_tokens" or name == "model.rotary_emb" or name == "model.norm" or name == "lm_head":
                     module.to(self.default_device)
             
 
@@ -221,7 +221,7 @@ class LoRAFineTuning(nn.Module):
                     pbar.update(1)
             # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
             # print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
-            return torch.cat([input_ids, generated_ids], dim=-1)
+            return torch.cat([input_ids, generated_ids], dim=-1, device="cuda:0")
         except Exception as e:
             exec_info = traceback.format_exc()
             logging.error(f"Error during text generation {exec_info}")
