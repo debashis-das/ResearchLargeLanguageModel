@@ -41,6 +41,7 @@ class LoRAFineTuning(nn.Module):
         self.loss_function = nn.CrossEntropyLoss()
         self.layers = self.model.config.num_hidden_layers
         self.multi_gpu_dict = {}
+        self.default_device = "cuda:1"
         for i in range(self.layers):
             if i > 27:
                 self.multi_gpu_dict["model.layers." + str(i)] = "cuda:0"
@@ -68,7 +69,7 @@ class LoRAFineTuning(nn.Module):
         for name, module in self.model.named_modules():
             self.module_dict[name] = module
         
-    def multi_gpu_spread(self, single_gpu=False, default_device="cuda:1"):
+    def multi_gpu_spread(self, single_gpu=False):
         if not single_gpu:
             for name, module in self.model.named_modules():
                 self.module_dict[name] = module
@@ -78,7 +79,7 @@ class LoRAFineTuning(nn.Module):
             for name, module in self.model.named_modules():
                 self.module_dict[name] = module
                 if name in self.multi_gpu_dict:
-                    module.to(default_device)
+                    module.to(self.default_device)
             
 
     def qwen_attention_mask(self, batch_size, attention_mask: torch.Tensor| None):
@@ -162,6 +163,9 @@ class LoRAFineTuning(nn.Module):
     @torch.no_grad()
     def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=0.0):
         try:
+            input_ids = input_ids.to(self.default_device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(self.default_device)
             self.multi_gpu_spread(single_gpu=True)
             self.eval()  # Set the model to evaluation mode
             kv_cache = DynamicCache(config=self.model.config)  
