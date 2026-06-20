@@ -75,6 +75,8 @@ class LoRAFineTuning(nn.Module):
                 self.module_dict[name] = module
                 if name in self.multi_gpu_dict:
                     module.to(self.multi_gpu_dict[name])
+                if name == "model.embed_tokens" or name == "model.rotary_emb" or name == "model.norm" or name == "lm_head":
+                    module.to(self.device)
         else:
             for name, module in self.model.named_modules():
                 self.module_dict[name] = module
