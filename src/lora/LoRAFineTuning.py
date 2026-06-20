@@ -166,31 +166,31 @@ class LoRAFineTuning(nn.Module):
             else:
                 next_token = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
             generated_ids = next_token
-            with tqdm(
-                total       = max_new_tokens,
-                desc        = "Generating text",
-                unit        = "tokens",
-                bar_format  = "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
-                ncols       = 120,       # width of the bar
-                colour      = "green",   # optional color
-            ) as pbar: 
+            # with tqdm(
+            #     total       = max_new_tokens,
+            #     desc        = "Generating text",
+            #     unit        = "tokens",
+            #     bar_format  = "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+            #     ncols       = 120,       # width of the bar
+            #     colour      = "green",   # optional color
+            # ) as pbar: 
                 # generate new tokens one by one.
-                for idx in range(max_new_tokens):
-                    cache_position = torch.tensor([init_seq_len + idx], device=self.device)  # Positions for the new token
-                    position_ids = cache_position.unsqueeze(0)
-                    next_token = self.module_dict["model.embed_tokens"](next_token)
-                    position_embeddings = self.module_dict["model.rotary_emb"](next_token, position_ids)  # (cos, sin)
-                    for layer_number in range(self.model.config.num_hidden_layers):
-                        next_token = self.action_per_layer(layer_number, next_token, position_embeddings=position_embeddings, cache_position=cache_position, kv_cache=kv_cache)
-                    next_token = self.module_dict["model.norm"](next_token)
-                    logits = self.module_dict["lm_head"](next_token)   # [batch, seq_len, vocab_size]
-                    next_token_logits = logits[:, -1, :]   # [batch, vocab_size]
-                    if temperature == 0.0:
-                        next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
-                    else:
-                        next_token = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
-                        generated_ids = torch.cat([generated_ids, next_token], dim=-1)
-                    pbar.update(1)
+            for idx in range(max_new_tokens):
+                cache_position = torch.tensor([init_seq_len + idx], device=self.device)  # Positions for the new token
+                position_ids = cache_position.unsqueeze(0)
+                next_token = self.module_dict["model.embed_tokens"](next_token)
+                position_embeddings = self.module_dict["model.rotary_emb"](next_token, position_ids)  # (cos, sin)
+                for layer_number in range(self.model.config.num_hidden_layers):
+                    next_token = self.action_per_layer(layer_number, next_token, position_embeddings=position_embeddings, cache_position=cache_position, kv_cache=kv_cache)
+                next_token = self.module_dict["model.norm"](next_token)
+                logits = self.module_dict["lm_head"](next_token)   # [batch, seq_len, vocab_size]
+                next_token_logits = logits[:, -1, :]   # [batch, vocab_size]
+                if temperature == 0.0:
+                    next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
+                else:
+                    next_token = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
+                    generated_ids = torch.cat([generated_ids, next_token], dim=-1)
+                    # pbar.update(1)
             # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
             # print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
             return torch.cat([input_ids, generated_ids], dim=-1)
