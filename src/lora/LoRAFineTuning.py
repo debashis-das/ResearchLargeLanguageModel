@@ -80,6 +80,8 @@ class LoRAFineTuning(nn.Module):
                 self.module_dict[name] = module
                 if name in self.multi_gpu_dict:
                     module.to(self.default_device)
+                if name == "model.embed_tokens" or name == "model.rotary_emb":
+                    module.to(self.default_device)
             
 
     def qwen_attention_mask(self, batch_size, attention_mask: torch.Tensor| None):
