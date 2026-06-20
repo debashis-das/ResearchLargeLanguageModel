@@ -241,7 +241,7 @@ class GRPORewardModel(nn.Module):
             considered_tensor = tensor_per_generation
             reward = self.extract_reward(considered_tensor, input_sequence_length=input_sequence_length)
             # reward to be calculated per token
-            reward_batch.append(torch.tensor(reward, dtype=self.dtype))
+            reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.loss_device))
         # print(f"Probs ratio batch : {probs_ratio_batch}")
         reward_batch = torch.stack(reward_batch)
         advantage = reward_batch
