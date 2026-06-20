@@ -221,7 +221,8 @@ class LoRAFineTuning(nn.Module):
                     pbar.update(1)
             # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
             # print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
-            return torch.cat([input_ids, generated_ids], dim=-1, device=self.device)
+            total_tokens = torch.cat([input_ids, generated_ids], dim=-1)
+            return total_tokens.to(self.device)
         except Exception as e:
             exec_info = traceback.format_exc()
             logging.error(f"Error during text generation {exec_info}")
