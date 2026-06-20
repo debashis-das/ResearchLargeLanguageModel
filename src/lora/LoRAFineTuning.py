@@ -137,6 +137,7 @@ class LoRAFineTuning(nn.Module):
     @torch.no_grad()
     def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=0.0):
         try:
+            print(f"Generating text with input_ids shape: {input_ids.shape}, attention_mask shape: {attention_mask.shape if attention_mask is not None else 'None'}, max_new_tokens: {max_new_tokens}, temperature: {temperature}")
             input_ids = input_ids.to(self.device)
             if attention_mask is not None:
                 attention_mask = attention_mask.to(self.device)
@@ -190,6 +191,8 @@ class LoRAFineTuning(nn.Module):
                 else:
                     next_token = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
                     generated_ids = torch.cat([generated_ids, next_token], dim=-1)
+                if idx % 20 == 0:
+                    print(f"Generated token {idx+1}/{max_new_tokens}")  
                     # pbar.update(1)
             # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
             # print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
