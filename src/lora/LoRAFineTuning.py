@@ -68,7 +68,7 @@ class LoRAFineTuning(nn.Module):
         for name, module in self.model.named_modules():
             self.module_dict[name] = module
         
-    def multi_gpu_spread(self, single_gpu=False, default_device="cuda:0"):
+    def multi_gpu_spread(self, single_gpu=False, default_device="cuda:1"):
         if not single_gpu:
             for name, module in self.model.named_modules():
                 self.module_dict[name] = module
