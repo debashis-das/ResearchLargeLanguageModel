@@ -197,7 +197,7 @@ class GRPORewardModel(nn.Module):
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
         training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
         
-        logits, _ = self.model(output_tensor.to(self.model_device), attention_mask=training_mask.to(self.model_device), is_multi_gpu_spread=True)
+        logits, _ = self.model(output_tensor.to(self.model_device), attention_mask=training_mask.to(self.model_device))
         base_logits = self.use_base_model(output_tensor.to(self.model_device), attention_mask=training_mask.to(self.model_device))
 
         logits = self.sanatize_logits(logits.to(self.loss_device))
