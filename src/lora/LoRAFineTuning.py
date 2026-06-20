@@ -101,34 +101,38 @@ class LoRAFineTuning(nn.Module):
             raise
 
     def forward(self, X, attention_mask=None, is_multi_gpu_spread=False):
-        assert len(X.shape) in (1, 2), (
-            f"Expected input_ids of shape [seq_len] or [batch, seq_len], got {X.shape}"
-        )
+        try:
+            assert len(X.shape) in (1, 2), (
+                f"Expected input_ids of shape [seq_len] or [batch, seq_len], got {X.shape}"
+            )
 
-        if is_multi_gpu_spread:
-            self.multi_gpu_spread()
+            if is_multi_gpu_spread:
+                self.multi_gpu_spread()
 
-        if len(X.shape) == 1:
-            X = X.unsqueeze(0)
-        batch_size, seq_len = X.shape
-        attention_mask = self.qwen_attention_mask(batch_size, attention_mask)
-        position_ids = torch.arange(seq_len, device=X.device).unsqueeze(0)
-        input = self.module_dict["model.embed_tokens"](X)
-        cos, sin = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
-        for layer_number in range(self.model.config.num_hidden_layers):
-            input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=(cos, sin))
-        input = self.module_dict["model.norm"](input)
-        logits_batch = self.module_dict["lm_head"](input)   # [batch, seq_len, vocab_size]
-        output_logits = logits_batch[:, :-1, :].contiguous()  # Shift logits for next-token prediction
-        # Shift logits and labels for next-token prediction
-        B, S, V = logits_batch.shape
-        logits = logits_batch.view(B * S, V)
-        X = X.view(B * S)
-        shifted_logits = logits[...,:-1,:].contiguous()
-        shifted_labels = X[..., 1:].contiguous()
-        # Compute loss
-        loss = self.loss_function(shifted_logits, shifted_labels)
-        return output_logits, loss
+            if len(X.shape) == 1:
+                X = X.unsqueeze(0)
+            batch_size, seq_len = X.shape
+            attention_mask = self.qwen_attention_mask(batch_size, attention_mask)
+            position_ids = torch.arange(seq_len, device=X.device).unsqueeze(0)
+            input = self.module_dict["model.embed_tokens"](X)
+            cos, sin = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
+            for layer_number in range(self.model.config.num_hidden_layers):
+                input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=(cos, sin))
+            input = self.module_dict["model.norm"](input)
+            logits_batch = self.module_dict["lm_head"](input)   # [batch, seq_len, vocab_size]
+            output_logits = logits_batch[:, :-1, :].contiguous()  # Shift logits for next-token prediction
+            # Shift logits and labels for next-token prediction
+            B, S, V = logits_batch.shape
+            logits = logits_batch.view(B * S, V)
+            X = X.view(B * S)
+            shifted_logits = logits[...,:-1,:].contiguous()
+            shifted_labels = X[..., 1:].contiguous()
+            # Compute loss
+            loss = self.loss_function(shifted_logits, shifted_labels)
+            return output_logits, loss
+        finally:
+            gc.collect()
+            torch.cuda.empty_cache()
     
     @torch.no_grad()
     def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=0.0):
@@ -195,6 +199,8 @@ class LoRAFineTuning(nn.Module):
             logging.error(f"Error during text generation {exec_info}")
             raise e
         finally:
+            gc.collect()
+            torch.cuda.empty_cache()
             self.train() 
 
     def temperature_sampling(self, temperature, next_token_logits, batch_size):
