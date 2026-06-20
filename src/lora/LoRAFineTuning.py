@@ -42,7 +42,7 @@ class LoRAFineTuning(nn.Module):
         self.layers = self.model.config.num_hidden_layers
         self.multi_gpu_dict = {}
         for i in range(self.layers):
-            if i%2 == 0:
+            if i > 15:
                 self.multi_gpu_dict["model.layers." + str(i)] = "cuda:0"
             else:
                 self.multi_gpu_dict["model.layers." + str(i)] = "cuda:1"        
@@ -133,7 +133,7 @@ class LoRAFineTuning(nn.Module):
         input = self.module_dict["model.embed_tokens"](X)
         cos, sin = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
         for layer_number in range(self.model.config.num_hidden_layers):
-            if layer_number%2 == 0:
+            if layer_number > 15:
                 input = input.to("cuda:0")
                 attention_mask = attention_mask.to("cuda:0")
                 cos = cos.to("cuda:0")
