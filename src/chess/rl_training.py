@@ -51,15 +51,15 @@ def rl_train(load_path = ""):
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-rl.parquet"
             df_input = pd.read_parquet(current_paraquet)
-            df_shuffled = df_input.sample(frac=1, ignore_index=True, random_state=7687)
+            df_shuffled = df_input.sample(frac=1, ignore_index=True, random_state=8787)
             for _, row in df_shuffled.iterrows():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
                 try:
                     loss = grpo_reward_model(input_ids, attention_mask=attention_mask)
+                    optimizer.zero_grad(set_to_none=True)
                     loss.backward()
                     optimizer.step()
-                    optimizer.zero_grad(set_to_none=True)
                     training_timestep += 1
                     if training_timestep % 1 == 0:
                         print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")

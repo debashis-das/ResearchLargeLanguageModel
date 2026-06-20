@@ -190,8 +190,11 @@ class GRPORewardModel(nn.Module):
         input_sequence_length = x.shape[-1]
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
-        output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.01)
-        output_tensor = output_tensor.to(self.loss_device)
+        with torch.no_grad():
+            output_tensor_md = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.01)
+        output_tensor = output_tensor_md.to(self.loss_device)
+        del output_tensor_md
+
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
