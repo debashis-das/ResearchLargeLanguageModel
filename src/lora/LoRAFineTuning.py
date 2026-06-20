@@ -204,7 +204,7 @@ class LoRAFineTuning(nn.Module):
             ) as pbar: 
                 # generate new tokens one by one.
                 for idx in range(max_new_tokens):
-                    cache_position = torch.tensor([init_seq_len + idx], device=self.device)  # Positions for the new token
+                    cache_position = torch.tensor([init_seq_len + idx], device=self.default_device)  # Positions for the new token
                     position_ids = cache_position.unsqueeze(0)
                     next_token = self.module_dict["model.embed_tokens"](next_token)
                     position_embeddings = self.module_dict["model.rotary_emb"](next_token, position_ids)  # (cos, sin)
@@ -221,7 +221,7 @@ class LoRAFineTuning(nn.Module):
                     pbar.update(1)
             # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
             # print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
-            return torch.cat([input_ids, generated_ids], dim=-1, device="cuda:0")
+            return torch.cat([input_ids, generated_ids], dim=-1, device=self.device)
         except Exception as e:
             exec_info = traceback.format_exc()
             logging.error(f"Error during text generation {exec_info}")
