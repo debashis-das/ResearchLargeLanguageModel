@@ -209,8 +209,8 @@ class GRPORewardModel(nn.Module):
             print("NaN in base_logits!")
             exit()
 
-        log_probs_all = torch.nn.functional.log_softmax(logits.float(), dim=-1).half()
-        base_log_probs_all = torch.nn.functional.log_softmax(base_logits.float(), dim=-1).half()        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
+        log_probs_all = torch.nn.functional.log_softmax(logits, dim=-1)
+        base_log_probs_all = torch.nn.functional.log_softmax(base_logits, dim=-1)        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
 
         log_probs = torch.gather(log_probs_all, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
         base_log_probs = torch.gather(base_log_probs_all, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
