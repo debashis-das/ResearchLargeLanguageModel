@@ -239,6 +239,14 @@ class GRPORewardModel(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
 
+        if torch.isnan(base_log_probs).any():
+            print("NaN in base_log_probs!")
+            exit()
+
+        if torch.isnan(log_probs).any():
+            print("NaN in log_probs!")
+            exit()
+
         ratio_clamp = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
         probs_ratio_batch = torch.exp(ratio_clamp)
         divergence = log_probs - base_log_probs
