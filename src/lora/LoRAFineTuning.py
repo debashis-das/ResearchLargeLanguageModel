@@ -105,7 +105,6 @@ class LoRAFineTuning(nn.Module):
             assert len(X.shape) in (1, 2), (
                 f"Expected input_ids of shape [seq_len] or [batch, seq_len], got {X.shape}"
             )
-
             if len(X.shape) == 1:
                 X = X.unsqueeze(0)
             batch_size, seq_len = X.shape
@@ -117,10 +116,10 @@ class LoRAFineTuning(nn.Module):
                 input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=(cos, sin))
             input = self.module_dict["model.norm"](input)
             logits_batch = self.module_dict["lm_head"](input)   # [batch, seq_len, vocab_size]
-            output_logits = logits_batch[:, :-1, :].contiguous()  # Shift logits for next-token prediction
             if with_no_loss:
-                return output_logits, None
+                return logits_batch[:, :-1, :], None
             # Shift logits and labels for next-token prediction
+            output_logits = logits_batch[:, :-1, :].contiguous()  # Shift logits for next-token prediction
             B, S, V = logits_batch.shape
             logits = logits_batch.view(B * S, V)
             X = X.view(B * S)
