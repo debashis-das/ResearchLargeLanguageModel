@@ -181,8 +181,8 @@ class GRPORewardModel(nn.Module):
         logits = torch.clamp(logits, min=-50, max=50)  # Clamp logits to avoid extreme values
         logsumexp = torch.logsumexp(logits, dim=-1, keepdim=True)
         logits = torch.exp(logits - logsumexp)  # Normalize logits to prevent overflow in softmax
-        logits = torch.nan_to_num(logits, nan=0.0)
-        logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
+        # logits = torch.nan_to_num(logits, nan=0.0)
+        # logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
         return logits  # Convert back to half precision
     
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
