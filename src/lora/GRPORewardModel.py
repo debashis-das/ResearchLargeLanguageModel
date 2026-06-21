@@ -206,10 +206,8 @@ class GRPORewardModel(nn.Module):
         if torch.isnan(logits).any():
             print("NaN in logits!")
             exit()
-
+        logsumexp = torch.logsumexp(logits, dim=-1)
         selected_logits = torch.gather(logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
-        logsumexp = torch.logsumexp(selected_logits, dim=-1)
-        print(f"logits : {logits.shape} Actions : {actions.shape} Selected logits : {selected_logits.shape} : Logsumexp : {logsumexp.shape}")
         log_probs = selected_logits - logsumexp
 
         del attention_mask
@@ -225,8 +223,8 @@ class GRPORewardModel(nn.Module):
 
         with torch.no_grad():
             base_logits = self.use_base_model(output_tensor.detach(), attention_mask=training_mask)
+            logsumexp_base = torch.logsumexp(base_logits, dim=-1)
             selected_base_logits = torch.gather(base_logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
-            logsumexp_base = torch.logsumexp(selected_base_logits, dim=-1)
             base_log_probs = selected_base_logits - logsumexp_base
 
         if torch.isnan(base_logits).any():
