@@ -250,6 +250,10 @@ class GRPORewardModel(nn.Module):
         probs_ratio_batch = torch.exp(ratio_clamp)
         divergence = log_probs - base_log_probs
 
+        if torch.isnan(divergence).any():
+            print("NaN in divergence!")
+            exit()
+
         del log_probs
         del base_log_probs
         del ratio_clamp
