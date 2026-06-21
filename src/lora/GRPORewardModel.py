@@ -28,7 +28,7 @@ class GRPORewardModel(nn.Module):
         self.model = model
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
         for p in self.model.parameters():
-            p.data += 0.0005 * torch.randn_like(p)    
+            p.data += 0.05 * torch.randn_like(p)    
         self.base_model = deepcopy(model)
         for param in self.base_model.parameters():
             param.requires_grad = False 
@@ -181,10 +181,10 @@ class GRPORewardModel(nn.Module):
         logits = torch.clamp(logits, min=-50, max=50)  # Clamp logits to avoid extreme values
         selected_logits = torch.gather(logits, dim=-1, index=actions).squeeze(-1)
         logsumexp = torch.logsumexp(logits, dim=-1)
-        print(f"logits: {logits.shape} : actions: {actions.shape} : logsumexp: {logsumexp.shape}")
+        # print(f"logits: {logits.shape} : actions: {actions.shape} : logsumexp: {logsumexp.shape}")
         # logits = torch.nan_to_num(logits, nan=0.0)
         # logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
-        print(f"Selected logits: {selected_logits.shape}")
+        # print(f"Selected logits: {selected_logits.shape}")
         log_probs = selected_logits - logsumexp
         return log_probs  # Convert back to half precision
     
@@ -195,7 +195,7 @@ class GRPORewardModel(nn.Module):
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
         with torch.no_grad():
-            output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.01)
+            output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.7)
 
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
