@@ -203,38 +203,52 @@ class GRPORewardModel(nn.Module):
         logits, _ = self.model(output_tensor, attention_mask=training_mask, with_no_loss=True)
         logits = self.sanatize_logits(logits)
 
+        if torch.isnan(logits).any():
+            print("NaN in logits!")
+            exit()
+
         logsumexp = torch.logsumexp(logits, dim=-1)
         selected_logits = torch.gather(logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
         log_probs = selected_logits - logsumexp
+
+        del attention_mask
+        del mask_addition
+        del extra_mask
+        del X
+        del x
+        del logits
+        del logsumexp
+        del selected_logits
+        gc.collect()
+        torch.cuda.empty_cache()
+
         with torch.no_grad():
             base_logits = self.use_base_model(output_tensor.detach(), attention_mask=training_mask)
             logsumexp_base = torch.logsumexp(base_logits, dim=-1)
             selected_base_logits = torch.gather(base_logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
             base_log_probs = selected_base_logits - logsumexp_base
 
-        if torch.isnan(logits).any():
-            print("NaN in logits!")
-            exit()
         if torch.isnan(base_logits).any():
             print("NaN in base_logits!")
             exit()
+
+        del training_mask
+        del base_logits
+        del logsumexp_base
+        del selected_base_logits
+        gc.collect()
+        torch.cuda.empty_cache()
 
         ratio_clamp = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
         probs_ratio_batch = torch.exp(ratio_clamp)
         divergence = log_probs - base_log_probs
 
-        del attention_mask
-        del mask_addition
-        del extra_mask
-        del training_mask
-        del X
-        del x
         del log_probs
         del base_log_probs
         del ratio_clamp
         gc.collect()
         torch.cuda.empty_cache()
-        # print(f"probs_ratio_batch : {torch.isnan(probs_ratio_batch).any()} : divergence : {torch.isnan(divergence).any()}")
+
         with torch.no_grad():
             reward_batch = []
             for tensor_per_generation in output_tensor.detach().cpu():
@@ -258,10 +272,6 @@ class GRPORewardModel(nn.Module):
         product = product.half()
 
         product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
-        # print(f"product : {product.max()} : product_with_clipping : {product_with_clipping.max()} : divergence : {divergence.max()}")
-        # print(f"product : {product.min()} : product_with_clipping : {product_with_clipping.min()} : divergence : {divergence.min()}")
-        # print(f"product : {product.mean()} : product_with_clipping : {product_with_clipping.mean()} : divergence : {divergence.mean()}")
-        
         loss = -torch.min(product, product_with_clipping) + self.beta * divergence
         print(f"Loss : {loss.mean()} : Advantage : {advantage.mean()} : Product : {product.mean()} : Product with clipping : {product_with_clipping.mean()} : Divergence : {divergence.mean()}")
 
