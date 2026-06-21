@@ -176,13 +176,14 @@ class GRPORewardModel(nn.Module):
         reward = self.chess_reward_function(prompt, generation)
         return reward
 
-    # def sanatize_logits(self, logits: torch.Tensor):
-    #     logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
-    #     logits = torch.clamp(logits, min=-50, max=50)  # Clamp logits to avoid extreme values
-    #     logits = torch.nn.functional.softmax(logits.float(), dim=-1)  
-    #     logits = torch.nan_to_num(logits, nan=0.0)
-    #     logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
-    #     return logits.half()  # Convert back to half precision
+    def sanatize_logits(self, logits: torch.Tensor):
+        logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
+        logits = torch.clamp(logits, min=-50, max=50)  # Clamp logits to avoid extreme values
+        logsumexp = torch.logsumexp(logits, dim=-1, keepdim=True)
+        logits = torch.exp(logits - logsumexp)  # Normalize logits to prevent overflow in softmax
+        logits = torch.nan_to_num(logits, nan=0.0)
+        logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
+        return logits  # Convert back to half precision
     
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
         attention_mask = attention_mask.unsqueeze(0)  # Add batch dimension
@@ -200,17 +201,17 @@ class GRPORewardModel(nn.Module):
 
         actions = output_tensor[..., 1:]
         logits, _ = self.model(output_tensor, attention_mask=training_mask, with_no_loss=True)
+        logits = self.sanatize_logits(logits)
+
         logsumexp = torch.logsumexp(logits, dim=-1)
         selected_logits = torch.gather(logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
         log_probs = selected_logits - logsumexp
         with torch.no_grad():
             base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
+            base_logits = self.sanatize_logits(base_logits.to(self.loss_device))
             logsumexp_base = torch.logsumexp(base_logits, dim=-1)
             selected_base_logits = torch.gather(base_logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
             base_log_probs = selected_base_logits - logsumexp_base
-
-        # logits = self.sanatize_logits(logits.to(self.loss_device))
-        # base_logits = self.sanatize_logits(base_logits.to(self.loss_device))
 
         if torch.isnan(logits).any():
             print("NaN in logits!")
