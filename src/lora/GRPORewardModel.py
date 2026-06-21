@@ -176,13 +176,13 @@ class GRPORewardModel(nn.Module):
         reward = self.chess_reward_function(prompt, generation)
         return reward
 
-    def sanatize_logits(self, logits: torch.Tensor):
-        logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
-        logits = torch.clamp(logits, min=-50, max=50)  # Clamp logits to avoid extreme values
-        logits = torch.nn.functional.softmax(logits.float(), dim=-1)  
-        logits = torch.nan_to_num(logits, nan=0.0)
-        logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
-        return logits.half()  # Convert back to half precision
+    # def sanatize_logits(self, logits: torch.Tensor):
+    #     logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
+    #     logits = torch.clamp(logits, min=-50, max=50)  # Clamp logits to avoid extreme values
+    #     logits = torch.nn.functional.softmax(logits.float(), dim=-1)  
+    #     logits = torch.nan_to_num(logits, nan=0.0)
+    #     logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
+    #     return logits.half()  # Convert back to half precision
     
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
         attention_mask = attention_mask.unsqueeze(0)  # Add batch dimension
@@ -191,37 +191,33 @@ class GRPORewardModel(nn.Module):
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
         with torch.no_grad():
-            output_tensor_md = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.01)
-        output_tensor = output_tensor_md.to(self.loss_device)
-        del output_tensor_md
+            output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.01)
 
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
         training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
-        
-        logits, _ = self.model(output_tensor.to(self.model_device), attention_mask=training_mask.to(self.model_device))
-        base_logits = self.use_base_model(output_tensor.to(self.model_device), attention_mask=training_mask.to(self.model_device))
-
-        logits = self.sanatize_logits(logits.to(self.loss_device))
-        base_logits = self.sanatize_logits(base_logits.to(self.loss_device))
 
         actions = output_tensor[..., 1:]
+        logits, _ = self.model(output_tensor, attention_mask=training_mask)
+        logsumexp = torch.logsumexp(logits, dim=-1)
+        selected_logits = torch.gather(logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
+        log_probs = selected_logits - logsumexp
+        with torch.no_grad():
+            base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
+            logsumexp_base = torch.logsumexp(base_logits, dim=-1)
+            selected_base_logits = torch.gather(base_logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
+            base_log_probs = selected_base_logits - logsumexp_base
+
+        # logits = self.sanatize_logits(logits.to(self.loss_device))
+        # base_logits = self.sanatize_logits(base_logits.to(self.loss_device))
+
         if torch.isnan(logits).any():
             print("NaN in logits!")
             exit()
         if torch.isnan(base_logits).any():
             print("NaN in base_logits!")
             exit()
-
-        log_probs_all = torch.nn.functional.log_softmax(logits, dim=-1)
-        base_log_probs_all = torch.nn.functional.log_softmax(base_logits, dim=-1)        # print(f"log_probs : {torch.isnan(log_probs).any()} : base_log_probs : {torch.isnan(base_log_probs).any()}")
-
-        log_probs = torch.gather(log_probs_all, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
-        base_log_probs = torch.gather(base_log_probs_all, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
-        
-        del log_probs_all
-        del base_log_probs_all
 
         ratio_clamp = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
         probs_ratio_batch = torch.exp(ratio_clamp)
@@ -239,15 +235,18 @@ class GRPORewardModel(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
         # print(f"probs_ratio_batch : {torch.isnan(probs_ratio_batch).any()} : divergence : {torch.isnan(divergence).any()}")
-        reward_batch = []
-        for tensor_per_generation in output_tensor:
-            considered_tensor = tensor_per_generation
-            reward = self.extract_reward(considered_tensor, input_sequence_length=input_sequence_length)
-            # reward to be calculated per token
-            reward_batch.append(torch.tensor(reward, dtype=self.dtype, device=self.loss_device))
-        # print(f"Probs ratio batch : {probs_ratio_batch}")
-        reward_batch = torch.stack(reward_batch)
-        advantage = reward_batch
+        with torch.no_grad():
+            reward_batch = []
+            for tensor_per_generation in output_tensor.detach().cpu():
+                considered_tensor = tensor_per_generation
+                reward = self.extract_reward(considered_tensor, input_sequence_length=input_sequence_length)
+                # reward to be calculated per token
+                reward_batch.append(torch.tensor(reward, dtype=self.dtype))
+            # print(f"Probs ratio batch : {probs_ratio_batch}")
+            reward_batch = torch.stack(reward_batch)
+        reward_batch = reward_batch.to(self.model_device)
+        advantage = (reward_batch - reward_batch.mean())*2.0  # Normalize advantages and scale
+        advantage = torch.clamp(advantage, min=0.0)  # Only consider positive advantages for the loss calculation
         
         # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
