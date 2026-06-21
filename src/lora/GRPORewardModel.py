@@ -206,8 +206,8 @@ class GRPORewardModel(nn.Module):
         logits, _ = self.model(output_tensor, attention_mask=training_mask, with_no_loss=True)
         log_probs = self.sanatize_logits(logits, actions.unsqueeze(-1))
 
-        if torch.isnan(logits).any():
-            print("NaN in logits!")
+        if torch.isnan(log_probs).any():
+            print("NaN in log_probs!")
             exit()
 
         del attention_mask
@@ -225,7 +225,7 @@ class GRPORewardModel(nn.Module):
             selected_base_logits = torch.gather(base_logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
             base_log_probs = selected_base_logits - logsumexp_base
 
-        if torch.isnan(base_logits).any():
+        if torch.isnan(base_log_probs).any():
             print("NaN in base_logits!")
             exit()
 
@@ -235,14 +235,6 @@ class GRPORewardModel(nn.Module):
         del selected_base_logits
         gc.collect()
         torch.cuda.empty_cache()
-
-        if torch.isnan(base_log_probs).any():
-            print("NaN in base_log_probs!")
-            exit()
-
-        if torch.isnan(log_probs).any():
-            print("NaN in log_probs!")
-            exit()
 
         ratio_clamp = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
         probs_ratio_batch = torch.exp(ratio_clamp)
