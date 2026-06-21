@@ -36,7 +36,7 @@ class GRPORewardModel(nn.Module):
     def use_base_model(self, tokens, attention_mask):
         self.base_model.eval()
         with torch.no_grad():
-            base_logits, _ = self.base_model(tokens, attention_mask=attention_mask)
+            base_logits, _ = self.base_model(tokens, attention_mask=attention_mask, with_no_loss=True)
         return base_logits.detach()
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
@@ -199,7 +199,7 @@ class GRPORewardModel(nn.Module):
         training_mask = torch.cat([torch.zeros_like(attention_mask), extra_mask], dim=-1)
 
         actions = output_tensor[..., 1:]
-        logits, _ = self.model(output_tensor, attention_mask=training_mask)
+        logits, _ = self.model(output_tensor, attention_mask=training_mask, with_no_loss=True)
         logsumexp = torch.logsumexp(logits, dim=-1)
         selected_logits = torch.gather(logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
         log_probs = selected_logits - logsumexp

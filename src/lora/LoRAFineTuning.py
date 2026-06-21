@@ -100,14 +100,11 @@ class LoRAFineTuning(nn.Module):
             logging.error(f"Error in layer {current_layer_number} : {e} : {traceback_info}")
             raise
 
-    def forward(self, X, attention_mask=None, is_multi_gpu_spread=False):
+    def forward(self, X, attention_mask=None, with_no_loss=False):
         try:
             assert len(X.shape) in (1, 2), (
                 f"Expected input_ids of shape [seq_len] or [batch, seq_len], got {X.shape}"
             )
-
-            if is_multi_gpu_spread:
-                self.multi_gpu_spread()
 
             if len(X.shape) == 1:
                 X = X.unsqueeze(0)
@@ -121,6 +118,8 @@ class LoRAFineTuning(nn.Module):
             input = self.module_dict["model.norm"](input)
             logits_batch = self.module_dict["lm_head"](input)   # [batch, seq_len, vocab_size]
             output_logits = logits_batch[:, :-1, :].contiguous()  # Shift logits for next-token prediction
+            if with_no_loss:
+                return output_logits, None
             # Shift logits and labels for next-token prediction
             B, S, V = logits_batch.shape
             logits = logits_batch.view(B * S, V)
