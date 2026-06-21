@@ -207,7 +207,7 @@ class GRPORewardModel(nn.Module):
         selected_logits = torch.gather(logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
         log_probs = selected_logits - logsumexp
         with torch.no_grad():
-            base_logits = self.use_base_model(output_tensor, attention_mask=training_mask)
+            base_logits = self.use_base_model(output_tensor.detach(), attention_mask=training_mask)
             base_logits = self.sanatize_logits(base_logits)
             logsumexp_base = torch.logsumexp(base_logits, dim=-1)
             selected_base_logits = torch.gather(base_logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
