@@ -62,7 +62,7 @@ def rl_train(load_path = ""):
                     optimizer.step()
                     training_timestep += 1
                     # if training_timestep % 1 == 0:
-                    #     print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
+                    print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
                 except Exception as e:
                     print(f"An error occurred during model training: {e}")
                     traceback.print_exc()
