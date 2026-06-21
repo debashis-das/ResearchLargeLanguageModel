@@ -23,7 +23,7 @@ dtype = torch.float16
 model = AutoModelForCausalLM.from_pretrained(
             model_path,
             dtype=dtype,
-            device_map="cuda:1"
+            device_map="cuda:0"
         )
 model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
 device = model.device
@@ -37,7 +37,7 @@ def rl_train(load_path = ""):
             optimizer.load_state_dict(checkpoint['optimizer_state_dic'])
             print(f"Model loaded successfully from {load_path} with loss: {checkpoint['loss']}")
 
-        grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, model_device="cuda:1", loss_device="cuda:0", dtype=dtype)
+        grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, model_device="cuda:0", dtype=dtype)
         training_timestep = 0
         recover = False
         for i in range(1,2):

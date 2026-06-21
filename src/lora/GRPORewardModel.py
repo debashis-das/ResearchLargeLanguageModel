@@ -12,12 +12,12 @@ from lora.LoRAFineTuning import LoRAFineTuning
 
 class GRPORewardModel(nn.Module):
 
-    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, model_device="cpu", loss_device="cpu", dtype=torch.float16, total_generation_length=300):
+    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, model_device="cpu", dtype=torch.float16, total_generation_length=300):
         super(GRPORewardModel, self).__init__()
         self.tokenizer = tokenizer
         self.grpo_batch = grpo_batch
         self.model_device = model_device
-        self.loss_device = loss_device
+        # self.loss_device = loss_device
         self.dtype = dtype
         self.total_generation_length = total_generation_length
         self.gamma = 0.99
