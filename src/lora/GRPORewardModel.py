@@ -117,9 +117,11 @@ class GRPORewardModel(nn.Module):
             # print(f"Input moves extracted for board state initialization: {input_moves}")
             game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
             same_generations = 0
+            reward = 0.0
             if "moves:" not in generation:
                 print(f"No moves generated. Penalizing reward.")
                 return -10.0
+            reward += 1.0  # Reward for generating output in the expected format
             moves_generations_with_extra_text = generation.split("moves:")
             # print(f"moves_generations_with_extra_text : {len(moves_generations_with_extra_text)} : {moves_generations_with_extra_text}")
             if len(moves_generations_with_extra_text) == 0:
@@ -128,25 +130,24 @@ class GRPORewardModel(nn.Module):
                 print(f"[Ideal case] Generated new moves : {generation_move_no - move_no} : Reward : {current_reward}")
                 return current_reward
             dont_consider = False
-            reward = 0.0
             reward_list = []
             for m in range(0, len(moves_generations_with_extra_text)):
                 # print(f"Processing generation segment : {moves_generations_with_extra_text[m]}")
                 if m%2 == 0:
                     if play_as == "white" and "play_as: black" in moves_generations_with_extra_text[m]:
-                        reward -= 10.0
+                        reward -= 0.5
                         dont_consider = True
                     elif play_as == "black" and "play_as: white" in moves_generations_with_extra_text[m]:
-                        reward -= 10.0
+                        reward -= 0.5
                         dont_consider = True
                     else:
                         dont_consider = False
                 elif m%2 == 1 and not dont_consider:
                     moves = moves_generations_with_extra_text[m]
-                    current_reward = 0.0
+                    current_reward = reward
                     same_generations += 1
                     if same_generations > 1:
-                        current_reward -= 10.0
+                        current_reward -= 0.2
                         print(f"Multiple generations detected. Penalizing reward. Current reward: {current_reward}")
                     moves = moves.strip()
                     generation_move_no = move_no
@@ -162,7 +163,6 @@ class GRPORewardModel(nn.Module):
         except Exception as e:
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
-            reward -= 1.0
         max_move_with_reward = reward_list[0] if len(reward_list) > 0 else (0.0, move_no)
         for gen in reward_list:
             if gen[1] > max_move_with_reward[1]:
@@ -245,9 +245,11 @@ class GRPORewardModel(nn.Module):
             # print(f"Probs ratio batch : {probs_ratio_batch}")
             reward_batch = torch.stack(reward_batch)
         reward_batch = reward_batch.to(self.model_device)
+
         advantage = (reward_batch - reward_batch.mean())*2.0  # Normalize advantages and scale
         advantage = torch.clamp(advantage, min=0.0)  # Only consider positive advantages for the loss calculation
-        
+        if advantage.mean() <= 0:
+            advantage = reward_batch
         # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
