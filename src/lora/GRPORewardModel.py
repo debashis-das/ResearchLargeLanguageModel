@@ -28,7 +28,7 @@ class GRPORewardModel(nn.Module):
         self.model = model
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
         for p in self.model.parameters():
-            p.data += 0.05 * torch.randn_like(p)    
+            p.data += 0.005 * torch.randn_like(p)    
         self.base_model = deepcopy(model)
         for param in self.base_model.parameters():
             param.requires_grad = False 
@@ -195,7 +195,7 @@ class GRPORewardModel(nn.Module):
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
         with torch.no_grad():
-            output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.7)
+            output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.1)
 
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
@@ -294,3 +294,12 @@ class GRPORewardModel(nn.Module):
         print("-------------------------------------------------------------")
         print(f"Generation : {self.tokenizer.decode(tensor_per_generation[X.shape[-1]:], skip_special_tokens=True)}")
         print("-------------------------------------------------------------")
+
+if __name__ == "__main__":
+    reward_batch = torch.tensor([-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, 1.0], dtype=torch.float32)
+    advantage = (reward_batch - reward_batch.mean())*2.0  # Normalize advantages and scale
+    advantage = torch.clamp(advantage, min=0.0)  # Only consider positive advantages for the loss calculation
+    if advantage.mean() <= 0:
+        advantage = reward_batch
+    # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
+    advantage = advantage.unsqueeze(-1).unsqueeze(-1)
