@@ -209,6 +209,7 @@ class GRPORewardModel(nn.Module):
 
         selected_logits = torch.gather(logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
         logsumexp = torch.logsumexp(selected_logits, dim=-1)
+        print(f"logits : {logits.shape} Actions : {actions.shape} Selected logits : {selected_logits.shape} : Logsumexp : {logsumexp.shape}")
         log_probs = selected_logits - logsumexp
 
         del attention_mask
