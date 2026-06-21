@@ -180,7 +180,7 @@ class GRPORewardModel(nn.Module):
         logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
         logits = torch.clamp(logits, min=-50, max=50)  # Clamp logits to avoid extreme values
         selected_logits = torch.gather(logits, dim=-1, index=actions).squeeze(-1)
-        logsumexp = torch.logsumexp(logits, dim=-1, keepdim=True)
+        logsumexp = torch.logsumexp(logits, dim=-1)
         print(f"logits: {logits.shape} : actions: {actions.shape} : logsumexp: {logsumexp.shape}")
         # logits = torch.nan_to_num(logits, nan=0.0)
         # logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
