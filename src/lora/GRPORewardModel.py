@@ -181,10 +181,10 @@ class GRPORewardModel(nn.Module):
         logits = torch.clamp(logits, min=-50, max=50)  # Clamp logits to avoid extreme values
         logsumexp = torch.logsumexp(logits, dim=-1, keepdim=True)
         logits = torch.exp(logits - logsumexp)  # Normalize logits to prevent overflow in softmax
-        print(f"logits: {logits}")
+        print(f"logits: {logits.shape} : actions: {actions.shape}")
         # logits = torch.nan_to_num(logits, nan=0.0)
         # logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
-        selected_logits = torch.gather(logits, dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
+        selected_logits = torch.gather(logits, dim=-1, index=actions).squeeze(-1)
         print(f"Selected logits: {selected_logits}")
         log_probs = selected_logits - logsumexp
         return log_probs  # Convert back to half precision
