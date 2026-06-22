@@ -12,7 +12,7 @@ from lora.LoRAFineTuning import LoRAFineTuning
 
 class GRPORewardModel(nn.Module):
 
-    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, model_device="cpu", dtype=torch.float16, total_generation_length=300):
+    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, model_device="cpu", dtype=torch.float16, total_generation_length=400):
         super(GRPORewardModel, self).__init__()
         self.tokenizer = tokenizer
         self.grpo_batch = grpo_batch
@@ -259,9 +259,10 @@ class GRPORewardModel(nn.Module):
             reward_batch = torch.stack(reward_batch)
         reward_batch = reward_batch.to(self.model_device)
 
-        advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-4)  # Normalize advantages
-        if reward_batch.std() < 1e-6:
-            advantage = torch.zeros_like(reward_batch)
+        advantage = (reward_batch - reward_batch.mean())*2  # Normalize advantages
+        advantage = torch.clamp(advantage, min=0.0)  # Only consider positive advantages for the loss calculation
+        if advantage.mean() <= 0:
+            advantage = reward_batch
         # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
