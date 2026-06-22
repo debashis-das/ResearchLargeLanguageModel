@@ -236,9 +236,8 @@ class GRPORewardModel(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
 
-        ratio_clamp = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
-        probs_ratio_batch = torch.exp(ratio_clamp)
-        divergence = ratio_clamp
+        divergence = log_probs - base_log_probs
+        ratio = torch.exp(divergence)
 
         if torch.isnan(divergence).any():
             print("NaN in divergence!")
@@ -246,7 +245,6 @@ class GRPORewardModel(nn.Module):
 
         del log_probs
         del base_log_probs
-        del ratio_clamp
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -261,25 +259,21 @@ class GRPORewardModel(nn.Module):
             reward_batch = torch.stack(reward_batch)
         reward_batch = reward_batch.to(self.model_device)
 
-        advantage = (reward_batch - reward_batch.mean())*2.0  # Normalize advantages and scale
-        advantage = torch.clamp(advantage, min=0.0)  # Only consider positive advantages for the loss calculation
-        if advantage.mean() <= 0:
-            advantage = reward_batch
+        advantage = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-4)  # Normalize advantages
+        if reward_batch.std() < 1e-6:
+            advantage = torch.zeros_like(reward_batch)
         # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
         advantage = advantage.unsqueeze(-1).unsqueeze(-1)
         
-        product = advantage.float() * probs_ratio_batch.float()
-        product = torch.nan_to_num(product, 0.0)
-        product = product.half()
-
-        product_with_clipping = torch.clamp(probs_ratio_batch, 1.0 - self.epsilon, 1.0 + self.epsilon)*advantage
-        loss = -torch.min(product, product_with_clipping) + self.beta * divergence
-        print(f"Loss : {loss.mean()} : Advantage : {advantage.mean()} : Product : {product.mean()} : Product with clipping : {product_with_clipping.mean()} : Divergence : {divergence.mean()}")
+        product = advantage.float() * ratio.float()
+        product_clamped = advantage.float() * torch.clamp(ratio.float(), 1.0 - self.epsilon, 1.0 + self.epsilon)
+        loss = -torch.min(product, product_clamped) + self.beta * divergence
+        print(f"Loss : {loss.mean()} : Advantage : {advantage.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : Divergence : {divergence.mean()}")
 
         del reward_batch
         del advantage
         del product
-        del product_with_clipping
+        del product_clamped
         del divergence
         gc.collect()
         torch.cuda.empty_cache()
