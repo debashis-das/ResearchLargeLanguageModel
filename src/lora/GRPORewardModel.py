@@ -236,7 +236,7 @@ class GRPORewardModel(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
 
-        divergence = log_probs - base_log_probs
+        divergence = torch.clamp(log_probs - base_log_probs, min=-50, max=50)
         ratio = torch.exp(divergence)
 
         if torch.isnan(divergence).any():
