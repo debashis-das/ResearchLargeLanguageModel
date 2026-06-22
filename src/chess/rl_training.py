@@ -37,7 +37,7 @@ def rl_train(load_path = ""):
             optimizer.load_state_dict(checkpoint['optimizer_state_dic'])
             print(f"Model loaded successfully from {load_path} with loss: {checkpoint['loss']}")
 
-        grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=8, model_device="cuda:0", dtype=dtype)
+        grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=6, model_device="cuda:0", dtype=dtype)
         training_timestep = 0
         recover = False
         for i in range(1,2):
