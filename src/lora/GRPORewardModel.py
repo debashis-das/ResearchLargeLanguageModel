@@ -128,6 +128,8 @@ class GRPORewardModel(nn.Module):
                 current_reward = 10.0
                 _, current_reward, all_valid, generation_move_no = self.board_state(generation.strip(), game, current_reward, ignore_moves_till = move_no, play_as=play_as)
                 print(f"[Ideal case] Generated new moves : {generation_move_no - move_no} : Reward : {current_reward}")
+                if current_reward < 0:
+                    return reward
                 return current_reward
             dont_consider = False
             reward_list = []
@@ -144,7 +146,7 @@ class GRPORewardModel(nn.Module):
                         dont_consider = False
                 elif m%2 == 1 and not dont_consider:
                     moves = moves_generations_with_extra_text[m]
-                    current_reward = reward
+                    current_reward = 0.0
                     same_generations += 1
                     if same_generations > 1:
                         current_reward -= 0.2
@@ -159,7 +161,10 @@ class GRPORewardModel(nn.Module):
                             current_reward += 10.0
                         elif play_as in ["white", "black"] and "1/2-1/2" in moves:                            
                             current_reward += 5.0
-                    reward_list.append((current_reward, generation_move_no))    
+                    if current_reward < 0:
+                        reward_list.append((1, generation_move_no))
+                    else:
+                        reward_list.append((current_reward+1, generation_move_no))    
         except Exception as e:
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
@@ -168,6 +173,8 @@ class GRPORewardModel(nn.Module):
             if gen[1] > max_move_with_reward[1]:
                 max_move_with_reward = gen
         print(f"Generated new moves ({reward_list}) : {max_move_with_reward[1] - move_no} : Reward : {max_move_with_reward[0]}")
+        if max_move_with_reward[0] < 0:
+            return 1.0
         return max_move_with_reward[0]
 
     def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
