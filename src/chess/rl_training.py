@@ -56,7 +56,7 @@ def rl_train(load_path = ""):
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
                 same_batch_count = 0
-                while same_batch_count > 2:
+                while same_batch_count < 2:
                     try:
                         loss = grpo_reward_model(input_ids, attention_mask=attention_mask)
                         optimizer.zero_grad(set_to_none=True)
