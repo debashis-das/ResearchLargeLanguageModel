@@ -80,7 +80,7 @@ def rl_train(load_path = ""):
                     finally:
                         for i in range(torch.cuda.device_count()):
                             print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
-                        if training_timestep % 1000 == 0 and loss is not None:
+                        if training_timestep % 500 == 0 and loss is not None:
                             torch.save({
                                         'parquet_idx': i,
                                         'epoch_per_parquet': training_timestep,
