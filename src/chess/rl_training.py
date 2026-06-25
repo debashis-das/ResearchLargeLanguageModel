@@ -89,11 +89,11 @@ def rl_train(load_path = ""):
                                         'loss': loss
                                         }, f"model/qwen-0.6b-with-loRA-rl-model-params")
                             print(f"Model training complete saved with name : qwen-0.6b-with-loRA-rl-model-params")
-                        del input_ids
-                        del attention_mask
                         gc.collect()
                         torch.cuda.empty_cache()
                         same_batch_count += 1
+                del input_ids
+                del attention_mask
                         
     except Exception as e:
         print(f"An error occurred during Parquet generation test: {e}")
