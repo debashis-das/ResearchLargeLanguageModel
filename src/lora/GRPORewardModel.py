@@ -98,7 +98,7 @@ class GRPORewardModel(nn.Module):
                 all_valid = False
                 break
         if count_valid_moves == 0:
-            reward -= 10.0
+            reward -= 1.0
         else:
             reward += count_valid_moves * 0.5
         if all_valid:
@@ -120,7 +120,7 @@ class GRPORewardModel(nn.Module):
             reward = 0.0
             if "moves:" not in generation:
                 print(f"No moves generated. Penalizing reward.")
-                return -10.0
+                return -1.0
             reward += 1.0  # Reward for generating output in the expected format
             moves_generations_with_extra_text = generation.split("moves:")
             # print(f"moves_generations_with_extra_text : {len(moves_generations_with_extra_text)} : {moves_generations_with_extra_text}")
@@ -267,7 +267,8 @@ class GRPORewardModel(nn.Module):
         reward_batch = reward_batch.to(self.model_device)
         advantage = reward_batch - reward_batch.mean()
         advantage = advantage / (advantage.abs().mean() + 1e-6) # Normalize advantages
-        weights = 1.5*torch.tanh(advantage)  # smooth gating
+        weights = 1.5*torch.tanh(advantage) + 0.1  # smooth gating
+        weights = weights + 0.01 * torch.sign(weights)
         weights = weights.unsqueeze(-1).unsqueeze(-1)
         
         product = weights.float() * ratio.float()
