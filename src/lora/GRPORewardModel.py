@@ -202,7 +202,7 @@ class GRPORewardModel(nn.Module):
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
         with torch.no_grad():
-            output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.1)
+            output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.7)
 
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
@@ -243,7 +243,7 @@ class GRPORewardModel(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
 
-        divergence = torch.clamp(log_probs - base_log_probs, min=-50, max=50)
+        divergence = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
         ratio = torch.exp(divergence)
 
         if torch.isnan(divergence).any():
@@ -265,18 +265,15 @@ class GRPORewardModel(nn.Module):
             # print(f"Probs ratio batch : {probs_ratio_batch}")
             reward_batch = torch.stack(reward_batch)
         reward_batch = reward_batch.to(self.model_device)
-
-        advantage = (reward_batch - reward_batch.mean())*2  # Normalize advantages
-        advantage = torch.clamp(advantage, min=0.0)  # Only consider positive advantages for the loss calculation
-        if advantage.mean() <= 0:
-            advantage = reward_batch
-        # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
-        advantage = advantage.unsqueeze(-1).unsqueeze(-1)
+        advantage = reward_batch - reward_batch.mean()
+        advantage = advantage / (advantage.abs().mean() + 1e-6) # Normalize advantages
+        weights = 1.5*torch.tanh(advantage)  # smooth gating
+        weights = weights.unsqueeze(-1).unsqueeze(-1)
         
-        product = advantage.float() * ratio.float()
-        product_clamped = advantage.float() * torch.clamp(ratio.float(), 1.0 - self.epsilon, 1.0 + self.epsilon)
+        product = weights.float() * ratio.float()
+        product_clamped = weights.float() * torch.clamp(ratio.float(), 1.0 - self.epsilon, 1.0 + self.epsilon)
         loss = -torch.min(product, product_clamped) + self.beta * divergence
-        print(f"Loss : {loss.mean()} : Advantage : {advantage.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : Divergence : {divergence.mean()}")
+        print(f"Loss : {loss.mean()} : Advantage weight : {weights.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : Divergence : {divergence.mean()}")
 
         del reward_batch
         del advantage
