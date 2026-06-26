@@ -40,7 +40,7 @@ def rl_train(load_path = ""):
         grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=5, model_device=device, dtype=dtype)
         training_timestep = 0
         recover = False
-        for i in range(1,2):
+        for i in range(5):
             if recover:
                 checkpoint = torch.load(f"model/qwen-0.6b-with-loRA-rl-model-params", map_location=device)
                 model_with_lora.load_state_dict(checkpoint['model_state_dict'])
