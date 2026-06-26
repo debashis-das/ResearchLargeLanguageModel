@@ -40,9 +40,9 @@ class GRPORewardModel(nn.Module):
         return base_logits.detach()
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
-        print(f"Processing moves for board state: {moves} | Ignore moves till: {ignore_moves_till} | Play as: {play_as}")
+        # print(f"Processing moves for board state: {moves} | Ignore moves till: {ignore_moves_till} | Play as: {play_as}")
         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
-        print("Moves cleaned for board state processing: ", moves_clean)
+        # print("Moves cleaned for board state processing: ", moves_clean)
         # Match: move_number. white_move [black_move]
         pattern = r'(\d+)\.\s+(\S+)(?:\s+(?!\d+\.)(\S+))?'
         count_valid_moves = 0
@@ -56,7 +56,8 @@ class GRPORewardModel(nn.Module):
                     continue
                 white   = m.group(2)
                 black   = m.group(3)  # None if Black didn't play (resignation)
-                # print(f"[Ignore till {ignore_moves_till}] Processing move number {move_no} : White move : {white} : Black move : {black}")
+                if ignore_moves_till > 0:
+                    print(f"[Ignore till {ignore_moves_till}] Processing move number {move_no} : White move : {white} : Black move : {black}")
                 if play_as == "white" and move_no == ignore_moves_till:
                     continue
                 if play_as == "black" and move_no == ignore_moves_till and black is not None:
