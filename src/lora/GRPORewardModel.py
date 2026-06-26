@@ -117,6 +117,7 @@ class GRPORewardModel(nn.Module):
             # print(f"Input moves extracted for board state initialization: {input_moves}")
             game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
             # print(f"Base moves : {move_no} : Play as : {play_as}")
+            print(f"Processing output for reward calculation: {generation}")
             _, current_reward, all_valid, generation_move_no = self.board_state(generation.strip(), game, ignore_moves_till = move_no, play_as=play_as)
             if current_reward < 0:
                 return -1.0
@@ -159,7 +160,7 @@ class GRPORewardModel(nn.Module):
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
         with torch.no_grad():
-            output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.1)
+            output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.5)
 
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
