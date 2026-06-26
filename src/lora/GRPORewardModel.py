@@ -226,7 +226,7 @@ class GRPORewardModel(nn.Module):
         print(f"Reward {reward_batch} : {advantage}")
 
         weights = 1.5*torch.tanh(advantage) + 0.1  # smooth gating
-        weights = weights + 0.01 * torch.sign(weights)
+        weights = weights + 0.01 * torch.sign(reward_batch)
         weights = weights.unsqueeze(-1).unsqueeze(-1)
         
         product = weights.float() * ratio.float()
