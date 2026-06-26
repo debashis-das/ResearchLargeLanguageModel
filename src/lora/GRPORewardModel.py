@@ -12,7 +12,7 @@ from lora.LoRAFineTuning import LoRAFineTuning
 
 class GRPORewardModel(nn.Module):
 
-    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, model_device="cpu", dtype=torch.float16, total_generation_length=300):
+    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, model_device="cpu", dtype=torch.float16, total_generation_length=50):
         super(GRPORewardModel, self).__init__()
         self.tokenizer = tokenizer
         self.grpo_batch = grpo_batch
@@ -136,6 +136,7 @@ class GRPORewardModel(nn.Module):
         return 0.0
 
     def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
+        print(f"Extracting reward for tensor of shape: {self.tokenizer.decode(tensor_per_generation, skip_special_tokens=True)}")
         prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
         generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
         reward = self.chess_reward_function(prompt, generation)
@@ -220,6 +221,7 @@ class GRPORewardModel(nn.Module):
                 reward = self.extract_reward(considered_tensor, input_sequence_length=input_sequence_length)
                 # reward to be calculated per token
                 reward_batch.append(torch.tensor(reward, dtype=self.dtype))
+                print("-------------------------------------------------------------")
             # print(f"Probs ratio batch : {probs_ratio_batch}")
             reward_batch = torch.stack(reward_batch)
         reward_batch = reward_batch.to(self.model_device)
