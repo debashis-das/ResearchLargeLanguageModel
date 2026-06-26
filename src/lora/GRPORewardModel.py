@@ -135,7 +135,7 @@ class GRPORewardModel(nn.Module):
         prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
         generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
         reward = self.chess_reward_function(prompt, generation)
-        print("-------------------------------------------------------------")
+        # print("-------------------------------------------------------------")
         return reward
 
     def sanatize_logits(self, logits: torch.Tensor, actions: torch.Tensor):
@@ -157,7 +157,7 @@ class GRPORewardModel(nn.Module):
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
         with torch.no_grad():
-            output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.1)
+            output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.7)
 
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
@@ -217,7 +217,7 @@ class GRPORewardModel(nn.Module):
                 reward = self.extract_reward(considered_tensor, input_sequence_length=input_sequence_length)
                 # reward to be calculated per token
                 reward_batch.append(torch.tensor(reward, dtype=self.dtype))
-                print("-------------------------------------------------------------")
+                # print("-------------------------------------------------------------")
             # print(f"Probs ratio batch : {probs_ratio_batch}")
             reward_batch = torch.stack(reward_batch)
         reward_batch = reward_batch.to(self.model_device)
