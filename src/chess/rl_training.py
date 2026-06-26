@@ -55,19 +55,30 @@ def rl_train(load_path = ""):
             for _, row in df_shuffled.iterrows():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
-                same_batch_count = 0
-                while same_batch_count < 2:
-                    try:
-                        loss = grpo_reward_model(input_ids, attention_mask=attention_mask)
-                        optimizer.zero_grad(set_to_none=True)
-                        loss.backward()
-                        optimizer.step()
-                        training_timestep += 1
-                        # if training_timestep % 1 == 0:
-                        print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
-                    except Exception as e:
-                        print(f"An error occurred during model training: {e}")
-                        traceback.print_exc()
+                try:
+                    loss = grpo_reward_model(input_ids, attention_mask=attention_mask)
+                    optimizer.zero_grad(set_to_none=True)
+                    loss.backward()
+                    optimizer.step()
+                    training_timestep += 1
+                    # if training_timestep % 1 == 0:
+                    print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
+                except Exception as e:
+                    print(f"An error occurred during model training: {e}")
+                    traceback.print_exc()
+                    torch.save({
+                                'parquet_idx': i,
+                                'epoch_per_parquet': training_timestep,
+                                'model_state_dict': grpo_reward_model.state_dict(),
+                                'optimizer_state_dic': optimizer.state_dict(),
+                                'loss': loss
+                                }, f"model/qwen-0.6b-with-loRA-rl-model-params")
+                    print(f"Model training complete saved with name : qwen-0.6b-with-loRA-rl-model-params")
+                    recover = True
+                finally:
+                    for i in range(torch.cuda.device_count()):
+                        print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
+                    if training_timestep % 500 == 0 and loss is not None:
                         torch.save({
                                     'parquet_idx': i,
                                     'epoch_per_parquet': training_timestep,
@@ -76,25 +87,10 @@ def rl_train(load_path = ""):
                                     'loss': loss
                                     }, f"model/qwen-0.6b-with-loRA-rl-model-params")
                         print(f"Model training complete saved with name : qwen-0.6b-with-loRA-rl-model-params")
-                        recover = True
-                    finally:
-                        for i in range(torch.cuda.device_count()):
-                            print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
-                        if training_timestep % 500 == 0 and loss is not None:
-                            torch.save({
-                                        'parquet_idx': i,
-                                        'epoch_per_parquet': training_timestep,
-                                        'model_state_dict': grpo_reward_model.state_dict(),
-                                        'optimizer_state_dic': optimizer.state_dict(),
-                                        'loss': loss
-                                        }, f"model/qwen-0.6b-with-loRA-rl-model-params")
-                            print(f"Model training complete saved with name : qwen-0.6b-with-loRA-rl-model-params")
-                        gc.collect()
-                        torch.cuda.empty_cache()
-                        same_batch_count += 1
-                del input_ids
-                del attention_mask
-                        
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    del input_ids
+                    del attention_mask
     except Exception as e:
         print(f"An error occurred during Parquet generation test: {e}")
 
