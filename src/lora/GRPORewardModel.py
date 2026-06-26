@@ -41,6 +41,7 @@ class GRPORewardModel(nn.Module):
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
+        print("Moves cleaned for board state processing: ", moves_clean)
         # Match: move_number. white_move [black_move]
         pattern = r'(\d+)\.\s+(\S+)(?:\s+(?!\d+\.)(\S+))?'
         count_valid_moves = 0
@@ -136,11 +137,10 @@ class GRPORewardModel(nn.Module):
         return 0.0
 
     def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
-        print(f"Extracting reward for tensor of shape: {self.tokenizer.decode(tensor_per_generation, skip_special_tokens=True)}")
-        print("-------------------------------------------------------------")
         prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
         generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
         reward = self.chess_reward_function(prompt, generation)
+        print("-------------------------------------------------------------")
         return reward
 
     def sanatize_logits(self, logits: torch.Tensor, actions: torch.Tensor):
