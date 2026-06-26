@@ -106,6 +106,7 @@ class GRPORewardModel(nn.Module):
             reward += count_valid_moves * 0.5
         if all_valid:
             reward += 5.0
+        print(f"Board state processing complete. Total valid moves: {count_valid_moves}, Reward: {reward}, All moves valid: {all_valid}, Last move number processed: {move_no}")
         return chess_board, reward, all_valid, move_no
 
     # reward for proper format of the output
