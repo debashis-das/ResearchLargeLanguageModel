@@ -189,8 +189,8 @@ class LoRAFineTuning(nn.Module):
                 else:
                     next_token = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
                     generated_ids = torch.cat([generated_ids, next_token], dim=-1)
-                if idx % 100 == 0:
-                    print(f"Generated token {idx+1}/{max_new_tokens}")  
+                # if idx % 100 == 0:
+                    # print(f"Generated token {idx+1}/{max_new_tokens}")  
                     # pbar.update(1)
             # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
             # print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  
