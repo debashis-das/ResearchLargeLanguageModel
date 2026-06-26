@@ -228,22 +228,31 @@ def apply_move(
     """Return a new board with the move applied (does not mutate input)."""
     nb = copy.deepcopy(board)
     p = nb[m.fr][m.ff]
+
+    # 🚨 NEW: Prevent capturing own piece
+    target = nb[m.tr][m.tf]
+    if target and pc(target) == pc(p):
+        raise ValueError(f"Illegal move: cannot capture own piece on {sq_name(m.tr, m.tf)}")
+
     if m.castle:
         r = m.fr
-        nb[r][m.tf] = p; nb[m.fr][m.ff] = None
+        nb[r][m.tf] = p
+        nb[m.fr][m.ff] = None
         if m.castle == "K":
-            nb[r][5] = nb[r][7]; nb[r][7] = None
+            nb[r][5] = nb[r][7]
+            nb[r][7] = None
         else:
-            nb[r][3] = nb[r][0]; nb[r][0] = None
+            nb[r][3] = nb[r][0]
+            nb[r][0] = None
     else:
         if m.ep:
             ep_r = m.fr
             nb[ep_r][m.tf] = None
-        nb[m.tr][m.tf] = p; nb[m.fr][m.ff] = None
+        nb[m.tr][m.tf] = p
+        nb[m.fr][m.ff] = None
         if pt(p) == "P" and m.tr in (0, 7):
             nb[m.tr][m.tf] = pc(p) + (promo or "Q")
     return nb
-
 
 def legal_moves(
     board: list[list[Optional[str]]],
@@ -462,51 +471,53 @@ class ChessGame:
         Returns (True, canonical_san) on success.
         Returns (False, error_message) on failure.
         """
-        if self.result:
-            return False, f"Game is already over: {self.result}"
+        try:
+            if self.result:
+                return False, f"Game is already over: {self.result}"
 
-        parsed = parse_san(san, self.board, self.turn, self.en_passant, self.castling)
-        if parsed is None:
-            return False, f'Illegal or ambiguous move: "{san}" for {self.turn} to move'
+            parsed = parse_san(san, self.board, self.turn, self.en_passant, self.castling)
+            if parsed is None:
+                return False, f'Illegal or ambiguous move: "{san}" for {self.turn} to move'
 
-        m, promo = parsed
-        canonical = move_to_san(self.board, m, promo, self.en_passant, self.castling)
+            m, promo = parsed
+            canonical = move_to_san(self.board, m, promo, self.en_passant, self.castling)
 
-        # Update castling rights
-        p = self.board[m.fr][m.ff]
-        if p:
-            if pt(p) == "K":
-                self.castling[self.turn + "K"] = False
-                self.castling[self.turn + "Q"] = False
-            if pt(p) == "R":
-                if m.ff == 0: self.castling[self.turn + "Q"] = False
-                if m.ff == 7: self.castling[self.turn + "K"] = False
-        if self.board[m.tr][m.tf]:
-            tgt = self.board[m.tr][m.tf]
-            if pt(tgt) == "R":
-                opc = opp(self.turn)
-                if m.tf == 0: self.castling[opc + "Q"] = False
-                if m.tf == 7: self.castling[opc + "K"] = False
+            # Update castling rights
+            p = self.board[m.fr][m.ff]
+            if p:
+                if pt(p) == "K":
+                    self.castling[self.turn + "K"] = False
+                    self.castling[self.turn + "Q"] = False
+                if pt(p) == "R":
+                    if m.ff == 0: self.castling[self.turn + "Q"] = False
+                    if m.ff == 7: self.castling[self.turn + "K"] = False
+            if self.board[m.tr][m.tf]:
+                tgt = self.board[m.tr][m.tf]
+                if pt(tgt) == "R":
+                    opc = opp(self.turn)
+                    if m.tf == 0: self.castling[opc + "Q"] = False
+                    if m.tf == 7: self.castling[opc + "K"] = False
 
-        # En passant target for next move
-        self.en_passant = (m.fr + (-1 if self.turn == "w" else 1), m.ff) if m.double_push else None
+            # En passant target for next move
+            self.en_passant = (m.fr + (-1 if self.turn == "w" else 1), m.ff) if m.double_push else None
 
-        # Halfmove clock
-        captured = self.board[m.tr][m.tf] is not None or m.ep
-        pawn_move = pt(p) == "P" if p else False
-        self.halfmove_clock = 0 if (captured or pawn_move) else self.halfmove_clock + 1
+            # Halfmove clock
+            captured = self.board[m.tr][m.tf] is not None or m.ep
+            pawn_move = pt(p) == "P" if p else False
+            self.halfmove_clock = 0 if (captured or pawn_move) else self.halfmove_clock + 1
 
-        # Apply move
-        self.board = apply_move(self.board, m, self.castling, promo)
-        self.move_list.append(canonical)
+            # Apply move
+            self.board = apply_move(self.board, m, self.castling, promo)
+            self.move_list.append(canonical)
 
-        if self.turn == "b":
-            self.fullmove_number += 1
-        self.turn = opp(self.turn)
+            if self.turn == "b":
+                self.fullmove_number += 1
+            self.turn = opp(self.turn)
 
-        # Check game termination
-        self._check_termination()
-
+            # Check game termination
+            self._check_termination()
+        except ValueError:
+            return False, "illegal move"
         return True, canonical
 
     # ── Verify move without applying ─────────────────────────────────────────

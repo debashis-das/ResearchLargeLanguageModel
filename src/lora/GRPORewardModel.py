@@ -54,7 +54,7 @@ class GRPORewardModel(nn.Module):
                     continue
                 white   = m.group(2)
                 black   = m.group(3)  # None if Black didn't play (resignation)
-
+                # print(f"[Ignore till {ignore_moves_till}] Processing move number {move_no} : White move : {white} : Black move : {black}")
                 if play_as == "white" and move_no == ignore_moves_till:
                     continue
                 if play_as == "black" and move_no == ignore_moves_till and black is not None:
@@ -112,70 +112,27 @@ class GRPORewardModel(nn.Module):
             game = ChessGame()
             # print(f"Processing output for reward calculation: {prompt} | {generation}")
             # input extraction and create board state based on the input moves
-            input_moves =  (prompt.rsplit("Generation Instructions:")[0].strip().rsplit("moves:")[-1].strip())
+            input_moves =  (prompt.rsplit("Task:")[0].strip().rsplit("moves:")[-1].strip())
             play_as = (prompt.split("play_as:")[-1].strip().split("moves:")[0].strip())
             # print(f"Input moves extracted for board state initialization: {input_moves}")
             game, _, _, move_no = self.board_state(input_moves, game, play_as=play_as)
-            same_generations = 0
-            reward = 0.0
-            if "moves:" not in generation:
-                print(f"No moves generated. Penalizing reward.")
+            # print(f"Base moves : {move_no} : Play as : {play_as}")
+            _, current_reward, all_valid, generation_move_no = self.board_state(generation.strip(), game, ignore_moves_till = move_no, play_as=play_as)
+            if current_reward < 0:
                 return -1.0
-            reward += 1.0  # Reward for generating output in the expected format
-            moves_generations_with_extra_text = generation.split("moves:")
-            # print(f"moves_generations_with_extra_text : {len(moves_generations_with_extra_text)} : {moves_generations_with_extra_text}")
-            if len(moves_generations_with_extra_text) == 0:
-                current_reward = 10.0
-                _, current_reward, all_valid, generation_move_no = self.board_state(generation.strip(), game, current_reward, ignore_moves_till = move_no, play_as=play_as)
-                print(f"[Ideal case] Generated new moves : {generation_move_no - move_no} : Reward : {current_reward}")
-                if current_reward < 0:
-                    return reward
-                return current_reward
-            dont_consider = False
-            reward_list = []
-            for m in range(0, len(moves_generations_with_extra_text)):
-                # print(f"Processing generation segment : {moves_generations_with_extra_text[m]}")
-                if m%2 == 0:
-                    if play_as == "white" and "play_as: black" in moves_generations_with_extra_text[m]:
-                        reward -= 0.5
-                        dont_consider = True
-                    elif play_as == "black" and "play_as: white" in moves_generations_with_extra_text[m]:
-                        reward -= 0.5
-                        dont_consider = True
-                    else:
-                        dont_consider = False
-                elif m%2 == 1 and not dont_consider:
-                    moves = moves_generations_with_extra_text[m]
-                    current_reward = 0.0
-                    same_generations += 1
-                    if same_generations > 1:
-                        current_reward -= 0.2
-                        print(f"Multiple generations detected. Penalizing reward. Current reward: {current_reward}")
-                    moves = moves.strip()
-                    generation_move_no = move_no
-                    _, current_reward, all_valid, generation_move_no = self.board_state(moves, game, current_reward, ignore_moves_till = move_no, play_as=play_as)
-                    if all_valid:
-                        if play_as == "white" and "1-0" in moves:
-                            current_reward += 10.0
-                        elif play_as == "black" and "0-1" in moves:
-                            current_reward += 10.0
-                        elif play_as in ["white", "black"] and "1/2-1/2" in moves:                            
-                            current_reward += 5.0
-                    if current_reward < 0:
-                        reward_list.append((1, generation_move_no))
-                    else:
-                        reward_list.append((current_reward+1, generation_move_no))    
+            print(f"[Ideal case] Generated new moves : {generation_move_no - move_no} : Reward : {current_reward}")
+            if all_valid:
+                if play_as == "white" and "1-0" in generation:
+                    current_reward += 10.0
+                elif play_as == "black" and "0-1" in generation:
+                    current_reward += 10.0
+                elif play_as in ["white", "black"] and "1/2-1/2" in generation:                            
+                    current_reward += 5.0
+            return current_reward
         except Exception as e:
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
-        max_move_with_reward = reward_list[0] if len(reward_list) > 0 else (0.0, move_no)
-        for gen in reward_list:
-            if gen[1] > max_move_with_reward[1]:
-                max_move_with_reward = gen
-        print(f"Generated new moves ({reward_list}) : {max_move_with_reward[1] - move_no} : Reward : {max_move_with_reward[0]}")
-        if max_move_with_reward[0] < 0:
-            return 1.0
-        return max_move_with_reward[0]
+        return 0.0
 
     def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
         prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
@@ -296,10 +253,23 @@ class GRPORewardModel(nn.Module):
         print("-------------------------------------------------------------")
 
 if __name__ == "__main__":
-    reward_batch = torch.tensor([-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, 1.0], dtype=torch.float32)
-    advantage = (reward_batch - reward_batch.mean())*2.0  # Normalize advantages and scale
-    advantage = torch.clamp(advantage, min=0.0)  # Only consider positive advantages for the loss calculation
-    if advantage.mean() <= 0:
-        advantage = reward_batch
-    # print(f"Reward batch : {reward_batch} : Advantage : {advantage}")
-    advantage = advantage.unsqueeze(-1).unsqueeze(-1)
+    sample_prompt = f"""
+        <system>
+        You are a strong chess engine.
+        Output must be strictly in SAN format with move numbers.
+        No explanations, no extra text.
+
+        <user>
+        play_as: white
+        moves: "1. d4 e6 2. a3 Nc6 3. Nc3 Bb4 4. axb4 a5 5. b5 Nb4 "
+
+        Task:
+        - Continue the game
+        - Play optimally
+        - End only at checkmate or resignation
+        - Output only moves
+
+        <assistant>"""
+    generation_text = f"""6. g4 g5 7. h4 gxh4 8. g5 h3 9. g6 h2 10. g7 h1=Q 11. g8=Q+ Ke7 12. Qg5+ Kd6 13. Qc5#"""
+    # print(chess_reward_function(sample_prompt, generation_text))
+    
