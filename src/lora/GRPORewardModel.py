@@ -137,6 +137,7 @@ class GRPORewardModel(nn.Module):
 
     def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
         print(f"Extracting reward for tensor of shape: {self.tokenizer.decode(tensor_per_generation, skip_special_tokens=True)}")
+        print("-------------------------------------------------------------")
         prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
         generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
         reward = self.chess_reward_function(prompt, generation)
