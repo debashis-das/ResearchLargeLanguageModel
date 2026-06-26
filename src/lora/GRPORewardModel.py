@@ -40,6 +40,7 @@ class GRPORewardModel(nn.Module):
         return base_logits.detach()
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
+        print(f"Processing moves for board state: {moves} | Ignore moves till: {ignore_moves_till} | Play as: {play_as}")
         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
         print("Moves cleaned for board state processing: ", moves_clean)
         # Match: move_number. white_move [black_move]
