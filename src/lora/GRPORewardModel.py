@@ -55,8 +55,8 @@ class GRPORewardModel(nn.Module):
                     continue
                 white   = m.group(2)
                 black   = m.group(3)  # None if Black didn't play (resignation)
-                if ignore_moves_till > 0:
-                    print(f"[Ignore till {ignore_moves_till}] Processing move number {move_no} : White move : {white} : Black move : {black}")
+                # if ignore_moves_till > 0:
+                #     print(f"[Ignore till {ignore_moves_till}] Processing move number {move_no} : White move : {white} : Black move : {black}")
                 if play_as == "white" and move_no == ignore_moves_till:
                     continue
                 if play_as == "black" and move_no == ignore_moves_till and black is not None:
@@ -99,7 +99,7 @@ class GRPORewardModel(nn.Module):
             reward -= 1.0
         else:
             reward += count_valid_moves * 0.5
-        # print(f"Board state processing complete. Total valid moves: {count_valid_moves}, Reward: {reward}, Last move number processed: {move_no}")
+            # print(f" Total valid moves: {count_valid_moves}, Reward: {reward}, Last move number processed: {move_no}")
         return chess_board, reward, move_no
 
     # reward for proper format of the output
@@ -118,7 +118,7 @@ class GRPORewardModel(nn.Module):
             _, current_reward, generation_move_no = self.board_state(generation.strip(), game, ignore_moves_till = move_no, play_as=play_as)
             if current_reward < 0:
                 return -1.0
-            print(f"[Ideal case] Generated new moves : {generation_move_no - move_no} : Reward : {current_reward}")
+            print(f"[Positive reward] Generated new moves : {generation_move_no - move_no} : Reward : {current_reward}")
             if play_as == "white" and "1-0" in generation:
                 current_reward += 10.0
             elif play_as == "black" and "0-1" in generation:
