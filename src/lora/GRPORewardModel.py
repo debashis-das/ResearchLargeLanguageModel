@@ -59,6 +59,7 @@ class GRPORewardModel(nn.Module):
             chunk = chunk.strip()
             if not chunk.startswith("1."):
                 continue
+            count_valid_moves = 0
             for m in re.finditer(pattern, chunk):
                 try:
                     move_no = int(m.group(1))
