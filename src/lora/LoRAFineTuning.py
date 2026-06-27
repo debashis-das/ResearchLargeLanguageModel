@@ -186,15 +186,14 @@ class LoRAFineTuning(nn.Module):
                 next_token_logits = logits[:, -1, :]   # [batch, vocab_size]
                 if temperature == 0.0:
                     next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
+                    generated_ids = torch.cat([generated_ids, next_token], dim=-1)
                 else:
                     next_token = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
                     generated_ids = torch.cat([generated_ids, next_token], dim=-1)
-                print(f"{idx} : {next_token} : {generated_ids.shape}")  # Debugging line to check generated token IDs at each step
                 # if idx % 100 == 0:
                     # print(f"Generated token {idx+1}/{max_new_tokens}")  
                     # pbar.update(1)
             print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
-            print(f"Generated token IDs: {generated_ids}")  # Debugging line to check generated token IDs
             print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  # Debugging line to check generated text
             return torch.cat([input_ids, generated_ids], dim=-1)
         except Exception as e:
