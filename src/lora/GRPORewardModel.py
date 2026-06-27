@@ -55,6 +55,8 @@ class GRPORewardModel(nn.Module):
         chunks = re.split(r'(?=\b1\.\s*)', moves_clean)
         max_reward = 0.0
         no_moves_generated = False
+        max_move_no = 0
+
         for chunk in chunks:
             chunk = chunk.strip()
             if not chunk.startswith("1."):
@@ -107,13 +109,15 @@ class GRPORewardModel(nn.Module):
                     print(f"An error occurred while processing moves: {e}")
                     traceback.print_exc()
                     break
+                finally:
+                    max_move_no = max(max_move_no, move_no)
             max_reward = max(max_reward, count_valid_moves * 0.5)
             if count_valid_moves > 0:
                 no_moves_generated = True
         if not no_moves_generated:
-            return chess_board, -1, move_no
+            return chess_board, -1, max_move_no
         # print(f" Total valid moves: {count_valid_moves}, Reward: {reward}, Last move number processed: {move_no}")
-        return chess_board, max_reward, move_no
+        return chess_board, max_reward, max_move_no
 
     # reward for proper format of the output
     def chess_reward_function(self, prompt, generation):
