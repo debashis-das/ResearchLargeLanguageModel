@@ -42,7 +42,8 @@ def sft_train():
                     row_rl = df_rl_input.sample(n=1).iloc[0]
                     input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                     attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
-                    model_with_lora.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=50, temperature=0.7)
+                    generation_ids = model_with_lora.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=50, temperature=0.7)
+                    print(f"Generated text: {tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                 try:
                     _, loss = model_with_lora(input_ids, attention_mask=attention_mask)
                     loss = loss / accumulation_steps
@@ -79,13 +80,15 @@ def sft_train():
         print(f"An error occurred during training the model: {e}")
 
 if __name__ == "__main__":
-    sft_train()
-    model_with_lora.load_state_dict(torch.load(f"model/qwen-0.6b-with-loRA-sft-model-params")['model_state_dict'])
-    i=3
-    current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
-    df_rl_input = pd.read_parquet(current_rl_paraquet)
-    row_rl = df_rl_input.sample(n=1).iloc[0]
-    input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
-    attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
-    output_ids = model_with_lora.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=100, temperature=0.7)
-    print(f"Generated text: {tokenizer.decode(output_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
+    try:
+        sft_train()
+    finally:
+        model_with_lora.load_state_dict(torch.load(f"model/qwen-0.6b-with-loRA-sft-model-params")['model_state_dict'])
+        i=3
+        current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
+        df_rl_input = pd.read_parquet(current_rl_paraquet)
+        row_rl = df_rl_input.sample(n=1).iloc[0]
+        input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
+        attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
+        output_ids = model_with_lora.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=100, temperature=0.7)
+        print(f"Generated text: {tokenizer.decode(output_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
