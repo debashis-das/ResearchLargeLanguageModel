@@ -38,8 +38,8 @@ def sft_train():
                     current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
                     df_rl_input = pd.read_parquet(current_rl_paraquet)
                     row_rl = df_rl_input.sample(n=1).iloc[0]
-                    input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device)
-                    attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device)
+                    input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
+                    attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
                     generated_ids = model_with_lora.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=10)
                     print(f"Generated text: {tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}") 
                 try:
