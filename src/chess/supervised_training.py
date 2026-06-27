@@ -25,6 +25,7 @@ def sft_train():
         training_timestep = 0
         running_loss = torch.zeros([1], dtype=torch.float32, device=device)
         optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
+        end = False
         for i in range(2):
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
@@ -32,7 +33,8 @@ def sft_train():
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             loss = None
             for _, row in df_shuffled.iterrows():
-                if training_timestep > 100:
+                if training_timestep > 50:
+                    end = True
                     break
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
@@ -62,7 +64,7 @@ def sft_train():
                     print(f"An error occurred during model training: {e}")
                     raise
                 finally:
-                    if training_timestep % 25 == 0 and loss is not None:
+                    if (training_timestep % 25 == 0 and loss is not None) or end:
                         
                         torch.save({
                                     'parquet_idx': i,
