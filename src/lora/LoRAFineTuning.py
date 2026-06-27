@@ -189,7 +189,7 @@ class LoRAFineTuning(nn.Module):
                 else:
                     next_token = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
                     generated_ids = torch.cat([generated_ids, next_token], dim=-1)
-                print(f"{idx} : {next_token}")
+                print(f"{idx} : {next_token} : {generated_ids.shape}")  # Debugging line to check generated token IDs at each step
                 # if idx % 100 == 0:
                     # print(f"Generated token {idx+1}/{max_new_tokens}")  
                     # pbar.update(1)
