@@ -40,7 +40,7 @@ def sft_train():
                     row_rl = df_rl_input.sample(n=1).iloc[0]
                     input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                     attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
-                    model_with_lora.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=50)
+                    model_with_lora.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=50, temperature=0.7)
                 try:
                     _, loss = model_with_lora(input_ids, attention_mask=attention_mask)
                     loss = loss / accumulation_steps
