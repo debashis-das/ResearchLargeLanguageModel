@@ -33,11 +33,20 @@ class GRPORewardModel(nn.Module):
         for param in self.base_model.parameters():
             param.requires_grad = False 
 
+    def set_model_after_recovery(self, model: LoRAFineTuning):
+        self.model = model
+
     def use_base_model(self, tokens, attention_mask):
         self.base_model.eval()
         with torch.no_grad():
             base_logits, _ = self.base_model(tokens, attention_mask=attention_mask, with_no_loss=True)
         return base_logits.detach()
+    
+    def generate(self, input_ids, attention_mask, max_new_tokens=10, temperature=0.01):
+        self.model.eval()
+        with torch.no_grad():
+            generated_ids = self.model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=max_new_tokens, temperature=temperature)
+        return generated_ids
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
         # print(f"Processing moves for board state: {moves} | Ignore moves till: {ignore_moves_till} | Play as: {play_as}")
@@ -115,6 +124,7 @@ class GRPORewardModel(nn.Module):
             game, _, move_no = self.board_state(input_moves, game, play_as=play_as)
             # print(f"Base moves : {move_no} : Play as : {play_as}")
             # print(f"Processing output for reward calculation: {generation}")
+            generation = generation.strip().rsplit("<assistant>")[-1].strip()
             _, current_reward, generation_move_no = self.board_state(generation.strip(), game, ignore_moves_till = move_no, play_as=play_as)
             if current_reward < 0:
                 return -1.0

@@ -46,6 +46,7 @@ def rl_train(load_path = ""):
                 model_with_lora.load_state_dict(checkpoint['model_state_dict'])
                 optimizer.load_state_dict(checkpoint['optimizer_state_dic'])
                 training_timestep = checkpoint['epoch_per_parquet']
+                grpo_reward_model.set_model_after_recovery(model_with_lora)
                 print(f"Model recovered successfully from qwen-0.6b-with-loRA-rl-model-params with loss: {checkpoint['loss']}")
                 recover = False
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
@@ -55,6 +56,14 @@ def rl_train(load_path = ""):
             for _, row in df_shuffled.iterrows():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
+                if training_timestep % 50 == 0:
+                    current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/000003-rl.parquet"
+                    df_rl_input = pd.read_parquet(current_rl_paraquet)
+                    row_rl = df_rl_input.sample(n=1).iloc[0]
+                    input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
+                    attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
+                    generation_ids = grpo_reward_model.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=50)
+                    print(f"Generated text: {tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                 try:
                     loss = grpo_reward_model(input_ids, attention_mask=attention_mask)
                     optimizer.zero_grad(set_to_none=True)
