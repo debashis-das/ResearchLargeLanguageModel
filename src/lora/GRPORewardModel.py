@@ -166,8 +166,6 @@ class GRPORewardModel(nn.Module):
         input_sequence_length = x.shape[-1]
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
-        print(self.tokenizer.batch_decode(X, skip_special_tokens=True))
-        exit()
         with torch.no_grad():
             output_tensor = self.model.generate(X.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.7)
 
