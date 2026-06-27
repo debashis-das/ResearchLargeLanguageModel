@@ -49,67 +49,70 @@ class GRPORewardModel(nn.Module):
         return generated_ids
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
-        # print(f"Processing moves for board state: {moves} | Ignore moves till: {ignore_moves_till} | Play as: {play_as}")
+        san = r'(O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?[+#]?)'
+        pattern = rf'(\d+)\.\s+({san})(?:\s+(?!\d+\.)( {san} ))?'
         moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
-        # print("Moves cleaned for board state processing: ", moves_clean)
-        # Match: move_number. white_move [black_move]
-        pattern = r'(\d+)\.\s+(\S+)(?:\s+(?!\d+\.)(\S+))?'
-        count_valid_moves = 0
-        move_no = 0
-        # print(f"-----------> PLay as : {play_as}")
-        for m in re.finditer(pattern, moves_clean):
-            try:
-                move_no = int(m.group(1))
-                if move_no < ignore_moves_till:
-                    continue
-                white   = m.group(2)
-                black   = m.group(3)  # None if Black didn't play (resignation)
-                # if ignore_moves_till > 0:
-                #     print(f"[Ignore till {ignore_moves_till}] Processing move number {move_no} : White move : {white} : Black move : {black}")
-                if play_as == "white" and move_no == ignore_moves_till:
-                    continue
-                if play_as == "black" and move_no == ignore_moves_till and black is not None:
-                    ok, _ = chess_board.push_san(black)
-                    if ok:
-                        count_valid_moves += 1
-                        if ignore_moves_till > 0:
-                            print(f"[Init] count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
-                    else:
-                        print(f"Invalid move for black: {black}")
+        chunks = re.split(r'(?=\b1\.\s*)', moves_clean)
+        max_reward = 0.0
+        no_moves_generated = False
+        for chunk in chunks:
+            chunk = chunk.strip()
+            if not chunk.startswith("1."):
+                continue
+            for m in re.finditer(pattern, chunk):
+                try:
+                    move_no = int(m.group(1))
+                    if move_no < ignore_moves_till:
+                        continue
+                    white   = m.group(2)
+                    black   = m.group(3)  # None if Black didn't play (resignation)
+                    # if ignore_moves_till > 0:
+                    #     print(f"[Ignore till {ignore_moves_till}] Processing move number {move_no} : White move : {white} : Black move : {black}")
+                    if play_as == "white" and move_no == ignore_moves_till:
+                        continue
+                    if play_as == "black" and move_no == ignore_moves_till and black is not None:
+                        ok, _ = chess_board.push_san(black)
+                        if ok:
+                            count_valid_moves += 1
+                            if ignore_moves_till > 0:
+                                print(f"[Init] count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
+                        else:
+                            print(f"Invalid move for black: {black}")
+                            break
+                        continue
+                    if white and white is not None:
+                        # print(f"Processing move number {move_no} : White move : {white}")
+                        ok, _ = chess_board.push_san(white)
+                        if ok:
+                            count_valid_moves += 1
+                            if ignore_moves_till > 0:
+                                print(f"[White] base moves : {ignore_moves_till} count_valid_moves : {count_valid_moves} : move_no : {move_no} : white move : {white}")
+                        else:
+                            # print(f"Invalid move for white: {white}")
+                            break
+                    if black and black is not None:
+                        # print(f"Processing move number {move_no} : Black move : {black}")
+                        ok, _ = chess_board.push_san(black)
+                        if ok:
+                            count_valid_moves += 1
+                            if ignore_moves_till > 0:
+                                print(f"[Black] base moves : {ignore_moves_till} count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
+                        else:
+                            # print(f"Invalid move for black: {black}")
+                            break
+                    if black is None or white is None:
                         break
-                    continue
-                if white and white is not None:
-                    # print(f"Processing move number {move_no} : White move : {white}")
-                    ok, _ = chess_board.push_san(white)
-                    if ok:
-                        count_valid_moves += 1
-                        if ignore_moves_till > 0:
-                            print(f"[White] base moves : {ignore_moves_till} count_valid_moves : {count_valid_moves} : move_no : {move_no} : white move : {white}")
-                    else:
-                        # print(f"Invalid move for white: {white}")
-                        break
-                if black and black is not None:
-                    # print(f"Processing move number {move_no} : Black move : {black}")
-                    ok, _ = chess_board.push_san(black)
-                    if ok:
-                        count_valid_moves += 1
-                        if ignore_moves_till > 0:
-                            print(f"[Black] base moves : {ignore_moves_till} count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
-                    else:
-                        # print(f"Invalid move for black: {black}")
-                        break
-                if black is None or white is None:
+                except Exception as e:
+                    print(f"An error occurred while processing moves: {e}")
+                    traceback.print_exc()
                     break
-            except Exception as e:
-                print(f"An error occurred while processing moves: {e}")
-                traceback.print_exc()
-                break
-        if count_valid_moves == 0:
-            reward -= 1.0
-        else:
-            reward += count_valid_moves * 0.5
-            # print(f" Total valid moves: {count_valid_moves}, Reward: {reward}, Last move number processed: {move_no}")
-        return chess_board, reward, move_no
+            max_reward = max(max_reward, count_valid_moves * 0.5)
+            if count_valid_moves > 0:
+                no_moves_generated = True
+        if not no_moves_generated:
+            return chess_board, -1, move_no
+        # print(f" Total valid moves: {count_valid_moves}, Reward: {reward}, Last move number processed: {move_no}")
+        return chess_board, max_reward, move_no
 
     # reward for proper format of the output
     def chess_reward_function(self, prompt, generation):
