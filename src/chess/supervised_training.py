@@ -35,7 +35,13 @@ def sft_train():
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                 attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
                 if training_timestep % 50 == 0:
-                    generated_ids = model_with_lora.generate(input_ids[...,:-2500], attention_mask=attention_mask[...,:-2500], max_new_tokens=100)
+                    current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
+                    df_rl_input = pd.read_parquet(current_rl_paraquet)
+                    row_rl = df_rl_input.sample(n=1).iloc[0]
+                    input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device)
+                    attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device)
+                    generated_ids = model_with_lora.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=10)
+                    print(f"Generated text: {tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}") 
                 try:
                     _, loss = model_with_lora(input_ids, attention_mask=attention_mask)
                     loss = loss / accumulation_steps

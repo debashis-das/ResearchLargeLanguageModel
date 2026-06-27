@@ -13,7 +13,7 @@ class TrainingType(enum.Enum):
     # Reinforcement Learning: The model is trained using reinforcement learning techniques using rewards
     REINFORCEMENT_LEARNING = "rl"
 
-max_paraquet_files_per_training_type = 2
+max_paraquet_files_per_training_type = 4
 # model_path = "/home/model"
 model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
 df = pd.DataFrame(columns=['input_ids', 'attention_mask'])
@@ -29,34 +29,47 @@ def prompt_generator(chess_json, training_type):
         # Match: move_number. white_move [black_move]
         pattern = r'(\d+)\.\s+(\S+)(?:\s+(?!\d+\.)(\S+))?'
         extracted_moves = ""
+        generate_moves = ""
         for m in re.finditer(pattern, moves_clean):
             move_no = int(m.group(1))
             white   = m.group(2)
             black   = m.group(3)  # None if Black didn't play (resignation)
-            if play_as == "white" and move_no > num_moves_to_parse:
-                break
-            if play_as == "black" and move_no > num_moves_to_parse:
+            if move_no <= num_moves_to_parse:
+                extracted_moves += f"{move_no}. {white} {black if black else ''} "
+            if play_as == "black" and move_no == num_moves_to_parse+1:
                 extracted_moves += f"{move_no}. {white} "
-                break
-            extracted_moves += f"{move_no}. {white} {black if black else ''} "
-        return extracted_moves
+                generate_moves += f"{black if black else ''} "
+            if play_as == "white" and move_no > num_moves_to_parse:
+                generate_moves += f"{move_no}. {white} {black if black else ''} "
+            if play_as == "black" and move_no > num_moves_to_parse+1:
+                generate_moves += f"{move_no}. {white} {black if black else ''} "
+        return extracted_moves, generate_moves
     # Generate the prompt based on the input JSON
     move_numbers = re.findall(r'(\d+)\.', chess_json["moves"])
     num_moves = int(move_numbers[-1])
     if num_moves < 5:  # If the game has less than 10 moves, parse all moves
         raise ValueError(f"Game has only {num_moves} moves, which is less than the minimum required 10 moves for training.")
     num_moves_to_parse = random.randint((num_moves // 4), (num_moves // 4) * 3)  # Randomly choose to parse between 25% and 75% of the moves
-    extracted_moves = parse_moves(chess_json["moves"], chess_json["play_as"], num_moves_to_parse=num_moves_to_parse)
+    extracted_moves, generate_moves = parse_moves(chess_json["moves"], chess_json["play_as"], num_moves_to_parse=num_moves_to_parse)
     if training_type == TrainingType.SUPERVISED_LEARNING:
         prompt = f"""
         <system>
-        You are a strong chess engine. Play optimally and output moves in SAN.
+        You are a strong chess engine.
+        Output must be strictly in SAN format with move numbers.
+        No explanations, no extra text.
 
         <user>
         play_as: {chess_json["play_as"]}
-        moves: {extracted_moves}
+        moves: "{extracted_moves}"
+
+        Task:
+        - Continue the game
+        - Play optimally
+        - End only at checkmate or resignation
+        - Output only moves
 
         <assistant>
+        {generate_moves}
         """
     if training_type == TrainingType.REINFORCEMENT_LEARNING:
         prompt = f"""
@@ -123,28 +136,28 @@ def open_bz2_file(file_path, counter, parquet_counter, paraquet_limit, training_
 if __name__ == "__main__":
     # paraquet generation with 10000 data points in each parquet file
     sl_parequet_generated_toggle = False
-    rl_parequet_generated_toggle = False
+    rl_parequet_generated_toggle = True
     parquet_sl_counter = 0
     parquet_rl_counter = 0
     paraquet_limit = 5000
     current_counter = 0
     for i in range(3,13):
         print(f"Processing file : lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2")
-        # if not sl_parequet_generated_toggle:
-        #     current_counter, sl_counter = open_bz2_file(f'src\chess\dataset\lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2',current_counter, parquet_sl_counter, paraquet_limit, training_type=TrainingType.SUPERVISED_LEARNING)
-        #     parquet_sl_counter += sl_counter
-        #     print(f"Finished processing file : lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2")
-        #     current_counter = 0
-        #     if parquet_sl_counter >= max_paraquet_files_per_training_type:
-        #         sl_parequet_generated_toggle = True
-        #         rl_parequet_generated_toggle = False
-        #         df = df[0:0]  # Clear the DataFrame to free up memory before starting RL parquet generation
-        # if not rl_parequet_generated_toggle:
-        current_counter, rl_counter = open_bz2_file(f'src\chess\dataset\lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2',current_counter, parquet_rl_counter, paraquet_limit, training_type=TrainingType.REINFORCEMENT_LEARNING)
-        parquet_rl_counter += rl_counter
-        print(f"Finished processing file : lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2")
-        # current_counter = 0
-        # if parquet_rl_counter >= max_paraquet_files_per_training_type:
-        #     rl_parequet_generated_toggle = True
+        if not sl_parequet_generated_toggle:
+            current_counter, sl_counter = open_bz2_file(f'src\chess\dataset\lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2',current_counter, parquet_sl_counter, paraquet_limit, training_type=TrainingType.SUPERVISED_LEARNING)
+            parquet_sl_counter += sl_counter
+            print(f"Finished processing file : lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2")
+            current_counter = 0
+            if parquet_sl_counter >= max_paraquet_files_per_training_type:
+                sl_parequet_generated_toggle = True
+                rl_parequet_generated_toggle = False
+                df = df[0:0]  # Clear the DataFrame to free up memory before starting RL parquet generation
+        if not rl_parequet_generated_toggle:
+            current_counter, rl_counter = open_bz2_file(f'src\chess\dataset\lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2',current_counter, parquet_rl_counter, paraquet_limit, training_type=TrainingType.REINFORCEMENT_LEARNING)
+            parquet_rl_counter += rl_counter
+            print(f"Finished processing file : lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2")
+            current_counter = 0
+            if parquet_rl_counter >= max_paraquet_files_per_training_type:
+                rl_parequet_generated_toggle = True
     
         

@@ -95,8 +95,8 @@ def rl_train(load_path = ""):
         print(f"An error occurred during Parquet generation test: {e}")
 
 if __name__ == "__main__":
-    # rl_train(load_path = f"model/qwen-0.6b-with-loRA-sft-model-params")
-    rl_train()
+    rl_train(load_path = f"model/qwen-0.6b-with-loRA-sft-model-params")
+    # rl_train()
     # current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
     # i = 0
     # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-rl.parquet"
