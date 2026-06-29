@@ -3,8 +3,6 @@ import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 import gc
-import json
-import re
 import traceback
 
 import pandas as pd
@@ -37,7 +35,7 @@ def rl_train(load = False, tokenizer=None, model=None, model_with_lora=None, dev
                 optimizer.load_state_dict(optimizer_with_timestep_state['optimizer_state_dic'])
                 # Model recovery with LoRA parameters
                 model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
-                model_with_lora.load_lora_parameters("model/lora_paramters.pt")
+                model_with_lora.load_lora_parameters("model/lora_parameters.pt")
                 training_timestep = optimizer_with_timestep_state['epoch_per_parquet']
                 grpo_reward_model.set_model_after_recovery(model_with_lora)
                 print(f"Model recovered successfully after error at timestep: {training_timestep}")
@@ -77,20 +75,21 @@ def rl_train(load = False, tokenizer=None, model=None, model_with_lora=None, dev
                 except Exception as e:
                     print(f"An error occurred during model training: {e}")
                     traceback.print_exc()
-                    grpo_reward_model.model.save_lora_parameters("model/lora_paramters.pt")
+                    grpo_reward_model.model.save_lora_parameters("model/lora_parameters.pt")
                     torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, f"model/optimizer_with_timestep_state_dict.pt")
-                    print(f"Model training complete saved with name : qwen-0.6b-with-loRA-rl-model-params")
+                    print(f"Model training complete saved")
                     recover = True
                 finally:
                     for i in range(torch.cuda.device_count()):
                         print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
                     if training_timestep % 500 == 0 and loss is not None:
-                        grpo_reward_model.model.save_lora_parameters("model/lora_paramters.pt")
-                        torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, f"model/qwen-0.6b-with-loRA-rl-model-params")
+                        grpo_reward_model.model.save_lora_parameters("model/lora_parameters.pt")
+                        torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, 
+                                   f"model/optimizer_with_timestep_state_dict.pt")
                         if len(replay_buffer) > 0:
                             replay_buffer.to_parquet(f"model/replay_buffer.parquet", compression="zstd", engine="pyarrow")
                             print(f"Replay buffer saved with name : replay_buffer_{training_timestep}.parquet")
-                        print(f"Model training complete saved with name : qwen-0.6b-with-loRA-rl-model-params")
+                        print(f"Model training complete saved")
 
                     gc.collect()
                     torch.cuda.empty_cache()
@@ -100,10 +99,10 @@ def rl_train(load = False, tokenizer=None, model=None, model_with_lora=None, dev
         print(f"An error occurred : {e}")
         traceback.print_exc()
 
-if __name__ == "__main__":
+def rl_execute():
     model_path = "/home/model"
     # model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
-
+    load = True
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     dtype = torch.float16
     model = AutoModelForCausalLM.from_pretrained(
@@ -115,7 +114,9 @@ if __name__ == "__main__":
     device = model.device
     optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
     replay_buffer = pd.DataFrame(columns=['input_ids', 'attention_mask'])
-    rl_train(tokenizer=tokenizer, model=model, model_with_lora=model_with_lora, device=device, dtype=dtype, optimizer=optimizer, replay_buffer=replay_buffer, load=True)
+    rl_train(tokenizer=tokenizer, model=model, model_with_lora=model_with_lora, 
+             device=device, dtype=dtype, optimizer=optimizer, 
+             replay_buffer=replay_buffer, load=load)
     # rl_train()
     # current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
     # i = 0

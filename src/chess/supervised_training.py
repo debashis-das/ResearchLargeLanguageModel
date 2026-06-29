@@ -65,15 +65,10 @@ def sft_train():
                     raise
                 finally:
                     if (training_timestep % 25 == 0 and loss is not None) or end:
-                        
-                        torch.save({
-                                    'parquet_idx': i,
-                                    'epoch_per_parquet': training_timestep,
-                                    'model_state_dict': model_with_lora.state_dict(),
-                                    'optimizer_state_dic': optimizer.state_dict(),
-                                    'loss': loss
-                                    }, f"model/qwen-0.6b-with-loRA-sft-model-params")
-                        print(f"Model training complete saved with name : qwen-0.6b-with-loRA-sft-model-params")
+                        model_with_lora.save_lora_parameters("model/lora_paramters.pt")
+                        torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, 
+                                   f"model/optimizer_with_timestep_state_dict.pt")
+                        print(f"Model training complete saved")
                     del input_ids
                     del attention_mask
                     gc.collect()
@@ -81,11 +76,11 @@ def sft_train():
     except Exception as e:
         print(f"An error occurred during training the model: {e}")
 
-if __name__ == "__main__":
+def sft_execute():
     try:
         sft_train()
     finally:
-        model_with_lora.load_state_dict(torch.load(f"model/qwen-0.6b-with-loRA-sft-model-params")['model_state_dict'])
+        model_with_lora.load_lora_parameters("model/lora_parameters.pt")
         i=3
         current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
         df_rl_input = pd.read_parquet(current_rl_paraquet)
