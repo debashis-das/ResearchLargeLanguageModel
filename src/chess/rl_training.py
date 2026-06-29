@@ -112,7 +112,8 @@ def rl_train(load = False):
                     del input_ids
                     del attention_mask
     except Exception as e:
-        print(f"An error occurred during Parquet generation test: {e}")
+        print(f"An error occurred : {e}")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     rl_train()
