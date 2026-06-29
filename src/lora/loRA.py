@@ -19,10 +19,6 @@ class loRA(nn.Module):
         nn.init.zeros_(self.down_proj.weight)
         nn.init.kaiming_uniform_(self.up_proj.weight, a=math.sqrt(5))
 
-    def save_weights(self):
-        """Save the weights of the up and down projection layers to specified file paths."""
-        return self.up_proj.state_dict(), self.down_proj.state_dict()
-
     def forward(self, X):
         projection = self.down_proj(self.up_proj(X))
         return (self.alpha / self.rank) * projection
