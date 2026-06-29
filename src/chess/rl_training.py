@@ -15,22 +15,7 @@ from chess.chess_validator import ChessGame
 from lora.GRPORewardModel import GRPORewardModel
 from lora.LoRAFineTuning import LoRAFineTuning
 
-model_path = "/home/model"
-# model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
-
-tokenizer = AutoTokenizer.from_pretrained(model_path)
-dtype = torch.float16
-model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            dtype=dtype,
-            device_map="auto"
-        )
-model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
-device = model.device
-optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
-replay_buffer = pd.DataFrame(columns=['input_ids', 'attention_mask'])
-
-def rl_train(load = False):
+def rl_train(load = False, tokenizer=None, model=None, model_with_lora=None, device=None, dtype=None, optimizer=None, replay_buffer=None):
     try:
         grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=28, model_device=device, dtype=dtype)
         training_timestep = 0
@@ -116,7 +101,21 @@ def rl_train(load = False):
         traceback.print_exc()
 
 if __name__ == "__main__":
-    rl_train()
+    model_path = "/home/model"
+    # model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
+
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    dtype = torch.float16
+    model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                dtype=dtype,
+                device_map="auto"
+            )
+    model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
+    device = model.device
+    optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
+    replay_buffer = pd.DataFrame(columns=['input_ids', 'attention_mask'])
+    rl_train(tokenizer=tokenizer, model=model, model_with_lora=model_with_lora, device=device, dtype=dtype, optimizer=optimizer, replay_buffer=replay_buffer, load=True)
     # rl_train()
     # current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
     # i = 0
