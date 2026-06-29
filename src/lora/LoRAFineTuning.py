@@ -73,6 +73,7 @@ class LoRAFineTuning(nn.Module):
         lora_state_dict = torch.load(load_path, map_location=self.device)
         for name, module in self.model.named_modules():
             if isinstance(module, loRALinear) and name in lora_state_dict:
+                print(f"Loading LoRA parameters for {name}")
                 module.loRA_module.load_state_dict(lora_state_dict[name])
         print(f"LoRA parameters loaded from {load_path}")
 
