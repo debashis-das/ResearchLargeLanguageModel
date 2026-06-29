@@ -264,7 +264,7 @@ class GRPORewardModel(nn.Module):
         if torch.isnan(loss).any():
             print("NaN in loss!")
             exit()
-        return loss.mean()
+        return loss.mean(), weights
 
     def debug_logs(self, X, idx, tensor_per_generation):
         print(f"Input      : {self.tokenizer.decode(X[idx], skip_special_tokens=True)}")
@@ -273,23 +273,33 @@ class GRPORewardModel(nn.Module):
         print("-------------------------------------------------------------")
 
 if __name__ == "__main__":
-    sample_prompt = f"""
-        <system>
-        You are a strong chess engine.
-        Output must be strictly in SAN format with move numbers.
-        No explanations, no extra text.
+    # sample_prompt = f"""
+    #     <system>
+    #     You are a strong chess engine.
+    #     Output must be strictly in SAN format with move numbers.
+    #     No explanations, no extra text.
 
-        <user>
-        play_as: white
-        moves: "1. d4 e6 2. a3 Nc6 3. Nc3 Bb4 4. axb4 a5 5. b5 Nb4 "
+    #     <user>
+    #     play_as: white
+    #     moves: "1. d4 e6 2. a3 Nc6 3. Nc3 Bb4 4. axb4 a5 5. b5 Nb4 "
 
-        Task:
-        - Continue the game
-        - Play optimally
-        - End only at checkmate or resignation
-        - Output only moves
+    #     Task:
+    #     - Continue the game
+    #     - Play optimally
+    #     - End only at checkmate or resignation
+    #     - Output only moves
 
-        <assistant>"""
-    generation_text = f"""6. g4 g5 7. h4 gxh4 8. g5 h3 9. g6 h2 10. g7 h1=Q 11. g8=Q+ Ke7 12. Qg5+ Kd6 13. Qc5#"""
+    #     <assistant>"""
+    # generation_text = f"""6. g4 g5 7. h4 gxh4 8. g5 h3 9. g6 h2 10. g7 h1=Q 11. g8=Q+ Ke7 12. Qg5+ Kd6 13. Qc5#"""
     # print(chess_reward_function(sample_prompt, generation_text))
+    reward_batch = torch.tensor([-1.0]*28+[1.0], dtype=torch.float32, device="cpu")
+    advantage = reward_batch - reward_batch.mean()
+    advantage = advantage / (advantage.abs().mean() + 1e-6) # Normalize advantages
+
+    weights = 1.5*torch.tanh(advantage) + 0.001  # smooth gating
+    weights = weights + 0.01 * torch.sign(reward_batch)
+    # print(f"Reward after smoothing : {weights}")
+    weights = weights.unsqueeze(-1).unsqueeze(-1)
+
+    print(f"Reward after smoothing ({weights.mean()}) : {weights}")
     

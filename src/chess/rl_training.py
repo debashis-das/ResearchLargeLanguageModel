@@ -75,6 +75,7 @@ def rl_train(load_path = ""):
                     if (weights > 0).any():
                         replay_buffer.loc[len(replay_buffer)] = [input_ids.cpu().numpy(), attention_mask.cpu().numpy()]
                         print("Added to replay buffer : Positive reward found in the batch")
+                    del weights
                     optimizer.zero_grad(set_to_none=True)
                     loss.backward()
                     optimizer.step()
@@ -104,7 +105,11 @@ def rl_train(load_path = ""):
                                     'optimizer_state_dic': optimizer.state_dict(),
                                     'loss': loss
                                     }, f"model/qwen-0.6b-with-loRA-rl-model-params")
+                        if len(replay_buffer) > 0:
+                            replay_buffer.to_parquet(f"model/replay_buffer.parquet", compression="zstd", engine="pyarrow")
+                            print(f"Replay buffer saved with name : replay_buffer_{training_timestep}.parquet")
                         print(f"Model training complete saved with name : qwen-0.6b-with-loRA-rl-model-params")
+
                     gc.collect()
                     torch.cuda.empty_cache()
                     del input_ids
