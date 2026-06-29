@@ -30,25 +30,32 @@ device = model.device
 optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
 replay_buffer = pd.DataFrame(columns=['input_ids', 'attention_mask'])
 
-def rl_train(load_path = ""):
+def rl_train(load = False):
     try:
-        if len(load_path) > 0:
-            checkpoint = torch.load(load_path, map_location=device)
-            model_with_lora.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dic'])
-            print(f"Model loaded successfully from {load_path} with loss: {checkpoint['loss']}")
-
         grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=28, model_device=device, dtype=dtype)
         training_timestep = 0
+        if load:
+            # Optimizer state recovery
+            optimizer_with_timestep_state = torch.load(f"model/optimizer_with_timestep_state_dict.pt", map_location=device)
+            optimizer.load_state_dict(optimizer_with_timestep_state['optimizer_state_dic'])
+            # Model recovery with LoRA parameters
+            model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
+            model_with_lora.load_lora_parameters("model/lora_paramters.pt")
+            training_timestep = optimizer_with_timestep_state['epoch_per_parquet']
+            grpo_reward_model.set_model_after_recovery(model_with_lora)
+            print(f"Model loaded successfully")
         recover = False
         for i in range(5):
             if recover:
-                checkpoint = torch.load(f"model/qwen-0.6b-with-loRA-rl-model-params", map_location=device)
-                model_with_lora.load_state_dict(checkpoint['model_state_dict'])
-                optimizer.load_state_dict(checkpoint['optimizer_state_dic'])
-                training_timestep = checkpoint['epoch_per_parquet']
+                # Optimizer state recovery
+                optimizer_with_timestep_state = torch.load(f"model/optimizer_with_timestep_state_dict.pt", map_location=device)
+                optimizer.load_state_dict(optimizer_with_timestep_state['optimizer_state_dic'])
+                # Model recovery with LoRA parameters
+                model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
+                model_with_lora.load_lora_parameters("model/lora_paramters.pt")
+                training_timestep = optimizer_with_timestep_state['epoch_per_parquet']
                 grpo_reward_model.set_model_after_recovery(model_with_lora)
-                print(f"Model recovered successfully from qwen-0.6b-with-loRA-rl-model-params with loss: {checkpoint['loss']}")
+                print(f"Model recovered successfully after error at timestep: {training_timestep}")
                 recover = False
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-rl.parquet"
@@ -85,26 +92,16 @@ def rl_train(load_path = ""):
                 except Exception as e:
                     print(f"An error occurred during model training: {e}")
                     traceback.print_exc()
-                    torch.save({
-                                'parquet_idx': i,
-                                'epoch_per_parquet': training_timestep,
-                                'model_state_dict': grpo_reward_model.state_dict(),
-                                'optimizer_state_dic': optimizer.state_dict(),
-                                'loss': loss
-                                }, f"model/qwen-0.6b-with-loRA-rl-model-params")
+                    grpo_reward_model.model.save_lora_parameters("model/lora_paramters.pt")
+                    torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, f"model/optimizer_with_timestep_state_dict.pt")
                     print(f"Model training complete saved with name : qwen-0.6b-with-loRA-rl-model-params")
                     recover = True
                 finally:
                     for i in range(torch.cuda.device_count()):
                         print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
                     if training_timestep % 500 == 0 and loss is not None:
-                        torch.save({
-                                    'parquet_idx': i,
-                                    'epoch_per_parquet': training_timestep,
-                                    'model_state_dict': grpo_reward_model.state_dict(),
-                                    'optimizer_state_dic': optimizer.state_dict(),
-                                    'loss': loss
-                                    }, f"model/qwen-0.6b-with-loRA-rl-model-params")
+                        grpo_reward_model.model.save_lora_parameters("model/lora_paramters.pt")
+                        torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, f"model/qwen-0.6b-with-loRA-rl-model-params")
                         if len(replay_buffer) > 0:
                             replay_buffer.to_parquet(f"model/replay_buffer.parquet", compression="zstd", engine="pyarrow")
                             print(f"Replay buffer saved with name : replay_buffer_{training_timestep}.parquet")
@@ -118,7 +115,7 @@ def rl_train(load_path = ""):
         print(f"An error occurred during Parquet generation test: {e}")
 
 if __name__ == "__main__":
-    rl_train(load_path = f"model/qwen-0.6b-with-loRA-sft-model-params")
+    rl_train()
     # rl_train()
     # current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
     # i = 0

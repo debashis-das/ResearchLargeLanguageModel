@@ -11,6 +11,12 @@ class loRALinear(nn.Module):
         self.frozen_linear_layer = frozen_linear_layer
         self.loRA_module = loRA(frozen_linear_layer.in_features, frozen_linear_layer.out_features, rank, alpha, dtype, device)
     
+    def load_lora_parameters(self, lora_up_proj, lora_down_proj):
+        self.loRA_module.load_weights(lora_up_proj, lora_down_proj)
+
+    def save_lora_parameters(self):
+        return self.loRA_module.save_weights()
+
     def forward(self, X):
         frozen_output = self.frozen_linear_layer(X)
         loRA_projection = self.loRA_module(X)

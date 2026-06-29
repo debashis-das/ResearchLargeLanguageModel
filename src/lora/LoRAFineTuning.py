@@ -63,6 +63,20 @@ class LoRAFineTuning(nn.Module):
         
         for name, module in self.model.named_modules():
             self.module_dict[name] = module
+    
+    def save_lora_parameters(self, save_path):
+        lora_state_dict = {name: module.loRA_module.save_weights() for name, module in self.model.named_modules() if isinstance(module, loRALinear)}
+        torch.save(lora_state_dict, save_path)
+        print(f"LoRA parameters saved to {save_path}")
+    
+    def load_lora_parameters(self, load_path):
+        lora_state_dict = torch.load(load_path, map_location=self.device)
+        for name, module in self.model.named_modules():
+            if isinstance(module, loRALinear):
+                up_proj_dict, down_proj_dict = lora_state_dict[name]
+                module.loRA_module.up_proj.load_state_dict(up_proj_dict)
+                module.loRA_module.down_proj.load_state_dict(down_proj_dict)
+        print(f"LoRA parameters loaded from {load_path}")
 
     def qwen_attention_mask(self, batch_size, attention_mask: torch.Tensor| None):
         # Qwen model expects attention mask of shape [batch, seq_len] with 1 for tokens to attend to and 0 for tokens to ignore.
