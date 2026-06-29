@@ -28,6 +28,7 @@ model = AutoModelForCausalLM.from_pretrained(
 model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
 device = model.device
 optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
+replay_buffer = pd.DataFrame(columns=['input_ids', 'attention_mask'])
 
 def rl_train(load_path = ""):
     try:
@@ -54,8 +55,13 @@ def rl_train(load_path = ""):
             df_input = pd.read_parquet(current_paraquet)
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             for _, row in df_shuffled.iterrows():
-                input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
-                attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
+                if len(replay_buffer) > 0 and training_timestep % 50 == 0:
+                    row_replay = replay_buffer.sample(n=1).iloc[0]
+                    input_ids = torch.tensor(row_replay['input_ids'], dtype=torch.long, device=device)
+                    attention_mask = torch.tensor(row_replay['attention_mask'], dtype=dtype, device=device)
+                else:
+                    input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
+                    attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
                 if training_timestep % 50 == 0:
                     current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/000003-rl.parquet"
                     df_rl_input = pd.read_parquet(current_rl_paraquet)
@@ -65,7 +71,10 @@ def rl_train(load_path = ""):
                     generation_ids = grpo_reward_model.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=50)
                     print(f"Generated text: {tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                 try:
-                    loss = grpo_reward_model(input_ids, attention_mask=attention_mask)
+                    loss, weights = grpo_reward_model(input_ids, attention_mask=attention_mask)
+                    if (weights > 0).any():
+                        replay_buffer.loc[len(replay_buffer)] = [input_ids.cpu().numpy(), attention_mask.cpu().numpy()]
+                        print("Added to replay buffer : Positive reward found in the batch")
                     optimizer.zero_grad(set_to_none=True)
                     loss.backward()
                     optimizer.step()
