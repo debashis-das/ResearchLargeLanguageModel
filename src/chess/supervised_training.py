@@ -65,7 +65,7 @@ def sft_train():
                     raise
                 finally:
                     if (training_timestep % 25 == 0 and loss is not None) or end:
-                        model_with_lora.save_lora_parameters("model/lora_paramters.pt")
+                        model_with_lora.save_lora_parameters("model/lora_parameters.pt")
                         torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, 
                                    f"model/optimizer_with_timestep_state_dict.pt")
                         print(f"Model training complete saved")
