@@ -65,14 +65,18 @@ class LoRAFineTuning(nn.Module):
             self.module_dict[name] = module
     
     def save_lora_parameters(self, save_path):
-        lora_state_dict = {name: module.loRA_module.state_dict() for name, module in self.model.named_modules() if isinstance(module, loRALinear)}
+        lora_state_dict = {}
+        for name, module in self.model.named_modules():
+            if "loRA" in name:
+                print(f"Saving LoRA parameters for {name}")
+                lora_state_dict[name] = module.loRA_module.state_dict()
         torch.save(lora_state_dict, save_path)
         print(f"LoRA parameters saved to {save_path}")
     
     def load_lora_parameters(self, load_path):
         lora_state_dict = torch.load(load_path, map_location=self.device)
         for name, module in self.model.named_modules():
-            if isinstance(module, loRALinear) and name in lora_state_dict:
+            if "loRA" in name:
                 print(f"Loading LoRA parameters for {name}")
                 module.loRA_module.load_state_dict(lora_state_dict[name])
         print(f"LoRA parameters loaded from {load_path}")
