@@ -15,7 +15,7 @@ from lora.LoRAFineTuning import LoRAFineTuning
 
 def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtype=None, optimizer=None, replay_buffer=None):
     try:
-        grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=28, model_device=device, dtype=dtype)
+        grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=30, model_device=device, dtype=dtype)
         training_timestep = 0
         recover = False
         for i in range(5):
