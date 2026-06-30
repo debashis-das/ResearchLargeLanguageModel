@@ -69,7 +69,7 @@ class LoRAFineTuning(nn.Module):
         for name, module in self.model.named_modules():
             if "loRA" in name:
                 print(f"Saving LoRA parameters for {name}")
-                lora_state_dict[name] = module.loRA_module.state_dict()
+                lora_state_dict[name] = module.state_dict()
         torch.save(lora_state_dict, save_path)
         print(f"LoRA parameters saved to {save_path}")
     
@@ -78,7 +78,7 @@ class LoRAFineTuning(nn.Module):
         for name, module in self.model.named_modules():
             if name in lora_state_dict:
                 print(f"Loading LoRA parameters for {name}")
-                module.loRA_module.load_state_dict(lora_state_dict[name])
+                module.load_state_dict(lora_state_dict[name])
         print(f"LoRA parameters loaded from {load_path}")
 
     def qwen_attention_mask(self, batch_size, attention_mask: torch.Tensor| None):
