@@ -13,7 +13,7 @@ from chess.chess_validator import ChessGame
 from lora.GRPORewardModel import GRPORewardModel
 from lora.LoRAFineTuning import LoRAFineTuning
 
-def rl_train(load = False, tokenizer=None, model=None, model_with_lora=None, device=None, dtype=None, optimizer=None, replay_buffer=None):
+def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtype=None, optimizer=None, replay_buffer=None):
     try:
         grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=28, model_device=device, dtype=dtype)
         training_timestep = 0
@@ -93,7 +93,6 @@ def rl_train(load = False, tokenizer=None, model=None, model_with_lora=None, dev
 def rl_execute():
     model_path = "/home/model"
     # model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
-    load = True
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     dtype = torch.float16
     model = AutoModelForCausalLM.from_pretrained(
@@ -111,7 +110,7 @@ def rl_execute():
     replay_buffer = pd.DataFrame(columns=['input_ids', 'attention_mask'])
     rl_train(tokenizer=tokenizer, model=model, model_with_lora=model_with_lora, 
              device=device, dtype=dtype, optimizer=optimizer, 
-             replay_buffer=replay_buffer, load=load)
+             replay_buffer=replay_buffer)
     # rl_train()
     # current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
     # i = 0

@@ -33,9 +33,6 @@ class GRPORewardModel(nn.Module):
         for param in self.base_model.parameters():
             param.requires_grad = False 
 
-    def set_model_after_recovery(self, model: LoRAFineTuning):
-        self.model = model
-
     def use_base_model(self, tokens, attention_mask):
         self.base_model.eval()
         with torch.no_grad():
