@@ -1,5 +1,6 @@
 
 import gc
+import traceback
 
 import pandas as pd
 import torch
@@ -33,6 +34,7 @@ def sft_train():
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             loss = None
             for _, row in df_shuffled.iterrows():
+                model_with_lora.load_lora_parameters("model/lora_parameters.pt")
                 if training_timestep > 50:
                     end = True
                     break
@@ -75,6 +77,7 @@ def sft_train():
                     torch.cuda.empty_cache()
     except Exception as e:
         print(f"An error occurred during training the model: {e}")
+        traceback.print_exc()
 
 def sft_execute():
     try:
