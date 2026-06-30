@@ -17,15 +17,6 @@ def rl_train(load = False, tokenizer=None, model=None, model_with_lora=None, dev
     try:
         grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=28, model_device=device, dtype=dtype)
         training_timestep = 0
-        if load:
-            # Optimizer state recovery
-            optimizer_with_timestep_state = torch.load(f"model/optimizer_with_timestep_state_dict.pt", map_location=device)
-            optimizer.load_state_dict(optimizer_with_timestep_state['optimizer_state_dic'])
-            # Model recovery with LoRA parameters
-            model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
-            model_with_lora.load_lora_parameters("model/lora_parameters.pt")
-            grpo_reward_model.set_model_after_recovery(model_with_lora)
-            print(f"Model loaded successfully")
         recover = False
         for i in range(5):
             if recover:
@@ -36,7 +27,8 @@ def rl_train(load = False, tokenizer=None, model=None, model_with_lora=None, dev
                 model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
                 model_with_lora.load_lora_parameters("model/lora_parameters.pt")
                 training_timestep = optimizer_with_timestep_state['epoch_per_parquet']
-                grpo_reward_model.set_model_after_recovery(model_with_lora)
+                del grpo_reward_model
+                grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=28, model_device=device, dtype=dtype)
                 print(f"Model recovered successfully after error at timestep: {training_timestep}")
                 recover = False
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
@@ -110,8 +102,12 @@ def rl_execute():
                 device_map="auto"
             )
     model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
+    model_with_lora.load_lora_parameters("model/lora_parameters.pt")
     device = model.device
+    optimizer_with_timestep_state = torch.load(f"model/optimizer_with_timestep_state_dict.pt", map_location=device)
     optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
+    
+    optimizer.load_state_dict(optimizer_with_timestep_state['optimizer_state_dic'])
     replay_buffer = pd.DataFrame(columns=['input_ids', 'attention_mask'])
     rl_train(tokenizer=tokenizer, model=model, model_with_lora=model_with_lora, 
              device=device, dtype=dtype, optimizer=optimizer, 
