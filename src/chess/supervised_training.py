@@ -34,7 +34,6 @@ def sft_train():
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             loss = None
             for _, row in df_shuffled.iterrows():
-                model_with_lora.load_lora_parameters("model/lora_parameters.pt")
                 if training_timestep > 50:
                     end = True
                     break

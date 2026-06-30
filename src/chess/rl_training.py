@@ -24,7 +24,6 @@ def rl_train(load = False, tokenizer=None, model=None, model_with_lora=None, dev
             # Model recovery with LoRA parameters
             model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
             model_with_lora.load_lora_parameters("model/lora_parameters.pt")
-            training_timestep = optimizer_with_timestep_state['epoch_per_parquet']
             grpo_reward_model.set_model_after_recovery(model_with_lora)
             print(f"Model loaded successfully")
         recover = False
