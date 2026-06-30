@@ -82,7 +82,7 @@ def sft_execute():
     try:
         sft_train()
     finally:
-        model_with_lora.load_lora_parameters("model/lora_parameters.pt")
+        model_with_lora.load_lora_parameters("model/sft_lora_parameters.pt")
         i=3
         current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
         df_rl_input = pd.read_parquet(current_rl_paraquet)
