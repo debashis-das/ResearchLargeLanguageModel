@@ -101,9 +101,9 @@ def rl_execute():
                 device_map="auto"
             )
     model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
-    model_with_lora.load_lora_parameters("model/lora_parameters.pt")
+    model_with_lora.load_lora_parameters("model/sft_lora_parameters.pt")
     device = model.device
-    optimizer_with_timestep_state = torch.load(f"model/optimizer_with_timestep_state_dict.pt", map_location=device)
+    optimizer_with_timestep_state = torch.load(f"model/sft_optimizer_with_timestep_state_dict.pt", map_location=device)
     optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
     
     optimizer.load_state_dict(optimizer_with_timestep_state['optimizer_state_dic'])
