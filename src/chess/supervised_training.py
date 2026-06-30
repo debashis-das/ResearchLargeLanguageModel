@@ -91,3 +91,6 @@ def sft_execute():
         attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
         output_ids = model_with_lora.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=100, temperature=0.7)
         print(f"Generated text: {tokenizer.decode(output_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
+
+if __name__ == "__main__":
+    sft_execute()

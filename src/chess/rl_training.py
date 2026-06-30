@@ -126,3 +126,6 @@ def rl_execute():
     #     input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
     #     attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
     #     print(tokenizer.decode(input_ids, skip_special_tokens=True))
+
+if __name__ == "__main__":
+    rl_execute()
