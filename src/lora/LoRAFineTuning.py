@@ -17,6 +17,9 @@ class LoRAFineTuning(nn.Module):
     The projections parameter allows you to specify which linear layers to inject the LoRA modules into.
     If not provided, it defaults to injecting into the query, key, and value projection layers of the attention mechanism. 
     The forward method implements the forward pass through the model, while the generate method implements text generation using the model with LoRA fine-tuning.
+    
+    Generally alpha is taken as 2*rank, but it can be tuned based on the model and task. The rank is a hyperparameter that controls the capacity of the LoRA module. 
+    A higher rank allows for more expressive power, but also increases the number of parameters and computational cost.
     """
     _default_projections = [
         "q_proj", "k_proj", "v_proj", "o_proj",   # attention
@@ -24,7 +27,7 @@ class LoRAFineTuning(nn.Module):
     ]
     def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, 
                  projections=None, 
-                 rank=16, alpha=32, 
+                 rank=32, alpha=64, 
                  dtype=torch.float16, device=torch.device("cuda")):
         super().__init__()
         if projections is None:
