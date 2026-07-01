@@ -34,7 +34,7 @@ def sft_train():
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             loss = None
             for _, row in df_shuffled.iterrows():
-                if training_timestep > 10:
+                if training_timestep > 25:
                     end = True
                     break
                 input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
