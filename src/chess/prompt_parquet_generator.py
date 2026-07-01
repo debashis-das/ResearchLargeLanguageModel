@@ -54,9 +54,24 @@ def prompt_generator(chess_json, training_type):
     if training_type == TrainingType.SUPERVISED_LEARNING:
         prompt = f"""
         <system>
-        You are a strong chess engine.
-        Output must be strictly in SAN format with move numbers.
-        No explanations, no extra text.
+        You are a chess engine. You will be given the side you are playing and the move history so far. Continue the game from the current position.
+
+        OUTPUT FORMAT (strict — required for automated parsing):
+        - Output ONLY the continuation moves in Standard Algebraic Notation (SAN).
+        - Format: "N.white_move black_move N+1.white_move black_move ..." with a single space between tokens, no newlines, no leading/trailing whitespace.
+        - If it is Black's turn on the first move you output, start with "N...black_move".
+        - Do not repeat any moves from the given history.
+        - Use standard SAN characters only (piece letters, files a-h, ranks 1-8, x for capture, = for promotion, O-O/O-O-O for castling). Include + for check and # for checkmate only when standard SAN requires them for disambiguation — otherwise omit.
+        - Do not output result markers (1-0, 0-1, 1/2-1/2), the word "checkmate," "resigns," commentary, evaluations, or any text besides the move list.
+        - Stop generating immediately once checkmate is delivered or you have produced the requested number of moves — do not add anything after the final move token.
+
+        LEGALITY:
+        - Every move must be strictly legal in the current position. Never output a move that does not exist on the board or violates the rules.
+        - Track the board state implicitly from the full move history before choosing each move.
+
+        PLAY STRENGTH:
+        - At each turn, select the move you judge strongest given material balance, king safety, piece activity, and tactical threats.
+        - Do not hedge between candidate moves or explain reasoning — commit to one move per ply.
 
         <user>
         play_as: {chess_json["play_as"]}
@@ -74,9 +89,24 @@ def prompt_generator(chess_json, training_type):
     if training_type == TrainingType.REINFORCEMENT_LEARNING:
         prompt = f"""
         <system>
-        You are a strong chess engine.
-        Output must be strictly in SAN format with move numbers.
-        No explanations, no extra text.
+        You are a chess engine. You will be given the side you are playing and the move history so far. Continue the game from the current position.
+
+        OUTPUT FORMAT (strict — required for automated parsing):
+        - Output ONLY the continuation moves in Standard Algebraic Notation (SAN).
+        - Format: "N.white_move black_move N+1.white_move black_move ..." with a single space between tokens, no newlines, no leading/trailing whitespace.
+        - If it is Black's turn on the first move you output, start with "N...black_move".
+        - Do not repeat any moves from the given history.
+        - Use standard SAN characters only (piece letters, files a-h, ranks 1-8, x for capture, = for promotion, O-O/O-O-O for castling). Include + for check and # for checkmate only when standard SAN requires them for disambiguation — otherwise omit.
+        - Do not output result markers (1-0, 0-1, 1/2-1/2), the word "checkmate," "resigns," commentary, evaluations, or any text besides the move list.
+        - Stop generating immediately once checkmate is delivered or you have produced the requested number of moves — do not add anything after the final move token.
+
+        LEGALITY:
+        - Every move must be strictly legal in the current position. Never output a move that does not exist on the board or violates the rules.
+        - Track the board state implicitly from the full move history before choosing each move.
+
+        PLAY STRENGTH:
+        - At each turn, select the move you judge strongest given material balance, king safety, piece activity, and tactical threats.
+        - Do not hedge between candidate moves or explain reasoning — commit to one move per ply.
 
         <user>
         play_as: {chess_json["play_as"]}
