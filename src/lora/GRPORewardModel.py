@@ -168,7 +168,7 @@ class GRPORewardModel(nn.Module):
     
     def generate(self, input_ids, attention_mask):
         with torch.no_grad():
-            output_tensor = self.model.generate(input_ids.to(self.model_device), attention_mask=attention_mask.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=self.temperature)
+            output_tensor = self.model.generate(input_ids.to(self.model_device), attention_mask=attention_mask.to(self.model_device), max_new_tokens=self.total_generation_length)
         return output_tensor
 
     
