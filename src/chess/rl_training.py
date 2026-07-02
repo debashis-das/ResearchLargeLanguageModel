@@ -23,7 +23,7 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
         input_ids = input_ids.repeat_interleave(repeats=5, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=5, dim=0)  # Repeat the attention mask for the batch size
         
-        generation_ids = grpo_reward_model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=50)
+        generation_ids = model_with_lora.generate(input_ids, attention_mask=attention_mask, max_new_tokens=50)
         print(f"Generated text: {tokenizer.batch_decode(generation_ids, skip_special_tokens=True)}")  
         exit()
         grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=16, model_device=device, dtype=dtype)
