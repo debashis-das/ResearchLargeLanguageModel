@@ -44,8 +44,8 @@ class GRPORewardModel(nn.Module):
         self.epsilon = 0.05
         self.beta = 0.02
         # self.temperature = 0.7
-        self.warm_up_steps = 500
-        self.current_step = 0
+        # self.warm_up_steps = 500
+        # self.current_step = 0
         # base model initalization
         self.model = model
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
@@ -202,19 +202,19 @@ class GRPORewardModel(nn.Module):
         return log_probs  # Convert back to half precision
     
     def generate(self, input_ids, attention_mask):
-        if self.current_step < self.warm_up_steps:
-            with torch.no_grad():
-                output_tensor = self.model.generate(input_ids.to(self.model_device), 
-                                                    attention_mask=attention_mask.to(self.model_device), 
-                                                    max_new_tokens=self.total_generation_length, 
-                                                    )
-        else:
-            with torch.no_grad():
-                output_tensor = self.model.generate(input_ids.to(self.model_device), 
-                                                attention_mask=attention_mask.to(self.model_device), 
-                                                max_new_tokens=self.total_generation_length, 
-                                                sampling=True
-                                                )
+        # if self.current_step < self.warm_up_steps:
+        #     with torch.no_grad():
+        #         output_tensor = self.model.generate(input_ids.to(self.model_device), 
+        #                                             attention_mask=attention_mask.to(self.model_device), 
+        #                                             max_new_tokens=self.total_generation_length, 
+        #                                             )
+        # else:
+        with torch.no_grad():
+            output_tensor = self.model.generate(input_ids.to(self.model_device), 
+                                            attention_mask=attention_mask.to(self.model_device), 
+                                            max_new_tokens=self.total_generation_length, 
+                                            sampling=True
+                                            )
         return output_tensor
 
     
