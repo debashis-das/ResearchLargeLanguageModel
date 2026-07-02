@@ -23,6 +23,7 @@ class GRPORewardModel(nn.Module):
         self.gamma = 0.99
         self.epsilon = 0.05
         self.beta = 0.02
+        self.temperature = 0.01
 
         # base model initalization
         self.model = model
@@ -167,7 +168,7 @@ class GRPORewardModel(nn.Module):
     
     def generate(self, input_ids, attention_mask):
         with torch.no_grad():
-            output_tensor = self.model.generate(input_ids.to(self.model_device), attention_mask=attention_mask.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=0.7)
+            output_tensor = self.model.generate(input_ids.to(self.model_device), attention_mask=attention_mask.to(self.model_device), max_new_tokens=self.total_generation_length, temperature=self.temperature)
         return output_tensor
 
     
