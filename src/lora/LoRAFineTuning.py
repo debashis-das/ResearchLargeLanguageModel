@@ -180,10 +180,12 @@ class LoRAFineTuning(nn.Module):
             X = self.module_dict["model.norm"](X)
             logits = self.module_dict["lm_head"](X)   # [batch, seq_len, vocab_size]
             next_token_logits = logits[:, -1, :]   # [batch, vocab_size]
-            if temperature == 0.0:
-                next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
+            if temperature is not None:
+                next_token_logits = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
+            if sampling :
+                next_token = torch.distributions.Categorical(next_token_logits).sample((batch,))  # Sample from the distribution
             else:
-                next_token = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
+                next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
             generated_ids = next_token
             # with tqdm(
             #     total       = max_new_tokens,
