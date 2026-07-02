@@ -153,7 +153,7 @@ class LoRAFineTuning(nn.Module):
             torch.cuda.empty_cache()
     
     @torch.no_grad()
-    def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=0.0):
+    def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=None, sampling=False):
         try:
             print(f"Generating text with input_ids shape: {input_ids.shape}, attention_mask shape: {attention_mask.shape if attention_mask is not None else 'None'}, max_new_tokens: {max_new_tokens}, temperature: {temperature}")
             input_ids = input_ids.to(self.device)
@@ -204,12 +204,13 @@ class LoRAFineTuning(nn.Module):
                 next_token = self.module_dict["model.norm"](next_token)
                 logits = self.module_dict["lm_head"](next_token)   # [batch, seq_len, vocab_size]
                 next_token_logits = logits[:, -1, :]   # [batch, vocab_size]
-                if temperature == 0.0:
-                    next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
-                    generated_ids = torch.cat([generated_ids, next_token], dim=-1)
+                if temperature is not None:
+                    next_token_logits = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
+                if sampling : 
+                    next_token = torch.distributions.Categorical(next_token_logits).sample((batch,))  # Sample from the distribution
                 else:
-                    next_token = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
-                    generated_ids = torch.cat([generated_ids, next_token], dim=-1)
+                    next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
+                generated_ids = torch.cat([generated_ids, next_token], dim=-1)
                 # if idx % 100 == 0:
                     # print(f"Generated token {idx+1}/{max_new_tokens}")  
                     # pbar.update(1)
@@ -233,9 +234,7 @@ class LoRAFineTuning(nn.Module):
         next_token_logits = torch.nn.functional.softmax(next_token_logits, dim=-1)  
         next_token_logits = torch.nan_to_num(next_token_logits, nan=0.0)
         next_token_logits = next_token_logits / next_token_logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
-        next_token = torch.distributions.Categorical(next_token_logits).sample((batch_size,))  # Sample from the distribution
-        del next_token_logits
-        return next_token
+        return next_token_logits
     
 if __name__ == "__main__":
     model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
