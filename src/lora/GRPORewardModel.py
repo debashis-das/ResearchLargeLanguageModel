@@ -10,9 +10,29 @@ from transformers import AutoTokenizer
 from chess.chess_validator import ChessGame
 from lora.LoRAFineTuning import LoRAFineTuning
 
+SAN_REGEX = re.compile(
+        r"""^(
+            # Castling
+            O-O(-O)?[+#]? |
+
+            # Piece moves (optional piece letter)
+            ([KQRBN])?                  # piece
+            ([a-h])?                   # disambiguation file
+            ([1-8])?                   # disambiguation rank
+            x?                         # capture
+            [a-h][1-8]                 # target square
+
+            (= [QRBN])?                # promotion (with space handled below)
+            (= [QRBN])?                # promotion (no space variant)
+
+            [+#]?                      # check or mate
+        )$""",
+        re.VERBOSE
+    )
+
 class GRPORewardModel(nn.Module):
 
-    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, model_device="cpu", dtype=torch.float16, total_generation_length=10):
+    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, model_device="cpu", dtype=torch.float16, total_generation_length=20):
         super(GRPORewardModel, self).__init__()
         self.tokenizer = tokenizer
         self.grpo_batch = grpo_batch
@@ -23,8 +43,9 @@ class GRPORewardModel(nn.Module):
         self.gamma = 0.99
         self.epsilon = 0.05
         self.beta = 0.02
-        self.temperature = 0
-
+        # self.temperature = 0.7
+        self.warm_up_steps = 500
+        self.current_step = 0
         # base model initalization
         self.model = model
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
@@ -45,6 +66,15 @@ class GRPORewardModel(nn.Module):
         with torch.no_grad():
             generated_ids = self.model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=max_new_tokens, temperature=temperature)
         return generated_ids
+
+    def is_valid_san(self, move: str) -> bool:
+        """
+        Validate if a move is syntactically valid SAN (no board legality).
+        """
+        move = move.strip()
+        # Normalize spaces like "e8 = Q"
+        move = move.replace(" = ", "=")
+        return bool(SAN_REGEX.match(move))
 
     def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
         san = r'(O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?[+#]?)'
@@ -69,6 +99,9 @@ class GRPORewardModel(nn.Module):
                     black   = m.group(3)  # None if Black didn't play (resignation)
                     # if ignore_moves_till > 0:
                     #     print(f"[Ignore till {ignore_moves_till}] Processing move number {move_no} : White move : {white} : Black move : {black}")
+                    if self.is_valid_san(white) or self.is_valid_san(black):
+                        atleast_one_valid_move = True
+
                     if play_as == "white" and move_no == ignore_moves_till:
                         continue
                     if play_as == "black" and move_no == ignore_moves_till and black is not None:
@@ -113,6 +146,8 @@ class GRPORewardModel(nn.Module):
             if count_valid_moves > 0:
                 no_moves_generated = True
         if not no_moves_generated:
+            if atleast_one_valid_move:
+                return chess_board, 0.5, max_move_no
             return chess_board, -1, max_move_no
         # print(f" Total valid moves: {count_valid_moves}, Reward: {reward}, Last move number processed: {move_no}")
         return chess_board, max_reward, max_move_no
@@ -167,16 +202,24 @@ class GRPORewardModel(nn.Module):
         return log_probs  # Convert back to half precision
     
     def generate(self, input_ids, attention_mask):
-        with torch.no_grad():
-            output_tensor = self.model.generate(input_ids.to(self.model_device), 
+        if self.current_step < self.warm_up_steps:
+            with torch.no_grad():
+                output_tensor = self.model.generate(input_ids.to(self.model_device), 
+                                                    attention_mask=attention_mask.to(self.model_device), 
+                                                    max_new_tokens=self.total_generation_length, 
+                                                    )
+        else:
+            with torch.no_grad():
+                output_tensor = self.model.generate(input_ids.to(self.model_device), 
                                                 attention_mask=attention_mask.to(self.model_device), 
                                                 max_new_tokens=self.total_generation_length, 
-                                                # sampling=True
+                                                sampling=True
                                                 )
         return output_tensor
 
     
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
+        self.current_step += 1
         attention_mask = attention_mask.unsqueeze(0)  # Add batch dimension
         x = x.unsqueeze(0)
         input_sequence_length = x.shape[-1]
@@ -270,6 +313,7 @@ class GRPORewardModel(nn.Module):
         if torch.isnan(loss).any():
             print("NaN in loss!")
             exit()
+        
         return loss.mean(), weights
 
     def debug_logs(self, X, idx, tensor_per_generation):
