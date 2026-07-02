@@ -58,8 +58,8 @@ def prompt_generator(chess_json, training_type):
 
         OUTPUT FORMAT (strict — required for automated parsing):
         - Output ONLY the continuation moves in Standard Algebraic Notation (SAN).
-        - Format: "N.white_move black_move N+1.white_move black_move ..." with a single space between tokens, no newlines, no leading/trailing whitespace.
-        - If it is Black's turn on the first move you output, start with "N...black_move".
+        - Format: "N. white_move black_move N+1. white_move black_move ..." with a single space between tokens, no newlines, no leading/trailing whitespace.
+        - If it is Black's turn on the first move you output, start with "black_move N+1. white_move".
         - Do not repeat any moves from the given history.
         - Use standard SAN characters only (piece letters, files a-h, ranks 1-8, x for capture, = for promotion, O-O/O-O-O for castling). Include + for check and # for checkmate only when standard SAN requires them for disambiguation — otherwise omit.
         - Do not output result markers (1-0, 0-1, 1/2-1/2), the word "checkmate," "resigns," commentary, evaluations, or any text besides the move list.
@@ -93,8 +93,8 @@ def prompt_generator(chess_json, training_type):
 
         OUTPUT FORMAT (strict — required for automated parsing):
         - Output ONLY the continuation moves in Standard Algebraic Notation (SAN).
-        - Format: "N.white_move black_move N+1.white_move black_move ..." with a single space between tokens, no newlines, no leading/trailing whitespace.
-        - If it is Black's turn on the first move you output, start with "N...black_move".
+        - Format: "N. white_move black_move N+1. white_move black_move ..." with a single space between tokens, no newlines, no leading/trailing whitespace.
+        - If it is Black's turn on the first move you output, start with "black_move N+1. white_move".
         - Do not repeat any moves from the given history.
         - Use standard SAN characters only (piece letters, files a-h, ranks 1-8, x for capture, = for promotion, O-O/O-O-O for castling). Include + for check and # for checkmate only when standard SAN requires them for disambiguation — otherwise omit.
         - Do not output result markers (1-0, 0-1, 1/2-1/2), the word "checkmate," "resigns," commentary, evaluations, or any text besides the move list.
@@ -174,7 +174,7 @@ if __name__ == "__main__":
     for i in range(3,13):
         print(f"Processing file : lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2")
         if not sl_parequet_generated_toggle:
-            current_counter, sl_counter = open_bz2_file(f'src\chess\dataset\lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2',current_counter, parquet_sl_counter, paraquet_limit, training_type=TrainingType.SUPERVISED_LEARNING)
+            current_counter, sl_counter = open_bz2_file(f'src\\chess\\dataset\\lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2',current_counter, parquet_sl_counter, paraquet_limit, training_type=TrainingType.SUPERVISED_LEARNING)
             parquet_sl_counter += sl_counter
             print(f"Finished processing file : lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2")
             current_counter = 0
@@ -183,7 +183,7 @@ if __name__ == "__main__":
                 rl_parequet_generated_toggle = False
                 df = df[0:0]  # Clear the DataFrame to free up memory before starting RL parquet generation
         if not rl_parequet_generated_toggle:
-            current_counter, rl_counter = open_bz2_file(f'src\chess\dataset\lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2',current_counter, parquet_rl_counter, paraquet_limit, training_type=TrainingType.REINFORCEMENT_LEARNING)
+            current_counter, rl_counter = open_bz2_file(f'src\\chess\\dataset\\lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2',current_counter, parquet_rl_counter, paraquet_limit, training_type=TrainingType.REINFORCEMENT_LEARNING)
             parquet_rl_counter += rl_counter
             print(f"Finished processing file : lichess_db_standard_rated_2013-{i:02d}.pgn.txt.bz2")
             current_counter = 0
