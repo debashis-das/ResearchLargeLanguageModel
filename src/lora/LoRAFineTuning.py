@@ -183,6 +183,9 @@ class LoRAFineTuning(nn.Module):
             if temperature is not None:
                 next_token_logits = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
             if sampling :
+                if temperature is None:
+                    next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
+                    next_token_logits = torch.softmax(next_token_logits, dim=-1)
                 next_token = torch.distributions.Categorical(next_token_logits).sample((batch,))  # Sample from the distribution
             else:
                 next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
@@ -229,14 +232,12 @@ class LoRAFineTuning(nn.Module):
             self.train() 
 
     def temperature_sampling(self, temperature, next_token_logits, batch_size):
-        next_token_logits = next_token_logits / temperature  # Apply temperature scaling
-        next_token_logits = torch.nan_to_num(next_token_logits, nan=0.0, posinf=1e4, neginf=-1e4)
-        next_token_logits = torch.clamp(next_token_logits, min=-50, max=50)  # Clamp logits to avoid extreme values
-        next_token_logits = next_token_logits.float()  # Ensure logits are in float32 for softmax
-        next_token_logits = torch.nn.functional.softmax(next_token_logits, dim=-1)  
-        next_token_logits = torch.nan_to_num(next_token_logits, nan=0.0)
-        next_token_logits = next_token_logits / next_token_logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
-        return next_token_logits
+        temperature = max(temperature, 1e-6)
+        logits = next_token_logits / temperature
+        logits = logits.float()
+        logits = logits - logits.max(dim=-1, keepdim=True).values
+        probs = torch.softmax(logits, dim=-1)
+        return probs
     
 if __name__ == "__main__":
     model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
