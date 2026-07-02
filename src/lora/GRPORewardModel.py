@@ -84,7 +84,7 @@ class GRPORewardModel(nn.Module):
         max_reward = 0.0
         no_moves_generated = False
         max_move_no = 0
-
+        atleast_one_valid_move = False
         for chunk in chunks:
             chunk = chunk.strip()
             if not chunk.startswith("1."):
