@@ -15,6 +15,17 @@ from lora.LoRAFineTuning import LoRAFineTuning
 
 def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtype=None, optimizer=None, replay_buffer=None):
     try:
+        paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/000001-rl.parquet"
+        df_input = pd.read_parquet(paraquet)
+        row = df_input.sample(n=1).iloc[0]
+        input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
+        attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
+        input_ids = input_ids.repeat_interleave(repeats=5, dim=0)  # Repeat the input tensor for the batch size
+        attention_mask = attention_mask.repeat_interleave(repeats=5, dim=0)  # Repeat the attention mask for the batch size
+        
+        generation_ids = grpo_reward_model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=50)
+        print(f"Generated text: {tokenizer.batch_decode(generation_ids, skip_special_tokens=True)}")  
+        exit()
         grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=16, model_device=device, dtype=dtype)
         training_timestep = 0
         recover = False
