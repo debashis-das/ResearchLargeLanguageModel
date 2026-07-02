@@ -60,7 +60,7 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
                     row_rl = df_rl_input.sample(n=1).iloc[0]
                     input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                     attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
-                    generation_ids = grpo_reward_model.generate(input_ids_rl, attention_mask=attention_mask_rl, max_new_tokens=50)
+                    generation_ids = grpo_reward_model.generate(input_ids_rl, attention_mask=attention_mask_rl)
                     print(f"Generated text: {tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                 try:
                     loss, weights = grpo_reward_model(input_ids, attention_mask=attention_mask)
