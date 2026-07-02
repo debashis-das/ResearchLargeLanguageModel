@@ -219,7 +219,7 @@ class GRPORewardModel(nn.Module):
 
     
     def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
-        self.current_step += 1
+        # self.current_step += 1
         attention_mask = attention_mask.unsqueeze(0)  # Add batch dimension
         x = x.unsqueeze(0)
         input_sequence_length = x.shape[-1]
