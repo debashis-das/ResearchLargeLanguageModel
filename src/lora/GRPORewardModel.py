@@ -23,7 +23,7 @@ class GRPORewardModel(nn.Module):
         self.gamma = 0.99
         self.epsilon = 0.05
         self.beta = 0.02
-        self.temperature = 0.01
+        self.temperature = 0
 
         # base model initalization
         self.model = model
