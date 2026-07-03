@@ -69,7 +69,6 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
                         print("Added to replay buffer : Positive reward found in the batch")
                     if rewards.all() < 0:
                         continue  # Skip the update if all rewards are negative
-                    del weights
                     optimizer.zero_grad(set_to_none=True)
                     loss.backward()
                     optimizer.step()
