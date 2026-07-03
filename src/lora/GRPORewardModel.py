@@ -289,6 +289,7 @@ class GRPORewardModel(nn.Module):
             # print(f"Probs ratio batch : {probs_ratio_batch}")
             reward_batch = torch.stack(reward_batch)
         # reward_batch = torch.tensor([-1.0]*28+[1.0], dtype=self.dtype, device=self.model_device)
+        print(f"Reward batch : {reward_batch.mean()} : {reward_batch}")
         reward_batch = reward_batch.to(self.model_device)
         advantage = reward_batch - reward_batch.mean()
         advantage = advantage / (advantage.abs().mean() + 1e-6) # Normalize advantages
