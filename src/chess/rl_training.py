@@ -22,7 +22,7 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
         # attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
         # input_ids = input_ids.repeat_interleave(repeats=5, dim=0)  # Repeat the input tensor for the batch size
         # attention_mask = attention_mask.repeat_interleave(repeats=5, dim=0)  # Repeat the attention mask for the batch size
-        grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=12, model_device=device, dtype=dtype)
+        grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, model_device=device, dtype=dtype)
         
         # generation_ids = grpo_reward_model.generate(input_ids, attention_mask=attention_mask)
         # print(f"Generated text: {tokenizer.batch_decode(generation_ids, skip_special_tokens=True)}")  
@@ -39,7 +39,7 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
                 model_with_lora.load_lora_parameters("model/lora_parameters.pt")
                 training_timestep = optimizer_with_timestep_state['epoch_per_parquet']
                 del grpo_reward_model
-                grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=12, model_device=device, dtype=dtype)
+                grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, model_device=device, dtype=dtype)
                 print(f"Model recovered successfully after error at timestep: {training_timestep}")
                 recover = False
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
