@@ -67,7 +67,7 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
                     if (rewards > 0).any():
                         replay_buffer.loc[len(replay_buffer)] = [input_ids.cpu().numpy(), attention_mask.cpu().numpy()]
                         print("Added to replay buffer : Positive reward found in the batch")
-                    if rewards.all() < 0:
+                    else:
                         print("All rewards are negative, skipping the update for this batch.")
                         continue  # Skip the update if all rewards are negative
                     print("Rewards : ", rewards)
