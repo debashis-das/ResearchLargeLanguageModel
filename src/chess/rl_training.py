@@ -64,12 +64,11 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
                     print(f"Generated text: {tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                 try:
                     loss, rewards = grpo_reward_model(input_ids, attention_mask=attention_mask)
+                    if loss is None:
+                        continue  # Skip this iteration if loss is None (all rewards were negative)
                     if (rewards > 0).any():
                         replay_buffer.loc[len(replay_buffer)] = [input_ids.cpu().numpy(), attention_mask.cpu().numpy()]
                         print("Added to replay buffer : Positive reward found in the batch")
-                    else:
-                        print("All rewards are negative, skipping the update for this batch.")
-                        continue  # Skip the update if all rewards are negative
                     print("Rewards : ", rewards)
                     optimizer.zero_grad(set_to_none=True)
                     loss.backward()

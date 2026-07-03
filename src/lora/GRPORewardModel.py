@@ -227,6 +227,18 @@ class GRPORewardModel(nn.Module):
         X = x.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the attention mask for the batch size
         output_tensor = self.generate(X.to(self.model_device), attention_mask=attention_mask)
+        
+        with torch.no_grad():
+            reward_batch = []
+            for tensor_per_generation in output_tensor.detach().cpu():
+                considered_tensor = tensor_per_generation
+                reward = self.extract_reward(considered_tensor, input_sequence_length=input_sequence_length)
+                # reward to be calculated per token
+                reward_batch.append(torch.tensor(reward, dtype=self.dtype))
+            reward_batch = torch.stack(reward_batch)
+        if (reward_batch < 0).all():
+            return None, reward_batch
+        
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
@@ -278,18 +290,7 @@ class GRPORewardModel(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
 
-        with torch.no_grad():
-            reward_batch = []
-            for tensor_per_generation in output_tensor.detach().cpu():
-                considered_tensor = tensor_per_generation
-                reward = self.extract_reward(considered_tensor, input_sequence_length=input_sequence_length)
-                # reward to be calculated per token
-                reward_batch.append(torch.tensor(reward, dtype=self.dtype))
-                # print("-------------------------------------------------------------")
-            # print(f"Probs ratio batch : {probs_ratio_batch}")
-            reward_batch = torch.stack(reward_batch)
-        # reward_batch = torch.tensor([-1.0]*28+[1.0], dtype=self.dtype, device=self.model_device)
-        # print(f"Reward batch : {reward_batch.mean()} : {reward_batch}")
+        
         reward_batch = reward_batch.to(self.model_device)
         advantage = reward_batch - reward_batch.mean()
         advantage = advantage / (advantage.abs().mean() + 1e-6) # Normalize advantages
