@@ -124,9 +124,7 @@ def prompt_generator(chess_json, training_type):
     moves: "Moves in SAN format with move number and dot separator between white and black moves. For example : 1. e4 e5 2. Nf3 Nc6 3. Bb5 a6",
     <user>
     play_as: {chess_json["play_as"]}
-    moves: "{extracted_moves}"
-    <assistant>
-    {generate_moves}
+    moves: {extracted_moves} {generate_moves}
     """
     if training_type == TrainingType.REINFORCEMENT_LEARNING:
         prompt = f"""
@@ -201,8 +199,8 @@ def prompt_generator(chess_json, training_type):
     moves: "Moves in SAN format with move number and dot separator between white and black moves. For example : 1. e4 e5 2. Nf3 Nc6 3. Bb5 a6",
     <user>
     play_as: {chess_json["play_as"]}
-    moves: "{extracted_moves}"
-    <assistant>"""
+    moves: {extracted_moves}
+    """
     return prompt
 
 def open_bz2_file(file_path, counter, parquet_counter, paraquet_limit, training_type):
