@@ -29,7 +29,7 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
         # exit()
         training_timestep = 0
         recover = False
-        for i in range(5):
+        for i in range(4):
             if recover:
                 # Optimizer state recovery
                 optimizer_with_timestep_state = torch.load(f"model/optimizer_with_timestep_state_dict.pt", map_location=device)
