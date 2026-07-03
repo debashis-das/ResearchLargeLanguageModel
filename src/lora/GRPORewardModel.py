@@ -304,11 +304,11 @@ class GRPORewardModel(nn.Module):
         loss = -torch.min(product, product_clamped) + self.beta * divergence
         print(f"Loss : {loss.mean()} : Advantage : {weights.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : Divergence : {divergence.mean()}")
 
-        del reward_batch
         del advantage
         del product
         del product_clamped
         del divergence
+        del weights
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -316,7 +316,7 @@ class GRPORewardModel(nn.Module):
             print("NaN in loss!")
             exit()
         
-        return loss.mean(), weights
+        return loss.mean(), reward_batch
 
     def debug_logs(self, X, idx, tensor_per_generation):
         print(f"Input      : {self.tokenizer.decode(X[idx], skip_special_tokens=True)}")

@@ -54,7 +54,7 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
                 else:
                     input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                     attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
-                if training_timestep % 50 == 0:
+                if training_timestep+1 % 50 == 0:
                     current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/000003-rl.parquet"
                     df_rl_input = pd.read_parquet(current_rl_paraquet)
                     row_rl = df_rl_input.sample(n=1).iloc[0]
@@ -63,10 +63,12 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
                     generation_ids = grpo_reward_model.generate(input_ids_rl, attention_mask=attention_mask_rl)
                     print(f"Generated text: {tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                 try:
-                    loss, weights = grpo_reward_model(input_ids, attention_mask=attention_mask)
-                    if (weights > 0).any():
+                    loss, rewards = grpo_reward_model(input_ids, attention_mask=attention_mask)
+                    if (rewards > 0).any():
                         replay_buffer.loc[len(replay_buffer)] = [input_ids.cpu().numpy(), attention_mask.cpu().numpy()]
                         print("Added to replay buffer : Positive reward found in the batch")
+                    if rewards.all() < 0:
+                        continue  # Skip the update if all rewards are negative
                     del weights
                     optimizer.zero_grad(set_to_none=True)
                     loss.backward()
