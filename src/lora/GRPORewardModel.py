@@ -142,7 +142,7 @@ class GRPORewardModel(nn.Module):
     def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
         prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
         generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
-        print(f"Prompt : {prompt} \n\n Generation : {generation}")
+        # print(f"Prompt : {prompt} \n\n Generation : {generation}")
         try:
             init_prompt = prompt.strip().rsplit("<user>")[-1].strip()
             input_moves =  (init_prompt.rsplit("moves:")[-1].strip())
@@ -252,7 +252,7 @@ class GRPORewardModel(nn.Module):
         advantage = reward_batch - reward_batch.mean()
         advantage = advantage / (advantage.abs().mean() + 1e-6) # Normalize advantages
 
-        weights = 1.5*torch.tanh(advantage) + 0.001  # smooth gating
+        weights = 5*torch.tanh(advantage) + 0.001  # smooth gating
         weights = weights + 0.01 * torch.sign(reward_batch)
         # print(f"Reward after smoothing : {weights}")
         weights = weights.unsqueeze(-1).unsqueeze(-1)
