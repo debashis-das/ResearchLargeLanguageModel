@@ -190,11 +190,7 @@ class LoRAFineTuning(nn.Module):
                 next_token = torch.distributions.Categorical(logits=next_token_logits).sample()  # Sample from the distribution
             else:
                 next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
-            if len(next_token.shape) == 1:
-                next_token = next_token.unsqueeze(0)
             generated_ids = next_token
-            print(next_token.shape)
-            
             # with tqdm(
             #     total       = max_new_tokens,
             #     desc        = "Generating text",
@@ -208,7 +204,6 @@ class LoRAFineTuning(nn.Module):
                 cache_position = torch.tensor([init_seq_len + idx], device=self.device)  # Positions for the new token
                 position_ids = cache_position.unsqueeze(0)
                 next_token = self.module_dict["model.embed_tokens"](next_token)
-                print(f"Next token shape: {next_token.shape}, Position IDs shape: {position_ids.shape}")
                 position_embeddings = self.module_dict["model.rotary_emb"](next_token, position_ids)  # (cos, sin)
                 for layer_number in range(self.model.config.num_hidden_layers):
                     next_token = self.action_per_layer(layer_number, next_token, position_embeddings=position_embeddings, cache_position=cache_position, kv_cache=kv_cache)
