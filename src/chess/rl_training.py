@@ -14,15 +14,14 @@ from lora.LoRAFineTuning import LoRAFineTuning
 def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dtype=None, replay_buffer=None):
     try:
         grpo_reward_model = GRPORewardModel(tokenizer_path, model_path, grpo_batch=4, 
-                                            loRA_parameters_path=loRA_parameters_path, 
-                                            dtype=dtype)
-
+                                            loRA_parameters_path=loRA_parameters_path)
+        device = grpo_reward_model.model_device
         optimizer = torch.optim.AdamW(grpo_reward_model.parameters(), lr=1e-5)
         paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/000001-rl.parquet"
         df_input = pd.read_parquet(paraquet)
         row = df_input.sample(n=1).iloc[0]
-        input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=grpo_reward_model.model_device).unsqueeze(0)
-        attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=grpo_reward_model.model_device).unsqueeze(0)
+        input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
+        attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
         input_ids = input_ids.repeat_interleave(repeats=5, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=5, dim=0)  # Repeat the attention mask for the batch size
         
@@ -46,8 +45,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                 # Model recovery with LoRA parameters
                 del grpo_reward_model
                 grpo_reward_model = GRPORewardModel(tokenizer_path, model_path, grpo_batch=4, 
-                                            loRA_parameters_path=loRA_parameters_path, 
-                                            model_device=device, dtype=dtype)
+                                            loRA_parameters_path=loRA_parameters_path)
                 print(f"Model recovered successfully after error at timestep: {training_timestep}")
                 recover = False
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
@@ -114,12 +112,11 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
 def rl_execute():
     model_path = "/home/model"
     # model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
-    dtype = torch.float16
     loRA_parameters_path = "model/sft_lora_parameters.pt"
     
     replay_buffer = pd.DataFrame(columns=['input_ids', 'attention_mask'])
     rl_train(tokenizer_path=model_path, model_path=model_path, loRA_parameters_path=loRA_parameters_path, 
-             dtype=dtype, replay_buffer=replay_buffer)
+             replay_buffer=replay_buffer)
 
 if __name__ == "__main__":
     rl_execute()
