@@ -176,7 +176,6 @@ class LoRAFineTuning(nn.Module):
             position_embeddings = self.module_dict["model.rotary_emb"](X, position_ids)  # (cos, sin)
             attention_mask = self.qwen_attention_mask(batch_size=batch, attention_mask=attention_mask) if attention_mask is not None else None
             for layer_number in range(self.model.config.num_hidden_layers):
-                print(f"Layer {layer_number} - X shape: {X.shape}")
                 X = self.action_per_layer(layer_number, X, attention_mask=attention_mask, position_embeddings=position_embeddings, cache_position=cache_position, kv_cache=kv_cache)
             X = self.module_dict["model.norm"](X)
             logits = self.module_dict["lm_head"](X)   # [batch, seq_len, vocab_size]
