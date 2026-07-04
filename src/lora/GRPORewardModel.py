@@ -1,4 +1,3 @@
-import copy
 import gc
 import re
 import traceback
@@ -62,7 +61,7 @@ class GRPORewardModel(nn.Module):
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
         # for p in self.model.parameters():
         #     p.data += 0.005 * torch.randn_like(p)  
-        self.base_model = copy.deepcopy(self.model)
+        self.base_model = LoRAFineTuning(init_model, self.tokenizer, device=init_model.device)
         
         for param in self.base_model.parameters():
             param.requires_grad = False 
