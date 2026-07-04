@@ -139,8 +139,10 @@ class GRPORewardModel(nn.Module):
             reward = -1.0
         return reward
 
-    # reward for proper format of the output
-    def extract_and_reward(self, prompt, generation):
+    def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
+        prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
+        generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
+        print(f"Prompt : {prompt} \n\n Generation : {generation}")
         try:
             init_prompt = prompt.strip().rsplit("<user>")[-1].strip()
             input_moves =  (init_prompt.rsplit("moves:")[-1].strip())
@@ -150,14 +152,6 @@ class GRPORewardModel(nn.Module):
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
         return 0.0
-
-    def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
-        prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
-        generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
-        print(f"Prompt : {prompt} \n\n Generation : {generation}")
-        reward = self.chess_reward_function(prompt, generation)
-        # print("-------------------------------------------------------------")
-        return reward
 
     def sanatize_logits(self, logits: torch.Tensor, actions: torch.Tensor):
         logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
