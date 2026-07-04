@@ -223,6 +223,8 @@ class LoRAFineTuning(nn.Module):
                     next_token = torch.distributions.Categorical(logits=next_token_logits).sample()  # Sample from the distribution
                 else:
                     next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
+                if len(next_token.shape) == 1:
+                    next_token = next_token.unsqueeze(-1)  # Ensure next_token has shape [batch, 1]
                 print(f"[Inside for]Next token : {next_token.shape}")
                 print(f"Generated ids : {generated_ids.shape}")
                 generated_ids = torch.cat([generated_ids, next_token], dim=-1)
