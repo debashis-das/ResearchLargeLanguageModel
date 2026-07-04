@@ -51,9 +51,9 @@ class GRPORewardModel(nn.Module):
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
         # for p in self.model.parameters():
         #     p.data += 0.005 * torch.randn_like(p)    
-        self.base_model = deepcopy(model)
-        for param in self.base_model.parameters():
-            param.requires_grad = False 
+        # self.base_model = deepcopy(model)
+        # for param in self.base_model.parameters():
+        #     param.requires_grad = False 
 
     def use_base_model(self, tokens, attention_mask):
         self.base_model.eval()
@@ -227,7 +227,7 @@ class GRPORewardModel(nn.Module):
             reward_batch = torch.stack(reward_batch)
         if (reward_batch < 0).all():
             return None, reward_batch
-        
+        exit()
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
