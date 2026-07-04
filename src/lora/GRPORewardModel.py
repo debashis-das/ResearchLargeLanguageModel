@@ -1,11 +1,10 @@
-from copy import deepcopy
 import gc
 import re
 import traceback
 
 from torch import nn
 import torch
-from transformers import AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from chess.chess_validator import ChessGame
 from lora.LoRAFineTuning import LoRAFineTuning
@@ -32,28 +31,40 @@ SAN_REGEX = re.compile(
 
 class GRPORewardModel(nn.Module):
 
-    def __init__(self, tokenizer: AutoTokenizer, model: LoRAFineTuning, grpo_batch: int, model_device="cpu", dtype=torch.float16, total_generation_length=50):
+    def __init__(self, 
+                 tokenizer_path: str, 
+                 model_path: str, 
+                 grpo_batch: int,
+                 loRA_parameters_path: str = None, 
+                 model_device="cpu", 
+                 dtype=torch.float16, 
+                 total_generation_length=50):
         super(GRPORewardModel, self).__init__()
-        self.tokenizer = tokenizer
+        self.tokenizer_path = tokenizer_path
         self.grpo_batch = grpo_batch
         self.model_device = model_device
-        # self.loss_device = loss_device
         self.dtype = dtype
         self.total_generation_length = total_generation_length
         self.gamma = 0.99
         self.epsilon = 0.05
         self.beta = 0.02
-        # self.temperature = 0.7
-        # self.warm_up_steps = 500
-        # self.current_step = 0
-        # base model initalization
-        self.model = model
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        init_model = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    dtype=dtype,
+                    device_map="auto"
+                )
+        self.model = LoRAFineTuning(init_model, self.tokenizer, device=init_model.device)
+        if loRA_parameters_path:
+            self.model.load_lora_parameters(loRA_parameters_path)
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
         # for p in self.model.parameters():
-        #     p.data += 0.005 * torch.randn_like(p)    
-        # self.base_model = deepcopy(model)
-        # for param in self.base_model.parameters():
-        #     param.requires_grad = False 
+        #     p.data += 0.005 * torch.randn_like(p)  
+        self.base_model = LoRAFineTuning(init_model, self.tokenizer, device=init_model.device)
+        if loRA_parameters_path:
+            self.base_model.load_lora_parameters(loRA_parameters_path)
+        for param in self.base_model.parameters():
+            param.requires_grad = False 
 
     def use_base_model(self, tokens, attention_mask):
         self.base_model.eval()

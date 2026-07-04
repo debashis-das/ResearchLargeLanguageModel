@@ -7,14 +7,19 @@ import traceback
 
 import pandas as pd
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from chess.chess_validator import ChessGame
 from lora.GRPORewardModel import GRPORewardModel
 from lora.LoRAFineTuning import LoRAFineTuning
 
-def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtype=None, optimizer=None, replay_buffer=None):
+def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, device=None, dtype=None, optimizer_with_timestep_state_path=None, replay_buffer=None):
     try:
+        grpo_reward_model = GRPORewardModel(tokenizer_path, model_path, grpo_batch=4, 
+                                            loRA_parameters_path=loRA_parameters_path, 
+                                            model_device=device, dtype=dtype)
+
+        optimizer_with_timestep_state = torch.load(optimizer_with_timestep_state_path, map_location=device)
+        optimizer = torch.optim.AdamW(grpo_reward_model.parameters(), lr=1e-5)
+        optimizer.load_state_dict(optimizer_with_timestep_state['optimizer_state_dic'])
         paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/000001-rl.parquet"
         df_input = pd.read_parquet(paraquet)
         row = df_input.sample(n=1).iloc[0]
@@ -23,16 +28,15 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
         input_ids = input_ids.repeat_interleave(repeats=5, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=5, dim=0)  # Repeat the attention mask for the batch size
         
-        generation_ids = model_with_lora.generate(input_ids, attention_mask=attention_mask, max_new_tokens=50, temperature=0.7)
-        print(f"Before passing it to GRPO Generated text: {tokenizer.batch_decode(generation_ids, skip_special_tokens=True)}")  
+        generation_ids = grpo_reward_model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=50, temperature=0.7)
+        print(f"Before passing it to GRPO Generated text: {grpo_reward_model.tokenizer.batch_decode(generation_ids, skip_special_tokens=True)}")  
         print("----------------------------------------------------------------------------------------------------")
         # input_ids = input_ids.repeat_interleave(repeats=5, dim=0)  # Repeat the input tensor for the batch size
         # attention_mask = attention_mask.repeat_interleave(repeats=5, dim=0)  # Repeat the attention mask for the batch size
-        grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, model_device=device, dtype=dtype)
         generation_ids = grpo_reward_model.generate(input_ids, attention_mask=attention_mask)
-        print(f"Generated text: {tokenizer.batch_decode(generation_ids, skip_special_tokens=True)}")  
+        print(f"Generated text: {grpo_reward_model.tokenizer.batch_decode(generation_ids, skip_special_tokens=True)}")  
 
-        # exit()
+        exit()
         training_timestep = 0
         recover = False
         for i in range(4):
@@ -112,34 +116,14 @@ def rl_train(tokenizer=None, model=None, model_with_lora=None, device=None, dtyp
 def rl_execute():
     model_path = "/home/model"
     # model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
     dtype = torch.float16
-    model = AutoModelForCausalLM.from_pretrained(
-                model_path,
-                dtype=dtype,
-                device_map="auto"
-            )
-    model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
-    model_with_lora.load_lora_parameters("model/sft_lora_parameters.pt")
-    device = model.device
-    optimizer_with_timestep_state = torch.load(f"model/sft_optimizer_with_timestep_state_dict.pt", map_location=device)
-    optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
+    loRA_parameters_path = "model/sft_lora_parameters.pt"
+    optimizer_with_timestep_state_path = "model/sft_optimizer_with_timestep_state_dict.pt"
     
-    optimizer.load_state_dict(optimizer_with_timestep_state['optimizer_state_dic'])
     replay_buffer = pd.DataFrame(columns=['input_ids', 'attention_mask'])
-    rl_train(tokenizer=tokenizer, model=model, model_with_lora=model_with_lora, 
-             device=device, dtype=dtype, optimizer=optimizer, 
+    rl_train(tokenizer_path=model_path, model_path=model_path, loRA_parameters_path=loRA_parameters_path, 
+             dtype=dtype, optimizer_with_timestep_state_path=optimizer_with_timestep_state_path, 
              replay_buffer=replay_buffer)
-    # rl_train()
-    # current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
-    # i = 0
-    # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-rl.parquet"
-    # df_input = pd.read_parquet(current_paraquet)
-    # df_shuffled = df_input.sample(frac=1, ignore_index=True)
-    # for _, row in df_shuffled.iterrows():
-    #     input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
-    #     attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
-    #     print(tokenizer.decode(input_ids, skip_special_tokens=True))
 
 if __name__ == "__main__":
     rl_execute()
