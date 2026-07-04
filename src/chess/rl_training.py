@@ -11,15 +11,13 @@ import torch
 from lora.GRPORewardModel import GRPORewardModel
 from lora.LoRAFineTuning import LoRAFineTuning
 
-def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, device=None, dtype=None, optimizer_with_timestep_state_path=None, replay_buffer=None):
+def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, device=None, dtype=None, replay_buffer=None):
     try:
         grpo_reward_model = GRPORewardModel(tokenizer_path, model_path, grpo_batch=4, 
                                             loRA_parameters_path=loRA_parameters_path, 
                                             model_device=device, dtype=dtype)
 
-        optimizer_with_timestep_state = torch.load(optimizer_with_timestep_state_path, map_location=device)
         optimizer = torch.optim.AdamW(grpo_reward_model.parameters(), lr=1e-5)
-        optimizer.load_state_dict(optimizer_with_timestep_state['optimizer_state_dic'])
         paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/000001-rl.parquet"
         df_input = pd.read_parquet(paraquet)
         row = df_input.sample(n=1).iloc[0]
@@ -44,12 +42,12 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, de
                 # Optimizer state recovery
                 optimizer_with_timestep_state = torch.load(f"model/optimizer_with_timestep_state_dict.pt", map_location=device)
                 optimizer.load_state_dict(optimizer_with_timestep_state['optimizer_state_dic'])
-                # Model recovery with LoRA parameters
-                model_with_lora = LoRAFineTuning(model, tokenizer, device=model.device)
-                model_with_lora.load_lora_parameters("model/lora_parameters.pt")
                 training_timestep = optimizer_with_timestep_state['epoch_per_parquet']
+                # Model recovery with LoRA parameters
                 del grpo_reward_model
-                grpo_reward_model = GRPORewardModel(tokenizer, model_with_lora, grpo_batch=4, model_device=device, dtype=dtype)
+                grpo_reward_model = GRPORewardModel(tokenizer_path, model_path, grpo_batch=4, 
+                                            loRA_parameters_path=loRA_parameters_path, 
+                                            model_device=device, dtype=dtype)
                 print(f"Model recovered successfully after error at timestep: {training_timestep}")
                 recover = False
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
@@ -118,12 +116,10 @@ def rl_execute():
     # model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
     dtype = torch.float16
     loRA_parameters_path = "model/sft_lora_parameters.pt"
-    optimizer_with_timestep_state_path = "model/sft_optimizer_with_timestep_state_dict.pt"
     
     replay_buffer = pd.DataFrame(columns=['input_ids', 'attention_mask'])
     rl_train(tokenizer_path=model_path, model_path=model_path, loRA_parameters_path=loRA_parameters_path, 
-             dtype=dtype, optimizer_with_timestep_state_path=optimizer_with_timestep_state_path, 
-             replay_buffer=replay_buffer)
+             dtype=dtype, replay_buffer=replay_buffer)
 
 if __name__ == "__main__":
     rl_execute()
