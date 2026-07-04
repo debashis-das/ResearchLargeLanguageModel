@@ -49,8 +49,8 @@ class GRPORewardModel(nn.Module):
         # base model initalization
         self.model = model
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
-        for p in self.model.parameters():
-            p.data += 0.005 * torch.randn_like(p)    
+        # for p in self.model.parameters():
+        #     p.data += 0.005 * torch.randn_like(p)    
         self.base_model = deepcopy(model)
         for param in self.base_model.parameters():
             param.requires_grad = False 
