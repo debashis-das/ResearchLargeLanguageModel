@@ -208,6 +208,7 @@ class LoRAFineTuning(nn.Module):
                 cache_position = torch.tensor([init_seq_len + idx], device=self.device)  # Positions for the new token
                 position_ids = cache_position.unsqueeze(0)
                 next_token = self.module_dict["model.embed_tokens"](next_token)
+                print(f"Next token shape: {next_token.shape}, Position IDs shape: {position_ids.shape}")
                 position_embeddings = self.module_dict["model.rotary_emb"](next_token, position_ids)  # (cos, sin)
                 for layer_number in range(self.model.config.num_hidden_layers):
                     next_token = self.action_per_layer(layer_number, next_token, position_embeddings=position_embeddings, cache_position=cache_position, kv_cache=kv_cache)
