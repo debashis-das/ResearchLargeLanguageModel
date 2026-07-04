@@ -187,6 +187,7 @@ class LoRAFineTuning(nn.Module):
                 #     next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
                 # next_token_logits = torch.softmax(next_token_logits, dim=-1)
                 next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
+                next_token_logits = torch.topk(next_token_logits, k=50, dim=-1).values  # Keep top 50 logits for sampling
                 next_token = torch.distributions.Categorical(logits=next_token_logits).sample()  # Sample from the distribution
             else:
                 next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
@@ -218,6 +219,7 @@ class LoRAFineTuning(nn.Module):
                     # if temperature is None:
                     #     next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
                     next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
+                    next_token_logits = torch.topk(next_token_logits, k=50, dim=-1).values  # Keep top 50 logits for sampling
                     next_token = torch.distributions.Categorical(logits=next_token_logits).sample()  # Sample from the distribution
                 else:
                     next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
