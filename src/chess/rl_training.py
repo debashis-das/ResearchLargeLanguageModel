@@ -67,12 +67,12 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                     input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                     attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
                     generation_ids = grpo_reward_model.generate(input_ids_rl, attention_mask=attention_mask_rl)
-                    print(f"Generated text: {tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
+                    print(f"Generated text: {grpo_reward_model.tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                 try:
                     loss, rewards = grpo_reward_model(input_ids, attention_mask=attention_mask)
                     if loss is None:
                         continue  # Skip this iteration if loss is None (all rewards were negative)
-                    if (rewards > 0).any():
+                    if (rewards > 0.5).any():
                         replay_buffer.loc[len(replay_buffer)] = [input_ids.cpu().numpy(), attention_mask.cpu().numpy()]
                         print("Added to replay buffer : Positive reward found in the batch")
                     print("Rewards : ", rewards)
