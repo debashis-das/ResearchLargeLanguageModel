@@ -17,7 +17,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
         grpo_reward_model = GRPORewardModel(tokenizer_path, model_path, grpo_batch=GRPO_BATCH_SIZE, 
                                             loRA_parameters_path=loRA_parameters_path)
         device = grpo_reward_model.model_device
-        optimizer = torch.optim.AdamW(grpo_reward_model.parameters(), lr=1e-5)
+        optimizer = torch.optim.AdamW(grpo_reward_model.parameters(), lr=8e-5)
         training_timestep = 0
         recover = False
         for i in range(4):
