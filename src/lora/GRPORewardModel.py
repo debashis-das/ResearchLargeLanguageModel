@@ -247,11 +247,10 @@ class GRPORewardModel(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
         
-        reward_batch = reward_batch.to(self.model_device)
+        reward_batch = reward_batch.to(self.model_device).float()
         normalized_reward = torch.tanh(reward_batch)
-        advantage = normalized_reward - normalized_reward.mean()
-        advantage = advantage / (advantage.std() + 1e-6) # Normalize advantages
-        weights = advantage
+        advantage = normalized_reward - normalized_reward.mean() / (normalized_reward.std() + 1e-6) # Normalize advantages
+        weights = advantage * 5.0
         weights = weights.unsqueeze(-1).unsqueeze(-1)
         
         product = weights.float() * ratio.float()
