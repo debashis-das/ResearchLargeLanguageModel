@@ -190,7 +190,8 @@ class LoRAFineTuning(nn.Module):
                 top_k = 50
                 values, _ = torch.topk(next_token_logits, top_k)
                 min_val = values[:, -1].unsqueeze(-1)
-                logits = torch.where(next_token_logits < min_val, float('-inf'), logits)
+                print(f"Min value for top-k sampling: {min_val}")
+                logits = torch.where(next_token_logits < min_val, float('-inf'), logits, dim=-1)
                 next_token = torch.distributions.Categorical(logits=next_token_logits).sample()  # Sample from the distribution
             else:
                 next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
