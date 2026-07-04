@@ -190,10 +190,11 @@ class LoRAFineTuning(nn.Module):
                 next_token = torch.distributions.Categorical(logits=next_token_logits).sample()  # Sample from the distribution
             else:
                 next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
-            print(next_token.shape)
+            if len(next_token.shape) == 1:
+                next_token = next_token.unsqueeze(0)
             generated_ids = next_token
-            if len(generated_ids.shape) == 1:
-                generated_ids = generated_ids.unsqueeze(0)
+            print(next_token.shape)
+            
             # with tqdm(
             #     total       = max_new_tokens,
             #     desc        = "Generating text",
