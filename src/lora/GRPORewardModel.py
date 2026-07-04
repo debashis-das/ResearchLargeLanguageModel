@@ -142,7 +142,7 @@ class GRPORewardModel(nn.Module):
     def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
         prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
         generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
-        print(f"Prompt : {prompt} \n\n Generation : {generation}")
+        # print(f"Prompt : {prompt} \n\n Generation : {generation}")
         try:
             init_prompt = prompt.strip().rsplit("<user>")[-1].strip()
             input_moves =  (init_prompt.rsplit("moves:")[-1].strip())
@@ -196,7 +196,6 @@ class GRPORewardModel(nn.Module):
             reward_batch = torch.stack(reward_batch)
         if (reward_batch < 0).all():
             return None, reward_batch
-        exit()
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
