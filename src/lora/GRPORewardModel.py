@@ -60,12 +60,6 @@ class GRPORewardModel(nn.Module):
         with torch.no_grad():
             base_logits, _ = self.base_model(tokens, attention_mask=attention_mask, with_no_loss=True)
         return base_logits.detach()
-    
-    def generate(self, input_ids, attention_mask, max_new_tokens=10, temperature=0.01):
-        self.model.eval()
-        with torch.no_grad():
-            generated_ids = self.model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=max_new_tokens, temperature=temperature)
-        return generated_ids
 
     def is_valid_san(self, move: str) -> bool:
         """
@@ -204,13 +198,6 @@ class GRPORewardModel(nn.Module):
         return log_probs  # Convert back to half precision
     
     def generate(self, input_ids, attention_mask):
-        # if self.current_step < self.warm_up_steps:
-        #     with torch.no_grad():
-        #         output_tensor = self.model.generate(input_ids.to(self.model_device), 
-        #                                             attention_mask=attention_mask.to(self.model_device), 
-        #                                             max_new_tokens=self.total_generation_length, 
-        #                                             )
-        # else:
         with torch.no_grad():
             output_tensor = self.model.generate(input_ids.to(self.model_device), 
                                             attention_mask=attention_mask.to(self.model_device), 
