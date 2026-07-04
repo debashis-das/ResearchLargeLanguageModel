@@ -26,7 +26,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, de
         input_ids = input_ids.repeat_interleave(repeats=5, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=5, dim=0)  # Repeat the attention mask for the batch size
         
-        generation_ids = grpo_reward_model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=50, temperature=0.7)
+        generation_ids = grpo_reward_model.generate(input_ids, attention_mask=attention_mask)
         print(f"Before passing it to GRPO Generated text: {grpo_reward_model.tokenizer.batch_decode(generation_ids, skip_special_tokens=True)}")  
         print("----------------------------------------------------------------------------------------------------")
         # input_ids = input_ids.repeat_interleave(repeats=5, dim=0)  # Repeat the input tensor for the batch size
