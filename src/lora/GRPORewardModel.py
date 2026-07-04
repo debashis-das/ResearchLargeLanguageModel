@@ -81,108 +81,68 @@ class GRPORewardModel(nn.Module):
         move = move.replace(" = ", "=")
         return bool(SAN_REGEX.match(move))
 
-    def board_state(self, moves, chess_board: ChessGame, reward = 0.0, ignore_moves_till = 0, play_as="white"):
-        san = r'(O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?[+#]?)'
-        pattern = rf'(\d+)\.\s+({san})(?:\s+(?!\d+\.)( {san} ))?'
-        moves_clean = re.sub(r'\s*(1-0|0-1|1/2-1/2|\*)\s*$', '', moves.strip())
-        chunks = re.split(r'(?=\b1\.\s*)', moves_clean)
-        max_reward = 0.0
-        no_moves_generated = False
-        max_move_no = 0
-        atleast_one_valid_move = False
-        for chunk in chunks:
-            chunk = chunk.strip()
-            if not chunk.startswith("1."):
-                continue
-            count_valid_moves = 0
-            for m in re.finditer(pattern, chunk):
-                try:
-                    move_no = int(m.group(1))
-                    if move_no < ignore_moves_till:
-                        continue
-                    white   = m.group(2)
-                    black   = m.group(3)  # None if Black didn't play (resignation)
-                    # if ignore_moves_till > 0:
-                    #     print(f"[Ignore till {ignore_moves_till}] Processing move number {move_no} : White move : {white} : Black move : {black}")
-                    if self.is_valid_san(white) or self.is_valid_san(black):
-                        atleast_one_valid_move = True
+    def board_state(self, prompt_moves, generation, play_as="white"):
+        chess_board = ChessGame()
+        san = r'(?:O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?)'
+        pattern = rf'(\d+)\.\s+({san})(?:\s+(?!\d+\.)({san}))?'
+        san_str = re.findall(pattern, prompt_moves)
+        init_moves_made = 0
+        count_valid_moves = 0
+        reward = 0.0
+        for m in san_str:
+            for san_values in m:
+                for san_values in san_values.split(" "):
+                    if len(san_values.strip()) > 0 :
+                        if san_values.isdigit():
+                            init_moves_made = int(san_values)
+                        elif san_values[-1] == "." and san_values[:-1].isdigit():
+                            init_moves_made = int(san_values[:-1])
+                        else:
+                            if self.is_valid_san(san_values):
+                                ok, _ = chess_board.push_san(san_values)
+                                if ok:
+                                    count_valid_moves += 1
 
-                    if play_as == "white" and move_no == ignore_moves_till:
-                        continue
-                    if play_as == "black" and move_no == ignore_moves_till and black is not None:
-                        ok, _ = chess_board.push_san(black)
-                        if ok:
-                            count_valid_moves += 1
-                            if ignore_moves_till > 0:
-                                print(f"[Init] count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
-                        else:
-                            print(f"Invalid move for black: {black}")
-                            break
-                        continue
-                    if white and white is not None:
-                        # print(f"Processing move number {move_no} : White move : {white}")
-                        ok, _ = chess_board.push_san(white)
-                        if ok:
-                            count_valid_moves += 1
-                            if ignore_moves_till > 0:
-                                print(f"[White] base moves : {ignore_moves_till} count_valid_moves : {count_valid_moves} : move_no : {move_no} : white move : {white}")
-                        else:
-                            # print(f"Invalid move for white: {white}")
-                            break
-                    if black and black is not None:
-                        # print(f"Processing move number {move_no} : Black move : {black}")
-                        ok, _ = chess_board.push_san(black)
-                        if ok:
-                            count_valid_moves += 1
-                            if ignore_moves_till > 0:
-                                print(f"[Black] base moves : {ignore_moves_till} count_valid_moves : {count_valid_moves} : move_no : {move_no} : black move : {black}")
-                        else:
-                            # print(f"Invalid move for black: {black}")
-                            break
-                    if black is None or white is None:
-                        break
-                except Exception as e:
-                    print(f"An error occurred while processing moves: {e}")
-                    traceback.print_exc()
-                    break
-                finally:
-                    max_move_no = max(max_move_no, move_no)
-            max_reward = max(max_reward, count_valid_moves * 0.5)
-            if count_valid_moves > 0:
-                no_moves_generated = True
-        if not no_moves_generated:
-            if atleast_one_valid_move:
-                return chess_board, 0.5, max_move_no
-            return chess_board, -1, max_move_no
-        # print(f" Total valid moves: {count_valid_moves}, Reward: {reward}, Last move number processed: {move_no}")
-        return chess_board, max_reward, max_move_no
+        san = r'(?:O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?)'
+        pattern = rf'(({san}\s+)?(?:\d+\.\s+{san}(?:\s+(?!\d+\.){san})?\s*)+)'
+        san_str = re.findall(pattern, generation)
+        atleast_one_valid_move = False
+        for m in san_str:
+            for san_values in m:
+                    for san_values in san_values.split(" "):
+                        if len(san_values.strip()) > 0 :
+                            if san_values.isdigit() and int(san_values) < init_moves_made:
+                                init_moves_made = int(san_values)
+                            elif san_values[-1] == "." and san_values[:-1].isdigit():
+                                init_moves_made = int(san_values[:-1])
+                            else:
+                                if self.is_valid_san(san_values):
+                                    atleast_one_valid_move = True
+                                    ok, _ = chess_board.push_san(san_values)
+                                    if ok:
+                                        reward += 1
+                                        print(f"Valid move made: {san_values} : Current reward: {reward}")
+        if atleast_one_valid_move:
+            reward += 0.5
+        if play_as == "white" and "1-0" in generation:
+            reward += 10.0
+        elif play_as == "black" and "0-1" in generation:
+            reward += 10.0
+        elif play_as in ["white", "black"] and "1/2-1/2" in generation:                            
+            reward += 5.0
+        if reward >= 1:
+            print(chess_board.board_string())
+        if reward == 0 and not atleast_one_valid_move:
+            reward = -1.0
+        return reward
 
     # reward for proper format of the output
-    def chess_reward_function(self, prompt, generation):
+    def extract_and_reward(self, prompt, generation):
         try:
-            # print(f"{prompt} \n\n\n-------------------------------\n\n\n")
-            game = ChessGame()
-            # print(f"Processing output for reward calculation: {prompt} | {generation}")
-            # input extraction and create board state based on the input 
             init_prompt = prompt.strip().rsplit("<user>")[-1].strip()
             input_moves =  (init_prompt.rsplit("moves:")[-1].strip())
             play_as = (init_prompt.split("play_as:")[-1].strip().split("moves:")[0].strip())
-            # print(f"Input moves extracted for board state initialization: {input_moves}")
-            game, _, move_no = self.board_state(input_moves, game, play_as=play_as)
-            # print(f"Base moves : {move_no} : Play as : {play_as}")
-            # print(f"Processing output for reward calculation: {generation}")
-            # generation = generation.strip().rsplit("<assistant>")[-1].strip()
-            _, current_reward, generation_move_no = self.board_state(generation.strip(), game, ignore_moves_till = move_no, play_as=play_as)
-            if current_reward < 0:
-                return -1.0
-            print(f"[Positive reward] Generated new moves : {generation_move_no - move_no} : Reward : {current_reward}")
-            if play_as == "white" and "1-0" in generation:
-                current_reward += 10.0
-            elif play_as == "black" and "0-1" in generation:
-                current_reward += 10.0
-            elif play_as in ["white", "black"] and "1/2-1/2" in generation:                            
-                current_reward += 5.0
-            return current_reward
+            return self.board_state(input_moves, generation.strip(), play_as=play_as)
         except Exception as e:
             print(f"An error occurred during move processing: {e}")
             traceback.print_exc()
@@ -214,7 +174,7 @@ class GRPORewardModel(nn.Module):
             output_tensor = self.model.generate(input_ids.to(self.model_device), 
                                             attention_mask=attention_mask.to(self.model_device), 
                                             max_new_tokens=self.total_generation_length, 
-                                            # sampling=True,
+                                            sampling=True,
                                             temperature=0.7
                                             )
         return output_tensor
@@ -326,34 +286,4 @@ class GRPORewardModel(nn.Module):
         print(f"Generation : {self.tokenizer.decode(tensor_per_generation[X.shape[-1]:], skip_special_tokens=True)}")
         print("-------------------------------------------------------------")
 
-if __name__ == "__main__":
-    # sample_prompt = f"""
-    #     <system>
-    #     You are a strong chess engine.
-    #     Output must be strictly in SAN format with move numbers.
-    #     No explanations, no extra text.
-
-    #     <user>
-    #     play_as: white
-    #     moves: "1. d4 e6 2. a3 Nc6 3. Nc3 Bb4 4. axb4 a5 5. b5 Nb4 "
-
-    #     Task:
-    #     - Continue the game
-    #     - Play optimally
-    #     - End only at checkmate or resignation
-    #     - Output only moves
-
-    #     <assistant>"""
-    # generation_text = f"""6. g4 g5 7. h4 gxh4 8. g5 h3 9. g6 h2 10. g7 h1=Q 11. g8=Q+ Ke7 12. Qg5+ Kd6 13. Qc5#"""
-    # print(chess_reward_function(sample_prompt, generation_text))
-    reward_batch = torch.tensor([-1.0]*28+[1.0], dtype=torch.float32, device="cpu")
-    advantage = reward_batch - reward_batch.mean()
-    advantage = advantage / (advantage.abs().mean() + 1e-6) # Normalize advantages
-
-    weights = 1.5*torch.tanh(advantage) + 0.001  # smooth gating
-    weights = weights + 0.01 * torch.sign(reward_batch)
-    # print(f"Reward after smoothing : {weights}")
-    weights = weights.unsqueeze(-1).unsqueeze(-1)
-
-    print(f"Reward after smoothing ({weights.mean()}) : {weights}")
     
