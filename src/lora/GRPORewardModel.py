@@ -61,8 +61,7 @@ class GRPORewardModel(nn.Module):
         # for p in self.model.parameters():
         #     p.data += 0.005 * torch.randn_like(p)  
         self.base_model = LoRAFineTuning(init_model, self.tokenizer, device=init_model.device)
-        if loRA_parameters_path:
-            self.base_model.load_lora_parameters(loRA_parameters_path)
+        
         for param in self.base_model.parameters():
             param.requires_grad = False 
 
