@@ -11,18 +11,18 @@ import torch
 from lora.GRPORewardModel import GRPORewardModel
 from lora.LoRAFineTuning import LoRAFineTuning
 
-def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, device=None, dtype=None, replay_buffer=None):
+def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dtype=None, replay_buffer=None):
     try:
         grpo_reward_model = GRPORewardModel(tokenizer_path, model_path, grpo_batch=4, 
                                             loRA_parameters_path=loRA_parameters_path, 
-                                            model_device=device, dtype=dtype)
+                                            dtype=dtype)
 
         optimizer = torch.optim.AdamW(grpo_reward_model.parameters(), lr=1e-5)
         paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/000001-rl.parquet"
         df_input = pd.read_parquet(paraquet)
         row = df_input.sample(n=1).iloc[0]
-        input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
-        attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
+        input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=grpo_reward_model.model_device).unsqueeze(0)
+        attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=grpo_reward_model.model_device).unsqueeze(0)
         input_ids = input_ids.repeat_interleave(repeats=5, dim=0)  # Repeat the input tensor for the batch size
         attention_mask = attention_mask.repeat_interleave(repeats=5, dim=0)  # Repeat the attention mask for the batch size
         
