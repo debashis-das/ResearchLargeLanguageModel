@@ -54,8 +54,8 @@ class GRPORewardModel(nn.Module):
                 )
         self.model_device = init_model.device
         self.model = LoRAFineTuning(init_model, self.tokenizer, dtype=dtype, device=init_model.device)
-        for name, param in self.model.named_parameters():
-            print(f"Parameter: {name} : shape: {param.shape} : requires_grad: {param.requires_grad}")
+        # for name, param in self.model.named_parameters():
+        #     print(f"Parameter: {name} : shape: {param.shape} : requires_grad: {param.requires_grad}")
         if loRA_parameters_path:
             self.model.load_lora_parameters(loRA_parameters_path)
         # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
@@ -107,17 +107,20 @@ class GRPORewardModel(nn.Module):
         pattern = rf'(({san}\s+)?(?:\d+\.\s+{san}(?:\s+(?!\d+\.){san})?\s*)+)'
         san_str = re.findall(pattern, generation)
         atleast_one_valid_move = False
+        generation_move_no = -1
         for m in san_str:
             for san_values in m:
                     for san_values in san_values.split(" "):
                         if len(san_values.strip()) > 0 :
                             if san_values.isdigit() and int(san_values) < init_moves_made:
-                                init_moves_made = int(san_values)
+                                generation_move_no = int(san_values)
                             elif san_values[-1] == "." and san_values[:-1].isdigit():
-                                init_moves_made = int(san_values[:-1])
+                                generation_move_no = int(san_values[:-1])
                             else:
                                 if self.is_valid_san(san_values):
                                     atleast_one_valid_move = True
+                                    if generation_move_no < init_moves_made or generation_move_no != -1:
+                                        continue
                                     ok, _ = chess_board.push_san(san_values)
                                     if ok:
                                         reward += 1
