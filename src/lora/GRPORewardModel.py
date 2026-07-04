@@ -171,7 +171,7 @@ class GRPORewardModel(nn.Module):
             output_tensor = self.model.generate(input_ids.to(self.model_device), 
                                             attention_mask=attention_mask.to(self.model_device), 
                                             max_new_tokens=self.total_generation_length, 
-                                            # sampling=True,
+                                            sampling=True,
                                             temperature=0.7
                                             )
         return output_tensor
