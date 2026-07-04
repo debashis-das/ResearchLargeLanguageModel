@@ -53,7 +53,7 @@ class GRPORewardModel(nn.Module):
                     device_map="auto"
                 )
         self.model_device = init_model.device
-        self.model = LoRAFineTuning(init_model, self.tokenizer, device=init_model.device)
+        self.model = LoRAFineTuning(init_model, self.tokenizer, dtype=dtype, device=init_model.device)
         for name, param in self.model.named_parameters():
             print(f"Parameter: {name} : shape: {param.shape} : requires_grad: {param.requires_grad}")
         # if loRA_parameters_path:
@@ -214,7 +214,7 @@ class GRPORewardModel(nn.Module):
             output_tensor = self.model.generate(input_ids.to(self.model_device), 
                                             attention_mask=attention_mask.to(self.model_device), 
                                             max_new_tokens=self.total_generation_length, 
-                                            sampling=True,
+                                            # sampling=True,
                                             temperature=0.7
                                             )
         return output_tensor
