@@ -158,14 +158,15 @@ class GRPORewardModel(nn.Module):
             # print(f"{prompt} \n\n\n-------------------------------\n\n\n")
             game = ChessGame()
             # print(f"Processing output for reward calculation: {prompt} | {generation}")
-            # input extraction and create board state based on the input moves
-            input_moves =  (prompt.rsplit("Task:")[0].strip().rsplit("moves:")[-1].strip())
-            play_as = (prompt.split("play_as:")[-1].strip().split("moves:")[0].strip())
+            # input extraction and create board state based on the input 
+            init_prompt = prompt.strip().rsplit("<user>")[-1].strip()
+            input_moves =  (init_prompt.rsplit("moves:")[-1].strip())
+            play_as = (init_prompt.split("play_as:")[-1].strip().split("moves:")[0].strip())
             # print(f"Input moves extracted for board state initialization: {input_moves}")
             game, _, move_no = self.board_state(input_moves, game, play_as=play_as)
             # print(f"Base moves : {move_no} : Play as : {play_as}")
             # print(f"Processing output for reward calculation: {generation}")
-            generation = generation.strip().rsplit("<assistant>")[-1].strip()
+            # generation = generation.strip().rsplit("<assistant>")[-1].strip()
             _, current_reward, generation_move_no = self.board_state(generation.strip(), game, ignore_moves_till = move_no, play_as=play_as)
             if current_reward < 0:
                 return -1.0
@@ -185,6 +186,7 @@ class GRPORewardModel(nn.Module):
     def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
         prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
         generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
+        print(f"Prompt : {prompt} \n\n Generation : {generation}")
         reward = self.chess_reward_function(prompt, generation)
         # print("-------------------------------------------------------------")
         return reward
