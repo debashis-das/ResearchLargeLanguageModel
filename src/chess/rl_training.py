@@ -69,6 +69,12 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                         filter(lambda p: p.requires_grad, grpo_reward_model.parameters()), max_norm=1.0
                     )
                     optimizer.step()
+                    non_finite = [
+                        name for name, p in grpo_reward_model.named_parameters()
+                        if p.requires_grad and not torch.isfinite(p).all()
+                    ]
+                    if non_finite:
+                        print(f"Non-finite trainable parameters after optimizer.step(): {non_finite}")
                     training_timestep += 1
                     # if training_timestep % 1 == 0:
                     print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
