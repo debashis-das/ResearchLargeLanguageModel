@@ -37,7 +37,7 @@ class GRPORewardModel(nn.Module):
                  grpo_batch: int,
                  loRA_parameters_path: str = None, 
                  dtype=torch.float16, 
-                 total_generation_length=200):
+                 total_generation_length=300):
         super(GRPORewardModel, self).__init__()
         self.tokenizer_path = tokenizer_path
         self.grpo_batch = grpo_batch
@@ -133,6 +133,8 @@ class GRPORewardModel(nn.Module):
                                         reward += 1
                                         all_correct_moves += 1
                                         print(f"Valid move made: {san_values} : Current reward: {reward}")
+        if generation.count("moves:") > 1:
+            reward -= 1.0
         if atleast_one_valid_move:
             reward += 0.5
         if all_correct_moves > 20:
