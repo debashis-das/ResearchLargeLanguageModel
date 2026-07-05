@@ -14,7 +14,8 @@ dependencies = [
     "transformers",
     "pandas",
     "pyarrow",
-    "accelerate"
+    "accelerate",
+    "bitsandbytes"
 ]
 
 [tool.pytest.ini_options]

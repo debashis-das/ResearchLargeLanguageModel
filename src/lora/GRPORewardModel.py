@@ -4,7 +4,7 @@ import traceback
 
 from torch import nn
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from chess.chess_validator import ChessGame
 from lora.LoRAFineTuning import LoRAFineTuning
@@ -59,10 +59,11 @@ class GRPORewardModel(nn.Module):
 
         # Reference model must be loaded independently — sharing init_model causes zero divergence,
         # frozen LoRA weights, and nested LoRA corruption on the second injection pass.
+        # Loaded in int8 since it's frozen (no gradients) and only used for reference log-probs.
         base_init_model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            dtype=dtype,
-            device_map="cpu"
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            device_map="auto"
         )
         self.base_model = LoRAFineTuning(base_init_model, self.tokenizer, dtype=dtype, device=base_init_model.device)
         for param in self.base_model.parameters():
@@ -70,9 +71,9 @@ class GRPORewardModel(nn.Module):
 
     def use_base_model(self, tokens, attention_mask):
         self.base_model.eval()
-        cpu = self.base_model.device
+        base_model_device = self.base_model.device
         with torch.no_grad():
-            logits, _ = self.base_model(tokens.to(cpu), attention_mask=attention_mask.to(cpu), with_no_loss=True)
+            logits, _ = self.base_model(tokens.to(base_model_device), attention_mask=attention_mask.to(base_model_device), with_no_loss=True)
         return logits.to(self.model_device).detach()
 
     def is_valid_san(self, move: str) -> bool:
