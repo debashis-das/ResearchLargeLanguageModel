@@ -133,7 +133,19 @@ class LoRAFineTuning(nn.Module):
             input = self.module_dict["model.embed_tokens"](X)
             cos, sin = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
             for layer_number in range(self.model.config.num_hidden_layers):
-                input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=(cos, sin))
+                if self.training:
+                    # `gradient_checkpointing_enable()` in __init__ has no effect here: it only
+                    # flips a flag that the model's own forward() checks, but we bypass that
+                    # entirely by driving layers through action_per_layer(). Without an explicit
+                    # checkpoint call, every layer's attention/MLP activations for the full
+                    # batch x seq_len are kept alive for backward, which is the dominant memory cost.
+                    input = checkpoint(
+                        self.action_per_layer, layer_number, input,
+                        attention_mask, (cos, sin), None, None,
+                        use_reentrant=False,
+                    )
+                else:
+                    input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=(cos, sin))
             input = self.module_dict["model.norm"](input)
             logits_batch = self.module_dict["lm_head"](input)   # [batch, seq_len, vocab_size]
             if with_no_loss:

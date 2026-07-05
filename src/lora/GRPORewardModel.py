@@ -74,8 +74,8 @@ class GRPORewardModel(nn.Module):
         base_model_device = self.base_model.device
         with torch.no_grad():
             logits, _ = self.base_model(tokens.to(base_model_device), attention_mask=attention_mask.to(base_model_device), with_no_loss=True)
-        logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
-        logits = torch.clamp(logits, min=-50, max=50)  # int8 quant noise can spike a token's logits; keep in sync with sanatize_logits
+        logits.nan_to_num_(nan=0.0, posinf=1e4, neginf=-1e4)
+        logits.clamp_(min=-50, max=50)  # int8 quant noise can spike a token's logits; keep in sync with sanatize_logits
         return logits.to(self.model_device).detach()
 
     def is_valid_san(self, move: str) -> bool:
@@ -160,14 +160,10 @@ class GRPORewardModel(nn.Module):
         return 0.0
 
     def sanatize_logits(self, logits: torch.Tensor, actions: torch.Tensor):
-        logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
-        logits = torch.clamp(logits, min=-50, max=50)  # Clamp logits to avoid extreme values
+        logits.nan_to_num_(nan=0.0, posinf=1e4, neginf=-1e4)
+        logits.clamp_(min=-50, max=50)  # Clamp logits to avoid extreme values
         selected_logits = torch.gather(logits, dim=-1, index=actions).squeeze(-1)
         logsumexp = torch.logsumexp(logits, dim=-1)
-        # print(f"logits: {logits.shape} : actions: {actions.shape} : logsumexp: {logsumexp.shape}")
-        # logits = torch.nan_to_num(logits, nan=0.0)
-        # logits = logits / logits.sum(dim=-1, keepdim=True)  # Normalize to get probabilities
-        # print(f"Selected logits: {selected_logits.shape}")
         log_probs = selected_logits - logsumexp
         return log_probs  # Convert back to half precision
     
@@ -264,8 +260,8 @@ class GRPORewardModel(nn.Module):
         product = weights.float() * ratio.float()
         product_clamped = weights.float() * torch.clamp(ratio.float(), 1.0 - self.epsilon, 1.0 + self.epsilon)
         loss = -torch.min(product, product_clamped) + self.beta * divergence
-        loss = torch.nan_to_num(loss, nan=0.0, posinf=50.0, neginf=-50.0)
-        loss = torch.clamp(loss, min=-50.0, max=50.0)
+        loss.nan_to_num_(nan=0.0, posinf=50.0, neginf=-50.0)
+        loss.clamp_(min=-50.0, max=50.0)
         print(f"Loss : {loss.mean()} : Advantage : {weights.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : Divergence : {divergence.mean()}")
 
         del advantage
