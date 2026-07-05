@@ -169,11 +169,10 @@ class GRPORewardModel(nn.Module):
         log_probs = selected_logits - logsumexp
         return log_probs  # Convert back to half precision
     
-    def generate(self, input_ids, attention_mask):
+    def generate(self, input_ids):
         with torch.no_grad():
             self.model.eval()
             output_tensor = self.model.generate(input_ids.to(self.model_device), 
-                                            attention_mask=attention_mask.to(self.model_device), 
                                             max_new_tokens=self.total_generation_length, 
                                             sampling=True,
                                             temperature=0.7
