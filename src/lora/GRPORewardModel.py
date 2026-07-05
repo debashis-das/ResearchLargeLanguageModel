@@ -257,9 +257,15 @@ class GRPORewardModel(nn.Module):
         weights = advantage * 2.0
         weights = weights.unsqueeze(-1).unsqueeze(-1)
         
+        # `ratio` is unbounded above (exp of a divergence clamped only to +-10, i.e. up to ~22026),
+        # so the unclamped `product` term can reach magnitudes that overflow the fp16 LoRA
+        # parameters' gradients during backward. Clamp the loss itself, before backward ever
+        # sees it, to the same order of magnitude as the other sanitized quantities in this file.
         product = weights.float() * ratio.float()
         product_clamped = weights.float() * torch.clamp(ratio.float(), 1.0 - self.epsilon, 1.0 + self.epsilon)
         loss = -torch.min(product, product_clamped) + self.beta * divergence
+        loss = torch.nan_to_num(loss, nan=0.0, posinf=50.0, neginf=-50.0)
+        loss = torch.clamp(loss, min=-50.0, max=50.0)
         print(f"Loss : {loss.mean()} : Advantage : {weights.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : Divergence : {divergence.mean()}")
 
         del advantage
