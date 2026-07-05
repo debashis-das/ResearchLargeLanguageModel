@@ -62,6 +62,12 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                     print("Rewards : ", rewards)
                     optimizer.zero_grad(set_to_none=True)
                     loss.backward()
+                    if not torch.isfinite(loss):
+                        print(f"Skipping optimizer step: non-finite loss ({loss.item()})")
+                        continue
+                    torch.nn.utils.clip_grad_norm_(
+                        filter(lambda p: p.requires_grad, grpo_reward_model.parameters()), max_norm=1.0
+                    )
                     optimizer.step()
                     training_timestep += 1
                     # if training_timestep % 1 == 0:
