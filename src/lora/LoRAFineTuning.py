@@ -160,7 +160,7 @@ class LoRAFineTuning(nn.Module):
             torch.cuda.empty_cache()
     
     @torch.no_grad()
-    def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=None, sampling=False):
+    def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=None, sampling=False, top_k = 10):
         try:
             print(f"Generating text with input_ids shape: {input_ids.shape}, attention_mask shape: {attention_mask.shape if attention_mask is not None else 'None'}, max_new_tokens: {max_new_tokens}, temperature: {temperature}")
             input_ids = input_ids.to(self.device)
@@ -199,7 +199,6 @@ class LoRAFineTuning(nn.Module):
                 #     next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
                 # next_token_logits = torch.softmax(next_token_logits, dim=-1)
                 next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
-                top_k = 10
                 values, _ = torch.topk(next_token_logits, top_k)
                 min_val = values[:, -1].unsqueeze(-1)
                 next_token_logits = torch.where(next_token_logits < min_val, float('-inf'), next_token_logits)
@@ -234,7 +233,6 @@ class LoRAFineTuning(nn.Module):
                     # if temperature is None:
                     #     next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
                     next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
-                    top_k = 5
                     values, _ = torch.topk(next_token_logits, top_k)
                     min_val = values[:, -1].unsqueeze(-1)
                     next_token_logits = torch.where(next_token_logits < min_val, float('-inf'), next_token_logits)
