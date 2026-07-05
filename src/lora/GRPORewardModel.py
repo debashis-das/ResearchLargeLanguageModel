@@ -65,7 +65,7 @@ class GRPORewardModel(nn.Module):
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             device_map="auto"
         )
-        self.base_model = LoRAFineTuning(base_init_model, self.tokenizer, dtype=dtype, device=base_init_model.device)
+        self.base_model = LoRAFineTuning(base_init_model, self.tokenizer, dtype=torch.bfloat16, device=base_init_model.device)
         for param in self.base_model.parameters():
             param.requires_grad = False
 
