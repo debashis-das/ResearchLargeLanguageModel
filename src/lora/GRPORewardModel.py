@@ -114,6 +114,7 @@ class GRPORewardModel(nn.Module):
         san_str = re.findall(pattern, generation)
         atleast_one_valid_move = False
         generation_move_no = -1
+        all_correct_moves = 0
         for m in san_str:
             for san_values in m:
                     for san_values in san_values.split(" "):
@@ -130,14 +131,15 @@ class GRPORewardModel(nn.Module):
                                     ok, _ = chess_board.push_san(san_values)
                                     if ok:
                                         reward += 1
+                                        all_correct_moves += 1
                                         print(f"Valid move made: {san_values} : Current reward: {reward}")
         if atleast_one_valid_move:
             reward += 0.5
-        if play_as == "white" and "1-0" in generation:
+        if all_correct_moves > 20:
+            reward += 15.0
+        elif all_correct_moves > 10:
             reward += 10.0
-        elif play_as == "black" and "0-1" in generation:
-            reward += 10.0
-        elif play_as in ["white", "black"] and "1/2-1/2" in generation:                            
+        elif all_correct_moves > 5:
             reward += 5.0
         if reward >= 1:
             print(chess_board.board_string())
