@@ -103,23 +103,18 @@ class LoRAFineTuning(nn.Module):
         return final_mask
 
     def action_per_layer(self, current_layer_number, X, attention_mask=None, position_embeddings=None, cache_position=None, kv_cache=None):
-        try:
-            x_projection = self.module_dict[f"model.layers.{current_layer_number}.input_layernorm"](X)
-            attn_output, _ = self.module_dict[f"model.layers.{current_layer_number}.self_attn"](hidden_states=x_projection, 
-                                                                                                            attention_mask=attention_mask, 
-                                                                                                            position_embeddings=position_embeddings,
-                                                                                                            past_key_values=kv_cache,
-                                                                                                            cache_position=cache_position
-                                                                                                            )
-            o_projection_residual = attn_output + X
-            o_projection_norm = self.module_dict[f"model.layers.{current_layer_number}.post_attention_layernorm"](o_projection_residual)
-            o_mlp = self.module_dict[f"model.layers.{current_layer_number}.mlp"](o_projection_norm)
-            return o_mlp + o_projection_residual
-        except Exception as e:
-            traceback_info = traceback.format_exc()
-            logging.error(f"Error in layer {current_layer_number} : {e} : {traceback_info}")
-            raise
-
+        x_projection = self.module_dict[f"model.layers.{current_layer_number}.input_layernorm"](X)
+        attn_output, _ = self.module_dict[f"model.layers.{current_layer_number}.self_attn"](hidden_states=x_projection, 
+                                                                                                        attention_mask=attention_mask, 
+                                                                                                        position_embeddings=position_embeddings,
+                                                                                                        past_key_values=kv_cache,
+                                                                                                        cache_position=cache_position
+                                                                                                        )
+        o_projection_residual = attn_output + X
+        o_projection_norm = self.module_dict[f"model.layers.{current_layer_number}.post_attention_layernorm"](o_projection_residual)
+        o_mlp = self.module_dict[f"model.layers.{current_layer_number}.mlp"](o_projection_norm)
+        return o_mlp + o_projection_residual
+        
     def forward(self, X, attention_mask=None, with_no_loss=False):
         try:
             assert len(X.shape) in (1, 2), (
