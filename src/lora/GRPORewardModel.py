@@ -74,6 +74,8 @@ class GRPORewardModel(nn.Module):
         base_model_device = self.base_model.device
         with torch.no_grad():
             logits, _ = self.base_model(tokens.to(base_model_device), attention_mask=attention_mask.to(base_model_device), with_no_loss=True)
+        logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
+        logits = torch.clamp(logits, min=-50, max=50)  # int8 quant noise can spike a token's logits; keep in sync with sanatize_logits
         return logits.to(self.model_device).detach()
 
     def is_valid_san(self, move: str) -> bool:
