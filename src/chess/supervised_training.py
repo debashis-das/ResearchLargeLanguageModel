@@ -45,7 +45,7 @@ def sft_train():
                     row_rl = df_rl_input.sample(n=1).iloc[0]
                     input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                     attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
-                    generation_ids = model_with_lora.generate(input_ids_rl, max_new_tokens=200, temperature=0.7)
+                    generation_ids = model_with_lora.generate(input_ids_rl, max_new_tokens=300, temperature=0.7)
                     print(f"Generated text: {tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                 try:
                     _, loss = model_with_lora(input_ids, attention_mask=attention_mask)
@@ -89,7 +89,7 @@ def sft_execute():
         row_rl = df_rl_input.sample(n=1).iloc[0]
         input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
         attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
-        output_ids = model_with_lora.generate(input_ids_rl, max_new_tokens=200, temperature=0.7)
+        output_ids = model_with_lora.generate(input_ids_rl, max_new_tokens=300, temperature=0.7)
         print(f"Generated text: {tokenizer.decode(output_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
 
 if __name__ == "__main__":
