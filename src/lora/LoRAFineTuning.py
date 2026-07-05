@@ -253,12 +253,15 @@ class LoRAFineTuning(nn.Module):
             self.train() 
 
     def temperature_sampling(self, temperature, next_token_logits, batch_size):
+        # Returns temperature-scaled LOGITS, not probabilities: the caller feeds this into
+        # topk/Categorical(logits=...), which does its own softmax. Returning softmax output
+        # here made the caller re-derive pseudo-logits from an already-normalized distribution,
+        # silently washing out the temperature's effect.
         temperature = max(temperature, 1e-6)
         logits = next_token_logits / temperature
         logits = logits.float()
         logits = logits - logits.max(dim=-1, keepdim=True).values
-        probs = torch.softmax(logits, dim=-1)
-        return probs
+        return logits
     
 if __name__ == "__main__":
     model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
