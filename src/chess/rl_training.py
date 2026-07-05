@@ -65,16 +65,17 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                     if not torch.isfinite(loss):
                         print(f"Skipping optimizer step: non-finite loss ({loss.item()})")
                         continue
+                    non_finite_grads = [
+                        (name, p.grad.isnan().sum().item(), p.grad.isinf().sum().item())
+                        for name, p in grpo_reward_model.named_parameters()
+                        if p.requires_grad and p.grad is not None and not torch.isfinite(p.grad).all()
+                    ]
+                    if non_finite_grads:
+                        print(f"Non-finite GRADIENTS before clipping (name, nan_count, inf_count): {non_finite_grads}")
                     torch.nn.utils.clip_grad_norm_(
                         filter(lambda p: p.requires_grad, grpo_reward_model.parameters()), max_norm=1.0
                     )
                     optimizer.step()
-                    non_finite = [
-                        name for name, p in grpo_reward_model.named_parameters()
-                        if p.requires_grad and not torch.isfinite(p).all()
-                    ]
-                    if non_finite:
-                        print(f"Non-finite trainable parameters after optimizer.step(): {non_finite}")
                     training_timestep += 1
                     # if training_timestep % 1 == 0:
                     print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
