@@ -37,7 +37,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
             df_input = pd.read_parquet(current_paraquet)
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             for _, row in df_shuffled.iterrows():
-                if len(replay_buffer) > 0 and training_timestep % 50 == 0:
+                if len(replay_buffer) > 0 and training_timestep % 10 == 0:
                     row_replay = replay_buffer.sample(n=1).iloc[0]
                     input_ids = torch.tensor(row_replay['input_ids'], dtype=torch.long, device=device)
                     attention_mask = torch.tensor(row_replay['attention_mask'], dtype=dtype, device=device)
