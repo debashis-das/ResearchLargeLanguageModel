@@ -54,23 +54,26 @@ class GRPORewardModel(nn.Module):
                 )
         self.model_device = init_model.device
         self.model = LoRAFineTuning(init_model, self.tokenizer, dtype=dtype, device=init_model.device)
-        # for name, param in self.model.named_parameters():
-        #     print(f"Parameter: {name} : shape: {param.shape} : requires_grad: {param.requires_grad}")
         if loRA_parameters_path:
             self.model.load_lora_parameters(loRA_parameters_path)
-        # adding tiny noise to the model parameters to avoid identical outputs from the base model and the fine-tuned model
-        # for p in self.model.parameters():
-        #     p.data += 0.005 * torch.randn_like(p)  
-        self.base_model = LoRAFineTuning(init_model, self.tokenizer, device=init_model.device)
-        
+
+        # Reference model must be loaded independently — sharing init_model causes zero divergence,
+        # frozen LoRA weights, and nested LoRA corruption on the second injection pass.
+        base_init_model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            dtype=dtype,
+            device_map="cpu"
+        )
+        self.base_model = LoRAFineTuning(base_init_model, self.tokenizer, dtype=dtype, device=base_init_model.device)
         for param in self.base_model.parameters():
-            param.requires_grad = False 
+            param.requires_grad = False
 
     def use_base_model(self, tokens, attention_mask):
         self.base_model.eval()
+        cpu = self.base_model.device
         with torch.no_grad():
-            base_logits, _ = self.base_model(tokens, attention_mask=attention_mask, with_no_loss=True)
-        return base_logits.detach()
+            logits, _ = self.base_model(tokens.to(cpu), attention_mask=attention_mask.to(cpu), with_no_loss=True)
+        return logits.to(self.model_device).detach()
 
     def is_valid_san(self, move: str) -> bool:
         """
@@ -194,8 +197,7 @@ class GRPORewardModel(nn.Module):
                 # reward to be calculated per token
                 reward_batch.append(torch.tensor(reward, dtype=self.dtype))
             reward_batch = torch.stack(reward_batch)
-        if (reward_batch < 0).all():
-            return None, reward_batch
+
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
         extra_mask = extra_mask.repeat_interleave(repeats=self.grpo_batch, dim=0)  # Repeat the extra mask for the batch size
@@ -249,7 +251,7 @@ class GRPORewardModel(nn.Module):
         
         reward_batch = reward_batch.to(self.model_device).float()
         normalized_reward = torch.tanh(reward_batch)
-        advantage = normalized_reward - normalized_reward.mean() / (normalized_reward.std() + 1e-6) # Normalize advantages
+        advantage = (normalized_reward - normalized_reward.mean()) / (normalized_reward.std() + 1e-6) # Normalize advantages
         weights = advantage * 2.0
         weights = weights.unsqueeze(-1).unsqueeze(-1)
         

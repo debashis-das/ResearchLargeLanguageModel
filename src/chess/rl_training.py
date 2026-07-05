@@ -17,7 +17,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
         grpo_reward_model = GRPORewardModel(tokenizer_path, model_path, grpo_batch=GRPO_BATCH_SIZE, 
                                             loRA_parameters_path=loRA_parameters_path)
         device = grpo_reward_model.model_device
-        optimizer = torch.optim.AdamW(grpo_reward_model.parameters(), lr=8e-5)
+        optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, grpo_reward_model.parameters()), lr=8e-5)
         training_timestep = 0
         recover = False
         for i in range(4):
@@ -44,7 +44,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                 else:
                     input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                     attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
-                if training_timestep+1 % 50 == 0:
+                if (training_timestep+1) % 50 == 0:
                     current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/000003-rl.parquet"
                     df_rl_input = pd.read_parquet(current_rl_paraquet)
                     row_rl = df_rl_input.sample(n=1).iloc[0]

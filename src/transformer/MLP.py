@@ -2,7 +2,7 @@ from torch import nn
 # import torch
 
 class MLP(nn.Module):
-    """The positionwise feed-forward network."""
+    """The MLP network."""
     def __init__(self, num_hiddens, num_intermediate, device):
         super().__init__()
         self.num_hiddens = num_hiddens
