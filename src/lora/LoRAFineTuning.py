@@ -199,7 +199,7 @@ class LoRAFineTuning(nn.Module):
                 #     next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
                 # next_token_logits = torch.softmax(next_token_logits, dim=-1)
                 next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
-                top_k = 5
+                top_k = 10
                 values, _ = torch.topk(next_token_logits, top_k)
                 min_val = values[:, -1].unsqueeze(-1)
                 next_token_logits = torch.where(next_token_logits < min_val, float('-inf'), next_token_logits)
