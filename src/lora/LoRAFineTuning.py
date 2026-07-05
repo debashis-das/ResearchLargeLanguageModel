@@ -180,6 +180,11 @@ class LoRAFineTuning(nn.Module):
             X = self.module_dict["model.norm"](X)
             logits = self.module_dict["lm_head"](X)   # [batch, seq_len, vocab_size]
             next_token_logits = logits[:, -1, :]   # [batch, vocab_size]
+            if not torch.isfinite(next_token_logits).all():
+                print(f"RAW prefill logits non-finite: nan={torch.isnan(next_token_logits).sum().item()}, "
+                      f"inf={torch.isinf(next_token_logits).sum().item()}, "
+                      f"min={next_token_logits[torch.isfinite(next_token_logits)].min().item() if torch.isfinite(next_token_logits).any() else 'n/a'}, "
+                      f"max={next_token_logits[torch.isfinite(next_token_logits)].max().item() if torch.isfinite(next_token_logits).any() else 'n/a'}")
             if temperature is not None:
                 next_token_logits = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
             if sampling :
