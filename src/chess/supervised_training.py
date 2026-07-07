@@ -21,12 +21,10 @@ device = model.device
 
 def sft_train():
     try:
-        accumulation_steps = 4
         training_timestep = 0
-        running_loss = torch.zeros([1], dtype=torch.float32, device=device)
         optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
         end = False
-        for i in range(2):
+        for i in range(4):
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
             df_input = pd.read_parquet(current_paraquet)
@@ -36,7 +34,6 @@ def sft_train():
             current_batch = 0
             for _, row in df_shuffled.iterrows():
                 try:
-
                     if training_timestep > 5:
                         end = True
                         break
@@ -57,24 +54,16 @@ def sft_train():
                             df_rl_input = pd.read_parquet(current_rl_paraquet)
                             row_rl = df_rl_input.sample(n=1).iloc[0]
                             input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
-                            attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
                             generation_ids = model_with_lora.generate(input_ids_rl, max_new_tokens=300, temperature=0.7)
                             print(f"Generated text: {tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
-                            _, loss = model_with_lora(input_ids, attention_mask=attention_mask)
-                            # loss = loss / accumulation_steps
-                            loss.backward()
-                            # running_loss += loss.item()*accumulation_steps
-                            training_timestep += 1
-                            # if training_timestep % accumulation_steps == 0:
-                            optimizer.step()
-                            optimizer.zero_grad(set_to_none=True)
-                            print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
-                            # if running_loss/accumulation_steps < 0.78:
-                            #     print(f"Loss is very low, stopping training at timestep: {training_timestep}, Loss: {running_loss/accumulation_steps}")
-                            #     return
-                            # running_loss = torch.zeros([1], dtype=torch.float32, device=device)
-                            for i in range(torch.cuda.device_count()):
-                                print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
+                        _, loss = model_with_lora(input_ids, attention_mask=attention_mask)
+                        loss.backward()
+                        training_timestep += 1
+                        optimizer.step()
+                        optimizer.zero_grad(set_to_none=True)
+                        print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
+                        for i in range(torch.cuda.device_count()):
+                            print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
                 except Exception as e:
                     print(f"An error occurred during model training: {e}")
                     raise
