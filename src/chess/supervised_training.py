@@ -1,5 +1,4 @@
 
-import gc
 import traceback
 
 import pandas as pd
@@ -85,9 +84,6 @@ def sft_train():
                         torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, 
                                 f"model/sft_optimizer_with_timestep_state_dict.pt")
                         print(f"Model training complete saved")
-                    del input_ids
-                    del attention_mask
-                    gc.collect()
                     torch.cuda.empty_cache()
     except Exception as e:
         print(f"An error occurred during training the model: {e}")
