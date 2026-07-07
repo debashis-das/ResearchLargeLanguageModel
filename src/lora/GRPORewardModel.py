@@ -1,4 +1,3 @@
-import gc
 import re
 import traceback
 
@@ -219,8 +218,6 @@ class GRPORewardModel(nn.Module):
         del X
         del x
         del logits
-        gc.collect()
-        torch.cuda.empty_cache()
 
         with torch.no_grad():
             base_logits = self.use_base_model(output_tensor.detach(), attention_mask=training_mask)
@@ -236,8 +233,6 @@ class GRPORewardModel(nn.Module):
         del base_logits
         del logsumexp_base
         del selected_base_logits
-        gc.collect()
-        torch.cuda.empty_cache()
 
         divergence = torch.clamp(log_probs - base_log_probs, min=-10, max=10)
         ratio = torch.exp(divergence)
@@ -248,12 +243,11 @@ class GRPORewardModel(nn.Module):
 
         del log_probs
         del base_log_probs
-        gc.collect()
-        torch.cuda.empty_cache()
-        
+
         reward_batch = reward_batch.to(self.model_device).float()
         normalized_reward = torch.tanh(reward_batch)
-        advantage = (normalized_reward - normalized_reward.mean()) / (normalized_reward.std() + 1e-6) # Normalize advantages
+        std = normalized_reward.std()
+        advantage = torch.zeros_like(normalized_reward) if std < 1e-4 else (normalized_reward - normalized_reward.mean()) / (std + 1e-6) # Normalize advantages
         weights = advantage * 2.0
         weights = weights.unsqueeze(-1).unsqueeze(-1)
         
@@ -273,8 +267,6 @@ class GRPORewardModel(nn.Module):
         del product_clamped
         del divergence
         del weights
-        gc.collect()
-        torch.cuda.empty_cache()
 
         if torch.isnan(loss).any():
             print("NaN in loss!")

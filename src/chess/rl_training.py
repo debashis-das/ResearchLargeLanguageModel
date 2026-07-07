@@ -2,7 +2,6 @@
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-import gc
 import traceback
 
 import pandas as pd
@@ -104,7 +103,6 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                             print(f"Replay buffer saved with name : replay_buffer_{training_timestep}.parquet")
                         print(f"Model training complete saved")
 
-                    gc.collect()
                     torch.cuda.empty_cache()
                     del input_ids
                     del attention_mask
@@ -122,4 +120,8 @@ def rl_execute():
              replay_buffer=replay_buffer)
 
 if __name__ == "__main__":
-    rl_execute()
+    # rl_execute()
+    for i in range(4):
+        current_paraquet = f"src\\chess\\paraquets\\{i:06d}-rl.parquet"
+        df_input = pd.read_parquet(current_paraquet)
+        print(f"DataFrame from {current_paraquet} has {len(df_input)} rows.")
