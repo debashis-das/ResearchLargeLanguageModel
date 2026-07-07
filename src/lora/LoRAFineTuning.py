@@ -153,8 +153,9 @@ class LoRAFineTuning(nn.Module):
             for label_idx in range(batch_size):
                 labels[label_idx, :prompt_length[label_idx]] = -100  # Ignore the last token of the prompt for loss computation
             labels[labels == self.tokenizer.pad_token_id] = -100  # Ignore padding tokens for loss computation
-        else:
             labels = labels[...,1:]
+        else:
+            labels = X[...,1:]
         print(f"Labels shape: {labels.shape}, Output logits shape: {output_logits.shape}")
         labels = labels.view(B * S)
         shifted_labels = labels.contiguous()  # Shift labels for next-token prediction
