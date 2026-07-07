@@ -35,7 +35,7 @@ def sft_train():
             prompt_length = []
             for _, row in df_shuffled.iterrows():
                 try:
-                    if training_timestep > 2:
+                    if training_timestep > 800:
                         end = True
                         break
                     if current_batch == 0:
