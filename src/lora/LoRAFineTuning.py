@@ -153,8 +153,9 @@ class LoRAFineTuning(nn.Module):
         shifted_logits = logits[...,:-1,:].contiguous()
         if prompt_length is not None:
             labels = X.clone()
-            for label in range(batch_size):
-                labels[label, :prompt_length[label]] = -100  # Ignore the last token of the prompt for loss computation
+            print(labels.shape)
+            for label_idx in range(batch_size):
+                labels[label_idx, :prompt_length[label_idx]] = -100  # Ignore the last token of the prompt for loss computation
             labels[labels == self.tokenizer.pad_token_id] = -100  # Ignore padding tokens for loss computation
             shifted_labels = labels[..., 1:].contiguous()
         else:
