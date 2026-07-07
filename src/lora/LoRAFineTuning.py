@@ -89,17 +89,19 @@ class LoRAFineTuning(nn.Module):
         if attention_mask is None:
             return None
         min_val = torch.finfo(self.dtype).min
-        mask = []
-        for idx, postion in enumerate(attention_mask[-1].tolist()):
-            if idx == 0 and postion == 0:
-                mask.append([min_val] * len(attention_mask[-1]))
-            elif postion == 1:
-                mask.append([0.0] * (idx+1) + [min_val] * (len(attention_mask[-1]) - (idx+1)))
-            else:
-                mask.append(mask[-1])
-        final_mask = torch.tensor(mask, device=attention_mask.device, dtype=self.dtype)
-        final_mask = final_mask.unsqueeze(0).unsqueeze(0).repeat_interleave(repeats=batch_size, dim=0)
-        return final_mask
+        batch_mask = []
+        for i in range(batch_size):
+            mask = []
+            for idx, postion in enumerate(attention_mask[i].tolist()):
+                if idx == 0 and postion == 0:
+                    mask.append([min_val] * len(attention_mask[i]))
+                elif postion == 1:
+                    mask.append([0.0] * (idx+1) + [min_val] * (len(attention_mask[i]) - (idx+1)))
+                else:
+                    mask.append(mask[-1])
+            batch_mask.append(mask)
+        final_mask = torch.tensor(batch_mask, device=attention_mask.device, dtype=self.dtype)
+        return final_mask..unsqueeze(1)
 
     def action_per_layer(self, current_layer_number, X, attention_mask=None, position_embeddings=None, cache_position=None, kv_cache=None):
         x_projection = self.module_dict[f"model.layers.{current_layer_number}.input_layernorm"](X)
