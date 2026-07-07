@@ -33,10 +33,10 @@ def sft_train():
             df_input = pd.read_parquet(current_paraquet)
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             loss = None
-            batch = 12
+            batch = 14
             current_batch = 0
             for _, row in df_shuffled.iterrows():
-                if training_timestep > 25:
+                if training_timestep > 5:
                     end = True
                     break
                 if current_batch == 0:
