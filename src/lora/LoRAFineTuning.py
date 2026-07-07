@@ -148,22 +148,22 @@ class LoRAFineTuning(nn.Module):
         # Shift logits and labels for next-token prediction
         output_logits = logits_batch[:, :-1, :].contiguous()  # Shift logits for next-token prediction
         B, S, V = logits_batch.shape
+        logits = logits_batch.view(B * S, V)
         if prompt_length is not None:
             labels = X.clone()
             for label_idx in range(batch_size):
                 labels[label_idx, :prompt_length[label_idx]] = -100  # Ignore the last token of the prompt for loss computation
             labels[labels == self.tokenizer.pad_token_id] = -100  # Ignore padding tokens for loss computation
-            labels = labels[...,1:]
+            print(f"Labels shape before view: {labels.shape}, after view: {labels.view(B * S).shape}")
+            labels = labels.view(B * S)
+            shifted_labels = labels[..., 1:].contiguous()
+            print(f"Shifted labels shape: {shifted_labels.shape}, shifted logits shape: {output_logits.shape}")
         else:
-            labels = X[...,1:]
-        print(f"Labels shape: {labels.shape}, Output logits shape: {output_logits.shape}")
-        labels = labels.view(B * S)
-        shifted_labels = labels.contiguous()  # Shift labels for next-token prediction
-        print(f"Shifted labels shape: {shifted_labels.shape}, Shifted logits shape: {output_logits.shape}")
-        logits = logits_batch.view(B * S, V)
+            X = X.view(B * S)
+            shifted_labels = X[..., 1:].contiguous()  # Shift labels for next-token prediction
         shifted_logits = logits[...,:-1,:].contiguous()
-        print(f"Shifted logits shape: {shifted_logits.shape}, Shifted labels shape: {shifted_labels.shape}")
         # Compute loss
+        print(f"Shifted logits shape: {shifted_logits.shape}, shifted labels shape: {shifted_labels.shape}")
         loss = self.loss_function(shifted_logits, shifted_labels)
         return output_logits, loss
     
