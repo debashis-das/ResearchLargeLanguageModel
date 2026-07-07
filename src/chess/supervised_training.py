@@ -30,7 +30,7 @@ def sft_train():
             df_input = pd.read_parquet(current_paraquet)
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             loss = None
-            batch = 14
+            batch = 20
             current_batch = 0
             prompt_length = []
             for _, row in df_shuffled.iterrows():
