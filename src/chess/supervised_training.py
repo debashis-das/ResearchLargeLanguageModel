@@ -34,7 +34,7 @@ def sft_train():
             current_batch = 0
             for _, row in df_shuffled.iterrows():
                 try:
-                    if training_timestep > 5:
+                    if training_timestep > 5000:
                         end = True
                         break
                     if current_batch == 0:
@@ -49,7 +49,7 @@ def sft_train():
                         continue
                     else:
                         current_batch = 0
-                        if training_timestep % 10 == 0:
+                        if training_timestep % 100 == 0 and training_timestep != 0:
                             current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
                             df_rl_input = pd.read_parquet(current_rl_paraquet)
                             row_rl = df_rl_input.sample(n=1).iloc[0]
