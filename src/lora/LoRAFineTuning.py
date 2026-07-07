@@ -101,7 +101,7 @@ class LoRAFineTuning(nn.Module):
                     mask.append(mask[-1])
             batch_mask.append(mask)
         final_mask = torch.tensor(batch_mask, device=attention_mask.device, dtype=self.dtype)
-        return final_mask..unsqueeze(1)
+        return final_mask.unsqueeze(1)
 
     def action_per_layer(self, current_layer_number, X, attention_mask=None, position_embeddings=None, cache_position=None, kv_cache=None):
         x_projection = self.module_dict[f"model.layers.{current_layer_number}.input_layernorm"](X)
