@@ -32,6 +32,7 @@ def sft_train():
             loss = None
             batch = 14
             current_batch = 0
+            prompt_length = []
             for _, row in df_shuffled.iterrows():
                 try:
                     if training_timestep > 1000:
@@ -40,11 +41,13 @@ def sft_train():
                     if current_batch == 0:
                         input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                         attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
+                        prompt_length.append(row['prompt_length'])
                         current_batch += 1
                         continue
                     elif current_batch < batch:
                         input_ids = torch.cat([input_ids, torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)], dim=0)
                         attention_mask = torch.cat([attention_mask, torch.tensor(row['attention_mask'], dtype=dtype, device=device).unsqueeze(0)], dim=0)
+                        prompt_length.append(row['prompt_length'])
                         current_batch += 1
                         continue
                     else:
@@ -56,7 +59,7 @@ def sft_train():
                             input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
                             generation_ids = model_with_lora.generate(input_ids_rl, max_new_tokens=300, temperature=0.7)
                             print(f"Generated text: {tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
-                        _, loss = model_with_lora(input_ids, attention_mask=attention_mask)
+                        _, loss = model_with_lora(input_ids, attention_mask=attention_mask, prompt_length=prompt_length)
                         loss.backward()
                         training_timestep += 1
                         optimizer.step()
