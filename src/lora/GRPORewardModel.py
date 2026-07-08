@@ -182,7 +182,7 @@ class GRPORewardModel(nn.Module):
         return output_tensor
 
     
-    def forward(self, x: torch.Tensor, attention_mask: torch.Tensor):
+    def forward(self, x: torch.Tensor, attention_mask: torch.Tensor, kl_pull: bool = False):
         # self.current_step += 1
         attention_mask = attention_mask.unsqueeze(0)  # Add batch dimension
         x = x.unsqueeze(0)
@@ -199,7 +199,10 @@ class GRPORewardModel(nn.Module):
                 # reward to be calculated per token
                 reward_batch.append(torch.tensor(reward, dtype=self.dtype))
             reward_batch = torch.stack(reward_batch)
-        if reward_batch.to(self.model_device).float().tanh().std() < 1e-4:
+        reward_batch = reward_batch.to(self.model_device).float()
+        normalized_reward = torch.tanh(reward_batch).float()
+        normalized_std = normalized_reward.std()
+        if normalized_std < 1e-4 and not kl_pull:
             return None, reward_batch
 
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
@@ -246,9 +249,14 @@ class GRPORewardModel(nn.Module):
 
         del log_probs
         del base_log_probs
-        reward_batch = reward_batch.to(self.model_device).float()
-        normalized_reward = torch.tanh(reward_batch).float()
         
+        kl = torch.exp(-divergence) + divergence - 1  # always >= 0, convex, matches GRPO paper's KL term
+        if normalized_std < 1e-4 and kl_pull:
+            loss = self.beta * kl
+            loss.nan_to_num_(nan=0.0, posinf=50.0, neginf=-50.0)
+            loss.clamp_(min=-50.0, max=50.0)
+            print(f"KL pull step uniform reward: Loss : {loss.mean()} : KL : {kl.mean()}")
+            return loss.mean(), reward_batch
         advantage = (normalized_reward - normalized_reward.mean()) # Normalize advantages
         weights = advantage * 2.0
         weights = weights.unsqueeze(-1).unsqueeze(-1)
@@ -261,11 +269,10 @@ class GRPORewardModel(nn.Module):
         # k3 (Schulman's proposed low-variance estimator) 
         # k3 = r - 1 - logr
         #    = exp(logr) - 1 - logr
-        kl = torch.exp(-divergence) + divergence - 1  # always >= 0, convex, matches GRPO paper's KL term
         loss = -torch.min(product, product_clamped) + self.beta * kl
         loss.nan_to_num_(nan=0.0, posinf=50.0, neginf=-50.0)
         loss.clamp_(min=-50.0, max=50.0)
-        print(f"Loss : {loss.mean()} : Advantage : {weights.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : Divergence : {divergence.mean()}")
+        print(f"Loss : {loss.mean()} : Advantage : {weights.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : kl : {kl.mean()}")
 
         del advantage
         del product

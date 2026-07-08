@@ -11,6 +11,7 @@ import torch
 from lora.GRPORewardModel import GRPORewardModel
 
 GRPO_BATCH_SIZE = 16
+SKIP_THRESHOLD = 5
 
 def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dtype=None, replay_buffer=None):
     try:
@@ -20,6 +21,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
         optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, grpo_reward_model.parameters()), lr=8e-5)
         training_timestep = 0
         recover = False
+        consecutive_skips = 0
         for i in range(4):
             if recover:
                 # Optimizer state recovery
@@ -53,9 +55,18 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                     generation_ids = grpo_reward_model.generate(input_ids_rl)
                     print(f"Generated text: {grpo_reward_model.tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                 try:
-                    loss, rewards = grpo_reward_model(input_ids, attention_mask=attention_mask)
+                    kl_pull = consecutive_skips >= SKIP_THRESHOLD
+                    loss, rewards = grpo_reward_model(input_ids, attention_mask=attention_mask, kl_pull=kl_pull)
                     if loss is None:
+                        consecutive_skips += 1
+                        print(f"Skipping optimizer step: loss is None (all rewards were negative). Consecutive skips: {consecutive_skips}")
                         continue  # Skip this iteration if loss is None (all rewards were negative)
+                    is_uniform_batch = torch.tanh(rewards.float()).std() < 1e-4
+                    if is_uniform_batch:
+                        print(f"KL-pull step fired after {consecutive_skips} consecutive skips")
+                        # leave consecutive_skips as-is so kl_pull keeps firing on the next uniform batch
+                    else:
+                        consecutive_skips = 0
                     if (rewards >= 1).any():
                         replay_buffer.loc[len(replay_buffer)] = [input_ids.cpu().numpy(), attention_mask.cpu().numpy()]
                         print("Added to replay buffer : Positive reward found in the batch")
