@@ -177,7 +177,7 @@ class GRPORewardModel(nn.Module):
                                             max_new_tokens=self.total_generation_length, 
                                             sampling=True,
                                             temperature=1.0,
-                                            top_k=50
+                                            top_k=100
                                             )
         return output_tensor
 

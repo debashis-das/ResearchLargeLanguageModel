@@ -11,7 +11,7 @@ import torch
 from lora.GRPORewardModel import GRPORewardModel
 
 GRPO_BATCH_SIZE = 16
-SKIP_THRESHOLD = 5
+SKIP_THRESHOLD = 3
 
 def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dtype=None, replay_buffer=None):
     try:
