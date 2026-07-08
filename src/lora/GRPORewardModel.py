@@ -137,11 +137,11 @@ class GRPORewardModel(nn.Module):
         if atleast_one_valid_move:
             reward += 0.5
         if all_correct_moves > 20:
-            reward += 15.0
+            reward += 8.0
         elif all_correct_moves > 10:
-            reward += 10.0
-        elif all_correct_moves > 5:
             reward += 5.0
+        elif all_correct_moves > 5:
+            reward += 3.0
         if reward >= 1:
             print(chess_board.board_string())
         if reward == 0 and not atleast_one_valid_move:
@@ -243,17 +243,12 @@ class GRPORewardModel(nn.Module):
 
         del log_probs
         del base_log_probs
-        reward_batch = torch.tensor([0.5]*4+[10]*10+[-0.5]*4, dtype=self.dtype)  # Example reward batch for testing
         reward_batch = reward_batch.to(self.model_device).float()
         normalized_reward = torch.tanh(reward_batch).float()
         std = normalized_reward.std()
-        print(f"Normalized reward : {normalized_reward.dtype}", normalized_reward)
-        print(f"Std : {std.dtype}", std)
         advantage = torch.zeros_like(normalized_reward) if std < 1e-4 and torch.all(normalized_reward < 0) else normalized_reward # Normalize advantages
-        print("Advantage after normalization: ", advantage)
         weights = advantage * 2.0
         weights = weights.unsqueeze(-1).unsqueeze(-1)
-        print("Advantage weights : ", weights)
         # `ratio` is unbounded above (exp of a divergence clamped only to +-10, i.e. up to ~22026),
         # so the unclamped `product` term can reach magnitudes that overflow the fp16 LoRA
         # parameters' gradients during backward. Clamp the loss itself, before backward ever
@@ -263,8 +258,6 @@ class GRPORewardModel(nn.Module):
         loss = -torch.min(product, product_clamped) + self.beta * divergence
         loss.nan_to_num_(nan=0.0, posinf=50.0, neginf=-50.0)
         loss.clamp_(min=-50.0, max=50.0)
-        print(f"Advantage {weights.mean()}: {weights}")
-        print(f"Reward batch : {reward_batch.mean()} : {reward_batch}")
         print(f"Loss : {loss.mean()} : Advantage : {weights.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : Divergence : {divergence.mean()}")
 
         del advantage
