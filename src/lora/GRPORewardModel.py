@@ -176,7 +176,8 @@ class GRPORewardModel(nn.Module):
             output_tensor = self.model.generate(input_ids.to(self.model_device), 
                                             max_new_tokens=self.total_generation_length, 
                                             sampling=True,
-                                            temperature=0.7
+                                            temperature=1.0,
+                                            top_k=50
                                             )
         return output_tensor
 
@@ -198,6 +199,8 @@ class GRPORewardModel(nn.Module):
                 # reward to be calculated per token
                 reward_batch.append(torch.tensor(reward, dtype=self.dtype))
             reward_batch = torch.stack(reward_batch)
+        if reward_batch.to(self.model_device).float().tanh().std() < 1e-4:
+            return None, reward_batch
 
         mask_addition = output_tensor.shape[-1] - attention_mask.shape[-1]
         extra_mask = torch.ones(mask_addition, dtype=attention_mask.dtype, device=attention_mask.device).unsqueeze(0)
@@ -245,8 +248,8 @@ class GRPORewardModel(nn.Module):
         del base_log_probs
         reward_batch = reward_batch.to(self.model_device).float()
         normalized_reward = torch.tanh(reward_batch).float()
-        std = normalized_reward.std()
-        advantage = torch.zeros_like(normalized_reward) if std < 1e-4 and torch.all(normalized_reward < 0) else normalized_reward # Normalize advantages
+        
+        advantage = (normalized_reward - normalized_reward.mean()) # Normalize advantages
         weights = advantage * 2.0
         weights = weights.unsqueeze(-1).unsqueeze(-1)
         # `ratio` is unbounded above (exp of a divergence clamped only to +-10, i.e. up to ~22026),
@@ -255,7 +258,11 @@ class GRPORewardModel(nn.Module):
         # sees it, to the same order of magnitude as the other sanitized quantities in this file.
         product = weights.float() * ratio.float()
         product_clamped = weights.float() * torch.clamp(ratio.float(), 1.0 - self.epsilon, 1.0 + self.epsilon)
-        loss = -torch.min(product, product_clamped) + self.beta * divergence
+        # k3 (Schulman's proposed low-variance estimator) 
+        # k3 = r - 1 - logr
+        #    = exp(logr) - 1 - logr
+        kl = torch.exp(-divergence) + divergence - 1  # always >= 0, convex, matches GRPO paper's KL term
+        loss = -torch.min(product, product_clamped) + self.beta * kl
         loss.nan_to_num_(nan=0.0, posinf=50.0, neginf=-50.0)
         loss.clamp_(min=-50.0, max=50.0)
         print(f"Loss : {loss.mean()} : Advantage : {weights.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : Divergence : {divergence.mean()}")
