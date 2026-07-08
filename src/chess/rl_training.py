@@ -1,4 +1,5 @@
 
+import gc
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
@@ -9,7 +10,7 @@ import torch
 
 from lora.GRPORewardModel import GRPORewardModel
 
-GRPO_BATCH_SIZE = 18
+GRPO_BATCH_SIZE = 16
 
 def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dtype=None, replay_buffer=None):
     try:
@@ -102,7 +103,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                             replay_buffer.to_parquet(f"model/replay_buffer.parquet", compression="zstd", engine="pyarrow")
                             print(f"Replay buffer saved with name : replay_buffer_{training_timestep}.parquet")
                         print(f"Model training complete saved")
-
+                    gc.collect()
                     torch.cuda.empty_cache()
                     del input_ids
                     del attention_mask
