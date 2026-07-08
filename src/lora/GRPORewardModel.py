@@ -243,7 +243,7 @@ class GRPORewardModel(nn.Module):
 
         del log_probs
         del base_log_probs
-
+        reward_batch = torch.tensor([0.5]*4+[10]*10+[-0.5]*4, dtype=self.dtype)  # Example reward batch for testing
         reward_batch = reward_batch.to(self.model_device).float()
         normalized_reward = torch.tanh(reward_batch).float()
         std = normalized_reward.std()
