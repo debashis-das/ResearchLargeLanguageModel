@@ -251,6 +251,7 @@ class GRPORewardModel(nn.Module):
         print("Std : ", std)
         advantage = torch.zeros_like(normalized_reward) if std < 1e-4 and torch.all(normalized_reward < 0) else (normalized_reward - normalized_reward.mean()) / (std + 1e-6) # Normalize advantages
         print(f"Condition : {std < 1e-4 and torch.all(normalized_reward < 0)}")
+        print("Advantage : ", advantage)
         weights = advantage * 2.0
         weights = weights.unsqueeze(-1).unsqueeze(-1)
         print("Advantage weights : ", weights)
