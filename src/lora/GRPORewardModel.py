@@ -260,6 +260,7 @@ class GRPORewardModel(nn.Module):
         loss = -torch.min(product, product_clamped) + self.beta * divergence
         loss.nan_to_num_(nan=0.0, posinf=50.0, neginf=-50.0)
         loss.clamp_(min=-50.0, max=50.0)
+        print(f"Advantage {weights.mean()}: {weights}")
         print(f"Loss : {loss.mean()} : Advantage : {weights.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : Divergence : {divergence.mean()}")
 
         del advantage
@@ -282,7 +283,7 @@ class GRPORewardModel(nn.Module):
 
 if __name__ == "__main__":
     # reward_batch = torch.tensor([0.5000]*18, dtype=torch.float32)
-    reward_batch = torch.tensor([-1.0]*17 + [0.5]*1, dtype=torch.float32)
+    reward_batch = torch.tensor([0.5]*18, dtype=torch.float32)
     normalized_reward = torch.tanh(reward_batch)
     print("Normalized reward : ", normalized_reward)
     std = normalized_reward.std()
@@ -290,6 +291,7 @@ if __name__ == "__main__":
     advantage = torch.zeros_like(normalized_reward) if std < 1e-4 and torch.all(normalized_reward < 0) else (normalized_reward - normalized_reward.mean()) / (std + 1e-6) # Normalize advantages
     print("Advantage : ", advantage)
     weights = advantage * 2.0
-    weights = weights.unsqueeze(-1).unsqueeze(-1)    
+    weights = weights.unsqueeze(-1).unsqueeze(-1)  
+    print("Advantage weights : ", weights.mean())  
 
     
