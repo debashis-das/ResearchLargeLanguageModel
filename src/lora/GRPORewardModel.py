@@ -247,7 +247,7 @@ class GRPORewardModel(nn.Module):
         reward_batch = reward_batch.to(self.model_device).float()
         normalized_reward = torch.tanh(reward_batch)
         std = normalized_reward.std()
-        advantage = torch.zeros_like(normalized_reward) if std < 1e-4 else (normalized_reward - normalized_reward.mean()) / (std + 1e-6) # Normalize advantages
+        advantage = torch.zeros_like(normalized_reward) if std < 1e-4 and torch.all(normalized_reward < 0) else (normalized_reward - normalized_reward.mean()) / (std + 1e-6) # Normalize advantages
         weights = advantage * 2.0
         weights = weights.unsqueeze(-1).unsqueeze(-1)
         
@@ -279,5 +279,17 @@ class GRPORewardModel(nn.Module):
         print("-------------------------------------------------------------")
         print(f"Generation : {self.tokenizer.decode(tensor_per_generation[X.shape[-1]:], skip_special_tokens=True)}")
         print("-------------------------------------------------------------")
+
+if __name__ == "__main__":
+    # reward_batch = torch.tensor([0.5000]*18, dtype=torch.float32)
+    reward_batch = torch.tensor([-1.0]*17 + [0.5]*1, dtype=torch.float32)
+    normalized_reward = torch.tanh(reward_batch)
+    print("Normalized reward : ", normalized_reward)
+    std = normalized_reward.std()
+    print("Std : ", std)
+    advantage = torch.zeros_like(normalized_reward) if std < 1e-4 and torch.all(normalized_reward < 0) else (normalized_reward - normalized_reward.mean()) / (std + 1e-6) # Normalize advantages
+    print("Advantage : ", advantage)
+    weights = advantage * 2.0
+    weights = weights.unsqueeze(-1).unsqueeze(-1)    
 
     
