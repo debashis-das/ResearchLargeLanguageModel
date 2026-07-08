@@ -36,7 +36,7 @@ class GRPORewardModel(nn.Module):
                  grpo_batch: int,
                  loRA_parameters_path: str = None, 
                  dtype=torch.float16, 
-                 total_generation_length=300):
+                 total_generation_length=250):
         super(GRPORewardModel, self).__init__()
         self.tokenizer_path = tokenizer_path
         self.grpo_batch = grpo_batch
