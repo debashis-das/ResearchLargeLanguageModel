@@ -245,10 +245,10 @@ class GRPORewardModel(nn.Module):
         del base_log_probs
 
         reward_batch = reward_batch.to(self.model_device).float()
-        normalized_reward = torch.tanh(reward_batch)
+        normalized_reward = torch.tanh(reward_batch).float()
         std = normalized_reward.std()
-        print("Normalized reward : ", normalized_reward)
-        print("Std : ", std)
+        print(f"Normalized reward : {normalized_reward.dtype}", normalized_reward)
+        print(f"Std : {std.dtype}", std)
         advantage = torch.zeros_like(normalized_reward) if std < 1e-4 and torch.all(normalized_reward < 0) else (normalized_reward - normalized_reward.mean()) / (std + 1e-6) # Normalize advantages
         print(f"Advantage normalization : {(normalized_reward - normalized_reward.mean()) / (std + 1e-6)}")
         print(f"Condition : {std < 1e-4 and torch.all(normalized_reward < 0)}")
@@ -295,6 +295,7 @@ if __name__ == "__main__":
     std = normalized_reward.std()
     print("Std : ", std)
     advantage = torch.zeros_like(normalized_reward) if std < 1e-4 and torch.all(normalized_reward < 0) else (normalized_reward - normalized_reward.mean()) / (std + 1e-6) # Normalize advantages
+    print(f"Advantage normalization : {(normalized_reward - normalized_reward.mean()) / (std + 1e-6)}")
     print("Advantage : ", advantage)
     weights = advantage * 2.0
     weights = weights.unsqueeze(-1).unsqueeze(-1)  
