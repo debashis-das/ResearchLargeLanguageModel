@@ -247,10 +247,11 @@ class GRPORewardModel(nn.Module):
         reward_batch = reward_batch.to(self.model_device).float()
         normalized_reward = torch.tanh(reward_batch)
         std = normalized_reward.std()
+        print("Normalized reward : ", normalized_reward)
         advantage = torch.zeros_like(normalized_reward) if std < 1e-4 and torch.all(normalized_reward < 0) else (normalized_reward - normalized_reward.mean()) / (std + 1e-6) # Normalize advantages
         weights = advantage * 2.0
         weights = weights.unsqueeze(-1).unsqueeze(-1)
-        
+        print("Advantage weights : ", weights)
         # `ratio` is unbounded above (exp of a divergence clamped only to +-10, i.e. up to ~22026),
         # so the unclamped `product` term can reach magnitudes that overflow the fp16 LoRA
         # parameters' gradients during backward. Clamp the loss itself, before backward ever
@@ -261,6 +262,7 @@ class GRPORewardModel(nn.Module):
         loss.nan_to_num_(nan=0.0, posinf=50.0, neginf=-50.0)
         loss.clamp_(min=-50.0, max=50.0)
         print(f"Advantage {weights.mean()}: {weights}")
+        print(f"Reward batch : {reward_batch.mean()} : {reward_batch}")
         print(f"Loss : {loss.mean()} : Advantage : {weights.mean()} : Product : {product.mean()} : Product with clipping : {product_clamped.mean()} : Divergence : {divergence.mean()}")
 
         del advantage
