@@ -1,0 +1,287 @@
+import traceback
+import logging
+
+from torch import nn
+from tqdm import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.cache_utils import DynamicCache
+import torch
+from torch.utils.checkpoint import checkpoint
+
+from lora.loRALinear import loRALinear
+
+class LoRAFineTuning(nn.Module):
+    """
+    LoRA Fine Tuning by injecting LoRA modules into the specified linear layers of the model. 
+    The projections parameter allows you to specify which linear layers to inject the LoRA modules into.
+    If not provided, it defaults to injecting into the query, key, and value projection layers of the attention mechanism. 
+    The forward method implements the forward pass through the model, while the generate method implements text generation using the model with LoRA fine-tuning.
+    
+    Generally alpha is taken as 2*rank, but it can be tuned based on the model and task. The rank is a hyperparameter that controls the capacity of the LoRA module. 
+    A higher rank allows for more expressive power, but also increases the number of parameters and computational cost.
+    """
+    _default_projections = [
+        "q_proj", "k_proj", "v_proj", "o_proj",   # attention
+        "gate_proj", "up_proj", "down_proj"         # MLP
+    ]
+    def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, 
+                 projections=None, 
+                 rank=32, alpha=64, 
+                 dtype=torch.float16, device=torch.device("cuda")):
+        super().__init__()
+        if projections is None:
+            projections = self._default_projections
+        assert type(projections) is list
+        self.projections = projections
+        self.tokenizer = tokenizer
+        self.rank = rank
+        self.alpha = alpha
+        self.device = device
+        self.model = model
+        self.dtype = dtype
+        self.create_module_dict_inject_loRA()
+        self.loss_function = nn.CrossEntropyLoss()
+        self.layers = self.model.config.num_hidden_layers
+        self.multi_gpu_dict = {}  
+        self.model.gradient_checkpointing_enable()  # Enable gradient checkpointing for memory efficiency     
+    
+    def create_module_dict_inject_loRA(self):
+        self.module_dict = {}
+        for name, module in self.model.named_modules():
+            if isinstance(module, nn.Linear):
+                module.requires_grad_(False)
+                if any(projection in name for projection in self.projections):
+                    # print(f"Injecting LoRA module into {name} with shape {module.weight.shape}")
+                    loRA_linear = loRALinear(module, rank=self.rank, alpha=self.alpha, device=self.device)
+                    parent_path, attr_name = name.rsplit(".", 1)
+                    parent_module = self.model.get_submodule(parent_path)
+                    setattr(parent_module, attr_name, loRA_linear)
+
+        for name, param in self.model.named_parameters():
+            if param.requires_grad and "loRA" in name:
+                continue
+            else:
+                param.requires_grad_(False)
+        
+        for name, module in self.model.named_modules():
+            self.module_dict[name] = module
+    
+    def save_lora_parameters(self, save_path):
+        lora_state_dict = {}
+        for name, module in self.model.named_modules():
+            if "loRA" in name:
+                # print(f"Saving LoRA parameters for {name} : {module.state_dict()}")
+                lora_state_dict[name] = module.state_dict()
+        torch.save(lora_state_dict, save_path)
+        print(f"LoRA parameters saved to {save_path}")
+    
+    def load_lora_parameters(self, load_path):
+        lora_state_dict = torch.load(load_path, map_location=self.device)
+        for name, module in self.model.named_modules():
+            if name in lora_state_dict:
+                # print(f"Loading LoRA parameters for {name} : {lora_state_dict[name]}")
+                module.load_state_dict(lora_state_dict[name])
+        print(f"LoRA parameters loaded from {load_path}")
+
+    def qwen_attention_mask(self, batch_size, attention_mask: torch.Tensor| None):
+        # Qwen model expects attention mask of shape [batch, seq_len] with 1 for tokens to attend to and 0 for tokens to ignore.
+        # We need to convert it to the shape [batch, 1, seq_len, seq_len] with -inf for tokens to ignore and 0 for tokens to attend to.
+        if attention_mask is None:
+            return None
+        min_val = torch.finfo(self.dtype).min
+        batch_mask = []
+        for i in range(batch_size):
+            mask = []
+            for idx, postion in enumerate(attention_mask[i].tolist()):
+                if idx == 0 and postion == 0:
+                    mask.append([min_val] * len(attention_mask[i]))
+                elif postion == 1:
+                    mask.append([0.0] * (idx+1) + [min_val] * (len(attention_mask[i]) - (idx+1)))
+                else:
+                    mask.append(mask[-1])
+            batch_mask.append(mask)
+        final_mask = torch.tensor(batch_mask, device=attention_mask.device, dtype=self.dtype)
+        return final_mask.unsqueeze(1)
+
+    def action_per_layer(self, current_layer_number, X, attention_mask=None, position_embeddings=None, cache_position=None, kv_cache=None):
+        x_projection = self.module_dict[f"model.layers.{current_layer_number}.input_layernorm"](X)
+        attn_output, _ = self.module_dict[f"model.layers.{current_layer_number}.self_attn"](hidden_states=x_projection, 
+                                                                                                        attention_mask=attention_mask, 
+                                                                                                        position_embeddings=position_embeddings,
+                                                                                                        past_key_values=kv_cache,
+                                                                                                        cache_position=cache_position
+                                                                                                        )
+        o_projection_residual = attn_output + X
+        o_projection_norm = self.module_dict[f"model.layers.{current_layer_number}.post_attention_layernorm"](o_projection_residual)
+        o_mlp = self.module_dict[f"model.layers.{current_layer_number}.mlp"](o_projection_norm)
+        return o_mlp + o_projection_residual
+        
+    def forward(self, X, attention_mask=None, prompt_length=None, with_no_loss=False):
+        assert len(X.shape) in (1, 2), (
+            f"Expected input_ids of shape [seq_len] or [batch, seq_len], got {X.shape}"
+        )
+        if len(X.shape) == 1:
+            X = X.unsqueeze(0)
+        batch_size, seq_len = X.shape
+        attention_mask = self.qwen_attention_mask(batch_size, attention_mask)
+        position_ids = torch.arange(seq_len, device=X.device).unsqueeze(0)
+        input = self.module_dict["model.embed_tokens"](X)
+        cos, sin = self.module_dict["model.rotary_emb"](input, position_ids)  # (cos, sin)
+        for layer_number in range(self.model.config.num_hidden_layers):
+            if self.training:
+                # `gradient_checkpointing_enable()` in __init__ has no effect here: it only
+                # flips a flag that the model's own forward() checks, but we bypass that
+                # entirely by driving layers through action_per_layer(). Without an explicit
+                # checkpoint call, every layer's attention/MLP activations for the full
+                # batch x seq_len are kept alive for backward, which is the dominant memory cost.
+                input = checkpoint(
+                    self.action_per_layer, layer_number, input,
+                    attention_mask, (cos, sin), None, None,
+                    use_reentrant=False,
+                )
+            else:
+                input = self.action_per_layer(layer_number, input, attention_mask=attention_mask, position_embeddings=(cos, sin))
+        input = self.module_dict["model.norm"](input)
+        logits_batch = self.module_dict["lm_head"](input)   # [batch, seq_len, vocab_size]
+        if with_no_loss:
+            return logits_batch[:, :-1, :], None
+        # Shift logits and labels for next-token prediction
+        output_logits = logits_batch[:, :-1, :].contiguous()  # Shift logits for next-token prediction
+        B, S, V = logits_batch.shape
+        logits = logits_batch.view(B * S, V)
+        if prompt_length is not None:
+            labels = X.clone()
+            for label_idx in range(batch_size):
+                labels[label_idx, :prompt_length[label_idx]] = -100  # Ignore the last token of the prompt for loss computation
+            labels[labels == self.tokenizer.pad_token_id] = -100  # Ignore padding tokens for loss computation
+            # print(f"Labels shape before view: {labels.shape}, after view: {labels.view(B * S).shape}")
+            labels = labels.view(B * S)
+            shifted_labels = labels[..., 1:].contiguous()
+            # print(f"Shifted labels shape: {shifted_labels.shape}, shifted logits shape: {output_logits.shape}")
+        else:
+            X = X.view(B * S)
+            shifted_labels = X[..., 1:].contiguous()  # Shift labels for next-token prediction
+        shifted_logits = logits[...,:-1,:].contiguous()
+        # Compute loss
+        # print(f"Shifted logits shape: {shifted_logits.shape}, shifted labels shape: {shifted_labels.shape}")
+        loss = self.loss_function(shifted_logits, shifted_labels)
+        return output_logits, loss
+    
+    @torch.no_grad()
+    def generate(self, input_ids, attention_mask=None, max_new_tokens=50, temperature=None, sampling=False, top_k = 10):
+        try:
+            print(f"Generating text with input_ids shape: {input_ids.shape}, attention_mask shape: {attention_mask.shape if attention_mask is not None else 'None'}, max_new_tokens: {max_new_tokens}, temperature: {temperature}")
+            input_ids = input_ids.to(self.device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(self.device)
+            # self.multi_gpu_spread(single_gpu=True)
+            self.eval()  # Set the model to evaluation mode
+            kv_cache = DynamicCache(config=self.model.config)  
+            assert len(input_ids.shape) in (1, 2), (
+                f"Expected input_ids of shape [seq_len] or [batch, seq_len], got {input_ids.shape}"
+            )
+            X = input_ids
+            if len(X.shape) == 1:
+                X = X.unsqueeze(0)
+            batch, init_seq_len = input_ids.shape
+            # prefill
+            cache_position = torch.arange(init_seq_len, device=X.device)  # Positions for the initial sequence
+            position_ids = cache_position.unsqueeze(0)
+            X = self.module_dict["model.embed_tokens"](X)
+            position_embeddings = self.module_dict["model.rotary_emb"](X, position_ids)  # (cos, sin)
+            attention_mask = self.qwen_attention_mask(batch_size=batch, attention_mask=attention_mask) if attention_mask is not None else None
+            for layer_number in range(self.model.config.num_hidden_layers):
+                X = self.action_per_layer(layer_number, X, attention_mask=attention_mask, position_embeddings=position_embeddings, cache_position=cache_position, kv_cache=kv_cache)
+            X = self.module_dict["model.norm"](X)
+            logits = self.module_dict["lm_head"](X)   # [batch, seq_len, vocab_size]
+            next_token_logits = logits[:, -1, :]   # [batch, vocab_size]
+            if not torch.isfinite(next_token_logits).all():
+                print(f"RAW prefill logits non-finite: nan={torch.isnan(next_token_logits).sum().item()}, "
+                      f"inf={torch.isinf(next_token_logits).sum().item()}, "
+                      f"min={next_token_logits[torch.isfinite(next_token_logits)].min().item() if torch.isfinite(next_token_logits).any() else 'n/a'}, "
+                      f"max={next_token_logits[torch.isfinite(next_token_logits)].max().item() if torch.isfinite(next_token_logits).any() else 'n/a'}")
+            if temperature is not None:
+                next_token_logits = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
+            if sampling :
+                # if temperature is None:
+                #     next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
+                # next_token_logits = torch.softmax(next_token_logits, dim=-1)
+                next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
+                values, _ = torch.topk(next_token_logits, top_k)
+                min_val = values[:, -1].unsqueeze(-1)
+                next_token_logits = torch.where(next_token_logits < min_val, float('-inf'), next_token_logits)
+                next_token = torch.distributions.Categorical(logits=next_token_logits).sample()  # Sample from the distribution
+            else:
+                next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
+            if len(next_token.shape) == 1:
+                next_token = next_token.unsqueeze(-1)  # Ensure next_token has shape [batch, 1]
+            generated_ids = next_token  # Start with the first generated token
+            # with tqdm(
+            #     total       = max_new_tokens,
+            #     desc        = "Generating text",
+            #     unit        = "tokens",
+            #     bar_format  = "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+            #     ncols       = 120,       # width of the bar
+            #     colour      = "green",   # optional color
+            # ) as pbar: 
+                # generate new tokens one by one.
+            for idx in range(max_new_tokens):
+                cache_position = torch.tensor([init_seq_len + idx], device=self.device)  # Positions for the new token
+                position_ids = cache_position.unsqueeze(0)
+                next_token = self.module_dict["model.embed_tokens"](next_token)
+                position_embeddings = self.module_dict["model.rotary_emb"](next_token, position_ids)  # (cos, sin)
+                for layer_number in range(self.model.config.num_hidden_layers):
+                    next_token = self.action_per_layer(layer_number, next_token, position_embeddings=position_embeddings, cache_position=cache_position, kv_cache=kv_cache)
+                next_token = self.module_dict["model.norm"](next_token)
+                logits = self.module_dict["lm_head"](next_token)   # [batch, seq_len, vocab_size]
+                next_token_logits = logits[:, -1, :]   # [batch, vocab_size]
+                if temperature is not None:
+                    next_token_logits = self.temperature_sampling(temperature, next_token_logits, batch_size=batch)
+                if sampling :
+                    # if temperature is None:
+                    #     next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
+                    next_token_logits = next_token_logits - next_token_logits.max(dim=-1, keepdim=True).values
+                    values, _ = torch.topk(next_token_logits, top_k)
+                    min_val = values[:, -1].unsqueeze(-1)
+                    next_token_logits = torch.where(next_token_logits < min_val, float('-inf'), next_token_logits)
+                    next_token = torch.distributions.Categorical(logits=next_token_logits).sample()  # Sample from the distribution
+                else:
+                    next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # Greedy decoding
+                if len(next_token.shape) == 1:
+                    next_token = next_token.unsqueeze(-1)  # Ensure next_token has shape [batch, 1]
+                generated_ids = torch.cat([generated_ids, next_token], dim=-1)
+                # if idx % 100 == 0:
+                    # print(f"Generated token {idx+1}/{max_new_tokens}")  
+                    # pbar.update(1)
+            # print(f"Input prompt: {self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)}")  # Debugging line to check input prompt
+            # print(f"Generated text: {self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)}")  # Debugging line to check generated text
+            return torch.cat([input_ids, generated_ids], dim=-1)
+        except Exception as e:
+            exec_info = traceback.format_exc()
+            logging.error(f"Error during text generation {exec_info}")
+            raise e
+        finally:
+            self.train()
+
+    def temperature_sampling(self, temperature, next_token_logits, batch_size):
+        # Returns temperature-scaled LOGITS, not probabilities: the caller feeds this into
+        # topk/Categorical(logits=...), which does its own softmax. Returning softmax output
+        # here made the caller re-derive pseudo-logits from an already-normalized distribution,
+        # silently washing out the temperature's effect.
+        temperature = max(temperature, 1e-6)
+        logits = next_token_logits / temperature
+        logits = logits.float()
+        logits = logits - logits.max(dim=-1, keepdim=True).values
+        return logits
+    
+if __name__ == "__main__":
+    model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                dtype=torch.float16,
+                device_map="auto"
+            )
+    for name, module in model.named_modules():
+        print(name)
+    

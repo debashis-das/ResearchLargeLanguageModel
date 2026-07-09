@@ -1,0 +1,242 @@
+import logging
+
+import torch
+# import torch.distributed as dist
+from torch import nn
+from torch.utils.checkpoint import checkpoint
+from transformer.TransformerLayer import TransformerLayer
+import triton
+import pandas as pd
+from torch.nn import functional as F
+import gc
+
+from config import Config
+from transformer.MLP import MLP
+from transformer.FusedAttentionBatch import _attention
+from transformer.RMSNorm import RMSNorm
+from transformer.RopeEmbedding import RopeEmbedding
+# from transformers import AutoTokenizer
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+
+# torch.set_printoptions(profile="full")
+DEVICE = triton.runtime.driver.active.get_active_torch_device()
+# DEVICE = "cpu"
+
+
+class MultiGPUExecutor(nn.Module):
+
+  def __init__(self, world_size, rank, tokens_per_gpu, device=DEVICE):
+    super().__init__()
+    self.device = device
+    self.rank = rank
+    self.world_size = world_size
+    self.tokens_per_gpu = tokens_per_gpu
+    self.embedding = nn.Embedding(Config.total_vocab, Config.hiddens, device=device)
+    self.rms3 = RMSNorm(Config.hiddens, device=device, name="After layers RMSNorm3")
+    self.dense = nn.LazyLinear(Config.total_vocab, bias=False, device=device)
+    self.loss_fn = nn.CrossEntropyLoss(reduction="sum")
+    self.model = nn.ModuleList()
+    for i in range(10):
+      self.model.append(TransformerLayer(world_size=self.world_size, rank=self.rank, tokens_per_gpu=self.tokens_per_gpu, device=device, layer_id=i))
+  
+  def exit_on_nan(self, input, message):
+    if torch.isnan(input).any():
+      logging.info(f"[Rank {self.rank}] [Shape {input.shape}] {message} : {input}")
+      exit()
+
+  def forward(self, src_tokens, step, all_logits = False):
+      # src_tokens = torch.tensor(tokens, dtype=torch.int32, device=DEVICE)
+      # self.exit_on_nan(src_tokens, f"NaN in input tokens in rank {self.rank}")
+      X = self.embedding(src_tokens)
+      if torch.isnan(X).any():
+        logging.debug(f"Embedding weight NaN: {torch.isnan(self.embedding.weight).any()}")
+        logging.debug(f"Embedding weight max: {self.embedding.weight.abs().max()}")
+        # self.exit_on_nan(X, f"NaN in embedding output in rank {self.rank}")
+      for layer in self.model:
+        X = checkpoint(layer, X, use_reentrant=False)
+        # X = layer(X)
+      X = self.rms3(X)
+      logits = self.dense(X)
+      logging.debug(f"[Step {step}] Logits NaN: {torch.isnan(logits).any()}")
+      logging.debug(f"[Step {step}] Logits max: {logits.abs().max()}")
+      # logging.debug(f"Logits before float : {logits.shape} : {logits[:,:10,:10]}")
+      logits = logits.float()
+      output_logits = logits[:,-1,:]
+      # print(f"Logits : {logits.shape} : {logits}")
+      B, T, H = logits.shape
+      logits = logits.view(B*T, H)
+      src_tokens = src_tokens.view(B*T)
+      shift_labels = src_tokens[...,1:].contiguous()
+      shift_logits = logits[...,:-1,:].contiguous()
+      # print(f"shift_logits({shift_logits.shape}), shift_labels({shift_labels.shape}) : {shift_logits[:10][:10]}, {shift_labels[:10]}")
+      loss = self.loss_fn(shift_logits, shift_labels.long())
+      if all_logits:
+        return all_logits, loss
+      return output_logits, loss
+
+# def generate_base(world_size, rank, tokens_per_gpu, current_tokenizer, max_tokens_generation=200):
+#   start_sentence = current_tokenizer.encode("<!~start_sentence> Find the lateral area ")
+#   pad_id = current_tokenizer.pad_token_id
+#   tokens_generated = 0
+
+#   checkpoint = torch.load(f"model/{rank}-model-params", weights_only=True, map_location=DEVICE)
+#   model = MultiGPUExecutor(world_size, rank)
+#   model.load_state_dict(checkpoint['model_state_dict'])
+#   model.eval()
+
+#   start_tensor = torch.tensor(start_sentence, device=DEVICE).unsqueeze(0)
+#   tensor_tokens = torch.repeat_interleave(start_tensor[:,:-1], Config.batch, dim=0)
+
+#   while tokens_generated < max_tokens_generation:
+#     n = tokens_per_gpu-tensor_tokens.shape[-1]
+#     print(f"Number of pad tokens : {n}")
+#     # print(f"Tensor tokens : {tensor_tokens.shape}")
+#     pad_tensor = torch.full((Config.batch, n), pad_id, device=DEVICE)
+#     # print(f"Pad Tensor tokens : {pad_tensor.shape}")
+#     total_tensor = torch.cat([tensor_tokens, pad_tensor], dim=-1)
+#     # print(f"total_tensor : {total_tensor.shape}")
+#     output_logits, _ = model(total_tensor)
+#     # print(f"Logits : {output_logits.shape}")
+#     X_next = torch.multinomial(F.softmax(output_logits, dim=-1), num_samples=1)
+#     # print(f"X_next : {X_next.shape}")
+#     tensor_tokens = torch.cat((tensor_tokens, X_next), dim=-1)
+#     print(f"Generated tensor : {tensor_tokens.shape}")
+#     tokens_generated += 1
+
+#   for i in range(tensor_tokens.shape[0]):
+#     generation = current_tokenizer.decode(tensor_tokens[i].tolist()) 
+#     print(f"Generated {i}: {generation}")
+
+# def generate_sft(world_size, rank, tokens_per_gpu, current_tokenizer, max_tokens_generation=200):
+#   pad_id = current_tokenizer.pad_token_id
+#   paraquet_filename = f"dataset/unsloth/shards/{rank}/{0:06d}.parquet"
+#   df = pd.read_parquet(paraquet_filename)
+#   checkpoint = torch.load(f"model/{rank}-model-params", weights_only=True, map_location=DEVICE)
+#   model = MultiGPUExecutor(world_size, rank)
+#   model.load_state_dict(checkpoint['model_state_dict'])
+#   model.eval()  
+#   g_idx = 0
+#   for _, record in df.iterrows():
+#     tokens_generated = 0
+#     start_tensor = torch.tensor(record["tensor"], device=DEVICE).unsqueeze(0)
+#     tensor_tokens = torch.repeat_interleave(start_tensor, Config.batch, dim=0)
+#     generation_idxs = record["generation_idx"]
+#     if generation_idxs[g_idx] >= rank*4000 and generation_idxs[g_idx] < (rank+1)*4000:
+#       token_idx = generation_idxs[g_idx]
+#       while token_idx < (rank+1)*4000:
+#         if start_tensor[token_idx] != pad_id:
+          
+#         n = tokens_per_gpu-tensor_tokens.shape[-1]
+#         print(f"Number of pad tokens : {n}")
+#         # print(f"Tensor tokens : {tensor_tokens.shape}")
+#         pad_tensor = torch.full((Config.batch, n), pad_id, device=DEVICE)
+#         # print(f"Pad Tensor tokens : {pad_tensor.shape}")
+#         total_tensor = torch.cat([tensor_tokens, pad_tensor], dim=-1)
+#         # print(f"total_tensor : {total_tensor.shape}")
+#         output_logits, _ = model(total_tensor)
+#         # print(f"Logits : {output_logits.shape}")
+#         X_next = torch.multinomial(F.softmax(output_logits, dim=-1), num_samples=1)
+#         # print(f"X_next : {X_next.shape}")
+#         tensor_tokens = torch.cat((tensor_tokens, X_next), dim=-1)
+#         print(f"Generated tensor : {tensor_tokens.shape}")
+#         tokens_generated += 1
+
+#       for i in range(tensor_tokens.shape[0]):
+#         generation = current_tokenizer.decode(tensor_tokens[i].tolist()) 
+#         print(f"Generated {i}: {generation}")
+
+
+def train(base, rank, tokens_per_gpu):
+  batch = []
+  accumulation_steps = Config.target_batch_size // Config.batch
+  running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
+  model_per_rank = MultiGPUExecutor(world_size, rank, tokens_per_gpu)
+  model_per_rank = model_per_rank.to(DEVICE)
+  optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=1e-4)
+  loss = None
+  for i in range(1):
+    paraquet_filename = f"{base}/{rank}/{i:06d}.parquet"
+    df = pd.read_parquet(paraquet_filename)
+    # df_per_rank = df.loc[df['shard'] == rank]
+    try:
+      step = 0
+      for index, row in df.iterrows():
+        batch.append(torch.tensor(row['tensor'][:tokens_per_gpu], device=DEVICE, dtype=torch.long))
+        if len(batch) == Config.batch:
+            tokens = torch.stack(batch)
+            # print(f"Tokens : {tokens.shape}")
+            _, loss = model_per_rank(tokens, step)
+            # dist.all_reduce(loss, op=dist.ReduceOp.SUM)
+            loss = loss / (Config.batch*Config.tokens)
+            loss = loss / accumulation_steps
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model_per_rank.parameters(), 1.0)
+            if torch.isnan(model_per_rank.embedding.weight.grad).any():
+              logging.debug(f"Grad NaN: {torch.isnan(model_per_rank.embedding.weight.grad).any()}")
+            running_loss += loss.item()*accumulation_steps
+            step += 1
+            if step % accumulation_steps == 0:
+              optimizer.step()
+              optimizer.zero_grad(set_to_none=True)
+              free, total = torch.cuda.mem_get_info(DEVICE)
+              mem_used_MB = (total - free) / 1024 ** 2
+              if step % 50 == 0:
+                torch.save({
+                        'parquet_idx': i,
+                        'epoch_per_parquet': index,
+                        'model_state_dict': model_per_rank.state_dict(),
+                        'optimizer_state_dic': optimizer.state_dict(),
+                        'loss': loss
+                        }, f"model/{rank}-base-model-params")
+                logging.info(f"[Rank {rank}] Model saved {rank}-model-params, step {step:010d} : mem_used_MB={mem_used_MB} ,train loss={running_loss/accumulation_steps}")
+              running_loss = torch.zeros([1], dtype=torch.float32, device=DEVICE)
+            del tokens
+            del batch
+            gc.collect()
+            torch.cuda.empty_cache()
+            batch = []
+    finally:
+      # dist.destroy_process_group()
+      torch.save({
+                  'parquet_idx': i,
+                  'epoch_per_parquet': index,
+                  'model_state_dict': model_per_rank.state_dict(),
+                  'optimizer_state_dic': optimizer.state_dict(),
+                  'loss': loss
+                  }, f"model/{rank}-base-model-params")
+      print(f"Model training complete saved for {rank} with name : {rank}-model-params")
+
+
+if __name__ == "__main__":
+  # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+  # per gpu code
+  # dist.init_process_group("gloo")
+  # dist.init_process_group("nccl")
+
+  # world_size = dist.get_world_size()
+  world_size = 1
+  tokens_per_gpu = Config.tokens//world_size
+
+  # rank = dist.get_rank()
+  rank = 0
+  # model_per_rank = MultiGPUExecutor(world_size, rank, tokens_per_gpu)
+  # model_per_rank = model_per_rank.to(DEVICE)
+  # optimizer = torch.optim.AdamW(model_per_rank.parameters(), lr=8e-6, weight_decay=0.008)
+  # max_tokens = 100
+  # current_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", 
+  #                     extra_special_tokens={"bos_token":"<s>", 
+  #                     "eos_token":"</s>", "pad_token":"</s>"})
+  #base
+  # train("dataset/mathematics/parquets", ranktokens_per_gpu, tokens_per_gpu)
+  #generate
+  # generate_base(world_size, rank, tokens_per_gpu, current_tokenizer)
+  #sft
+  train("dataset/deepseek-r1/shards", rank, tokens_per_gpu)
+  #generate
+  # generate_sft(world_size, rank, tokens_per_gpu,current_tokenizer)
+
+  # train("dataset/deepseek-r1/parquets", rank, tokens_per_gpu)

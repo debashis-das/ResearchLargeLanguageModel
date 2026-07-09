@@ -8,7 +8,15 @@ name = "python-starter"
 version = "0.1.0"
 description = "Starter Python project"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    "numpy",
+    "torch >= 2.1",
+    "transformers",
+    "pandas",
+    "pyarrow",
+    "accelerate",
+    "bitsandbytes"
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
