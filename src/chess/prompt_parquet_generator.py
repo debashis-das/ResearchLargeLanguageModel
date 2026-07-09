@@ -17,6 +17,7 @@ max_paraquet_files_per_training_type = 4
 # model_path = "/home/model"
 model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
 df = pd.DataFrame(columns=['input_ids', 'attention_mask', 'prompt_length'])
+replay_buffer_df = pd.DataFrame(columns=['input_ids', 'attention_mask', 'prompt_length'])
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 
@@ -135,7 +136,7 @@ def prompt_generator(chess_json, training_type):
 max_sequence_length = 2500  # Adjusted to a more reasonable length for chess move sequences
 
 def open_bz2_file(file_path, counter, parquet_counter, paraquet_limit, training_type):
-    global df, tokenizer
+    global df, tokenizer, replay_buffer_df
     counter = 0
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
     with bz2.open(file_path, 'rt', encoding='utf-8') as file:
@@ -173,6 +174,12 @@ def open_bz2_file(file_path, counter, parquet_counter, paraquet_limit, training_
                             torch.tensor(attention_mask, dtype=torch.long).numpy(),
                             prompt_length,
                         ]
+                        attention_mask_replay_buffer = [1] * len(prompt_ids)
+                        replay_buffer_df.loc[len(replay_buffer_df)] = [
+                            torch.tensor(prompt_ids, dtype=torch.long).numpy(),
+                            torch.tensor(attention_mask_replay_buffer, dtype=torch.long).numpy(),
+                            prompt_length,
+                        ]
                     else:
                         input_ids = tokenizer.apply_chat_template(prompt_messages, tokenize=True, add_generation_prompt=True)["input_ids"]
                         if len(input_ids) > max_sequence_length:
@@ -191,10 +198,13 @@ def open_bz2_file(file_path, counter, parquet_counter, paraquet_limit, training_
                 if counter >= paraquet_limit:
                     parquet_filename = f"src\\chess\\paraquets\\{parquet_counter:06d}-{training_type.value}.parquet"
                     df.to_parquet(parquet_filename, compression="zstd", engine="pyarrow")
+                    replay_buffer_parquet_filename = f"src\\chess\\paraquets\\{parquet_counter:06d}-rl-replay-buffer.parquet"
+                    replay_buffer_df.to_parquet(replay_buffer_parquet_filename, compression="zstd", engine="pyarrow")
                     parquet_counter += 1
                     print(f"Successfully created a new Parquet file: '{parquet_filename}'")
                     counter = 0
                     df = pd.DataFrame(columns=['input_ids', 'attention_mask', 'prompt_length'])
+                    replay_buffer_df = pd.DataFrame(columns=['input_ids', 'attention_mask', 'prompt_length'])
                     if parquet_counter == max_paraquet_files_per_training_type:  # Limit to max_paraquet_files_per_training_type parquet files for this example
                         break
     return counter, parquet_counter

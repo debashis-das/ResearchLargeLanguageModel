@@ -13,15 +13,19 @@ from lora.GRPORewardModel import GRPORewardModel
 GRPO_BATCH_SIZE = 14
 SKIP_THRESHOLD = 3
 
-def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dtype=None, replay_buffer=None):
+def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dtype=None):
     try:
         grpo_reward_model = GRPORewardModel(tokenizer_path, model_path, grpo_batch=GRPO_BATCH_SIZE, 
                                             loRA_parameters_path=loRA_parameters_path)
         device = grpo_reward_model.model_device
-        optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, grpo_reward_model.parameters()), lr=8e-5)
+        optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, grpo_reward_model.parameters()), lr=1e-5)
         training_timestep = 0
         recover = False
         consecutive_skips = 0
+        replay_index = 0
+        replay_paraquet_path = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{replay_index:06d}-rl-replay-buffer.parquet"
+        replay_df_shuffled = pd.read_parquet(replay_paraquet_path).sample(frac=1, ignore_index=True)
+        replay_counter = 0
         for i in range(4):
             if recover:
                 # Optimizer state recovery
@@ -39,8 +43,14 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
             df_input = pd.read_parquet(current_paraquet)
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             for _, row in df_shuffled.iterrows():
-                if len(replay_buffer) > 0 and training_timestep % 10 == 0:
-                    row_replay = replay_buffer.sample(n=1).iloc[0]
+                if training_timestep % 10 == 0:
+                    if replay_counter >= len(replay_df_shuffled):
+                        replay_counter = 0
+                        replay_index = (replay_index + 1) % 4  # Cycle through the replay buffer parquet files
+                        replay_paraquet_path = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{replay_index:06d}-rl-replay-buffer.parquet"
+                        replay_df_shuffled = pd.read_parquet(replay_paraquet_path).sample(frac=1, ignore_index=True)
+                    row_replay = replay_df_shuffled.iloc[replay_counter]
+                    replay_counter += 1
                     input_ids = torch.tensor(row_replay['input_ids'], dtype=torch.long, device=device)
                     attention_mask = torch.tensor(row_replay['attention_mask'], dtype=dtype, device=device)
                 else:
@@ -67,9 +77,6 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                         # leave consecutive_skips as-is so kl_pull keeps firing on the next uniform batch
                     else:
                         consecutive_skips = 0
-                    if (rewards >= 1).any():
-                        replay_buffer.loc[len(replay_buffer)] = [input_ids.cpu().numpy(), attention_mask.cpu().numpy()]
-                        print("Added to replay buffer : Positive reward found in the batch")
                     print("Rewards : ", rewards)
                     optimizer.zero_grad(set_to_none=True)
                     loss.backward()
@@ -110,9 +117,6 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                         grpo_reward_model.model.save_lora_parameters("model/lora_parameters.pt")
                         torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, 
                                    f"model/optimizer_with_timestep_state_dict.pt")
-                        if len(replay_buffer) > 0:
-                            replay_buffer.to_parquet(f"model/replay_buffer.parquet", compression="zstd", engine="pyarrow")
-                            print(f"Replay buffer saved with name : replay_buffer_{training_timestep}.parquet")
                         print(f"Model training complete saved")
                     gc.collect()
                     torch.cuda.empty_cache()
@@ -127,9 +131,7 @@ def rl_execute():
     # model_path = "C:\\Users\\DebashisDas\\personal\\models\\Qwen"
     loRA_parameters_path = "model/sft_lora_parameters.pt"
     
-    replay_buffer = pd.DataFrame(columns=['input_ids', 'attention_mask'])
-    rl_train(tokenizer_path=model_path, model_path=model_path, loRA_parameters_path=loRA_parameters_path, 
-             replay_buffer=replay_buffer)
+    rl_train(tokenizer_path=model_path, model_path=model_path, loRA_parameters_path=loRA_parameters_path)
 
 if __name__ == "__main__":
     rl_execute()
