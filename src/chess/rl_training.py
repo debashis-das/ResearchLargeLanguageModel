@@ -138,7 +138,7 @@ def rl_execute():
 
 if __name__ == "__main__":
     rl_execute()
-    # for i in range(4):
-    #     current_paraquet = f"src\\chess\\paraquets\\{i:06d}-rl.parquet"
+    # for replay_index in range(4):
+    #     current_paraquet = f"src\\chess\\paraquets\\{replay_index:06d}-rl-replay-buffer.parquet"
     #     df_input = pd.read_parquet(current_paraquet)
     #     print(f"DataFrame from {current_paraquet} has {len(df_input)} rows.")

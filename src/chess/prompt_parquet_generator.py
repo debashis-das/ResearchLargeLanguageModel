@@ -198,8 +198,9 @@ def open_bz2_file(file_path, counter, parquet_counter, paraquet_limit, training_
                 if counter >= paraquet_limit:
                     parquet_filename = f"src\\chess\\paraquets\\{parquet_counter:06d}-{training_type.value}.parquet"
                     df.to_parquet(parquet_filename, compression="zstd", engine="pyarrow")
-                    replay_buffer_parquet_filename = f"src\\chess\\paraquets\\{parquet_counter:06d}-rl-replay-buffer.parquet"
-                    replay_buffer_df.to_parquet(replay_buffer_parquet_filename, compression="zstd", engine="pyarrow")
+                    if training_type == TrainingType.SUPERVISED_LEARNING:
+                        replay_buffer_parquet_filename = f"src\\chess\\paraquets\\{parquet_counter:06d}-rl-replay-buffer.parquet"
+                        replay_buffer_df.to_parquet(replay_buffer_parquet_filename, compression="zstd", engine="pyarrow")
                     parquet_counter += 1
                     print(f"Successfully created a new Parquet file: '{parquet_filename}'")
                     counter = 0
