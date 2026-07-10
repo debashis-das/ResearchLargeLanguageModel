@@ -67,6 +67,9 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                 try:
                     kl_pull = consecutive_skips >= SKIP_THRESHOLD
                     loss, rewards = grpo_reward_model(input_ids, attention_mask=attention_mask, kl_pull=kl_pull)
+                    if (rewards > 0).all():
+                        print(f"Skipping optimizer step: all rewards are positive")
+                        continue  # Skip optimizer step if all rewards are positive
                     if loss is None:
                         consecutive_skips += 1
                         print(f"Skipping optimizer step: loss is None (all rewards were negative). Consecutive skips: {consecutive_skips}")
