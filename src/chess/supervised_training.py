@@ -69,7 +69,8 @@ def sft_train():
                             print(f"[Epoch {idx}] Training timestep: {training_timestep}, Loss: {loss.item()}")
                             for i in range(torch.cuda.device_count()):
                                 print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
-                            del input_ids, attention_mask, prompt_length
+                            del input_ids, attention_mask
+                            prompt_length = []
                     except Exception as e:
                         print(f"An error occurred during model training: {e}")
                         raise
