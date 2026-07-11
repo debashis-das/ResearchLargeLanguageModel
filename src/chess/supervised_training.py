@@ -31,15 +31,14 @@ def sft_train():
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             loss = None
             batch = 24
-            current_batch = 0
-            prompt_length = []
-            for _ in range(2):
+            for idx in range(3):  # Repeat the training process for 5 epochs
+                current_batch = 0
+                prompt_length = []
                 prompt_per_paraquet = 0
+                if idx != 0:
+                    df_shuffled = df_shuffled.sample(frac=1, ignore_index=True)
                 for _, row in df_shuffled.iterrows():
                     try:
-                        if prompt_per_paraquet > 150:
-                            end = True
-                            break
                         prompt_per_paraquet += 1
                         if current_batch == 0:
                             input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
@@ -67,9 +66,10 @@ def sft_train():
                             training_timestep += 1
                             optimizer.step()
                             optimizer.zero_grad(set_to_none=True)
-                            print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
+                            print(f"[Epoch {idx}] Training timestep: {training_timestep}, Loss: {loss.item()}")
                             for i in range(torch.cuda.device_count()):
                                 print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
+                            del input_ids, attention_mask, prompt_length
                     except Exception as e:
                         print(f"An error occurred during model training: {e}")
                         raise
