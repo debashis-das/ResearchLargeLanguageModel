@@ -10,7 +10,7 @@ import torch
 
 from lora.GRPORewardModel import GRPORewardModel
 
-GRPO_BATCH_SIZE = 14
+GRPO_BATCH_SIZE = 30
 SKIP_THRESHOLD = 3
 
 def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dtype=None):
@@ -68,11 +68,11 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                     kl_pull = consecutive_skips >= SKIP_THRESHOLD
                     loss, rewards = grpo_reward_model(input_ids, attention_mask=attention_mask, kl_pull=kl_pull)
                     if (rewards > 0).all():
-                        print(f"Skipping optimizer step: all rewards are positive")
+                        print(f"Skipping optimizer step: all rewards are positive {rewards}. Consecutive skips: {consecutive_skips}")
                         continue  # Skip optimizer step if all rewards are positive
                     if loss is None:
                         consecutive_skips += 1
-                        print(f"Skipping optimizer step: loss is None (all rewards were negative). Consecutive skips: {consecutive_skips}")
+                        print(f"Skipping optimizer step: loss is None (all rewards were negative) {rewards}. Consecutive skips: {consecutive_skips}")
                         continue  # Skip this iteration if loss is None (all rewards were negative)
                     is_uniform_batch = torch.tanh(rewards.float()).std() < 1e-4
                     if is_uniform_batch:
