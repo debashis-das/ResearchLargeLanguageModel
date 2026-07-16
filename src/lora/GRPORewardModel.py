@@ -151,7 +151,7 @@ class GRPORewardModel(nn.Module):
     def extract_reward(self, tensor_per_generation: torch.Tensor, input_sequence_length: int):
         prompt = self.tokenizer.decode(tensor_per_generation[:input_sequence_length], skip_special_tokens=True)
         generation = self.tokenizer.decode(tensor_per_generation[input_sequence_length:], skip_special_tokens=True)
-        # print(f"Prompt : {prompt} \n\n Generation : {generation}")
+        print(f"Generation : {generation}")
         try:
             init_prompt = prompt.strip().rsplit("<user>")[-1].strip()
             input_moves =  (init_prompt.rsplit("moves:")[-1].strip())

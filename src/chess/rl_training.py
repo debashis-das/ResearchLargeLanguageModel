@@ -53,6 +53,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                     replay_counter += 1
                     input_ids = torch.tensor(row_replay['input_ids'], dtype=torch.long, device=device)
                     attention_mask = torch.tensor(row_replay['attention_mask'], dtype=dtype, device=device)
+                    print(f"Using replay buffer data at index {replay_counter-1}")
                 else:
                     input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                     attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
