@@ -108,7 +108,6 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                     print(f"[TR {training_timestep}] Model training complete saved")
                     recover = True
                 finally:
-                    training_timestep += 1
                     for i in range(torch.cuda.device_count()):
                         print(f"[TR {training_timestep}] [GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
                     if training_timestep % 500 == 0 and loss is not None:
@@ -116,6 +115,7 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                         torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, 
                                    f"model/optimizer_with_timestep_state_dict.pt")
                         print(f"[TR {training_timestep}] Model training complete saved")
+                    training_timestep += 1
                     gc.collect()
                     torch.cuda.empty_cache()
                     del input_ids
