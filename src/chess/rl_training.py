@@ -65,7 +65,6 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                     print(f"[Rewards]: {rewards}")
                     is_uniform_batch = torch.tanh(rewards.float()).std() < 1e-4
                     if (rewards > 0).all() and is_uniform_batch:
-                        consecutive_skips += 1
                         print(f"[SKIP {consecutive_skips}] Skipping optimizer step: all rewards are positive and same")
                         continue  # Skip optimizer step if all rewards are positive and same
                     if loss is None:
