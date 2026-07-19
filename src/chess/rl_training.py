@@ -62,20 +62,20 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                 try:
                     kl_pull = consecutive_skips >= SKIP_THRESHOLD
                     loss, rewards = grpo_reward_model(input_ids, attention_mask=attention_mask, kl_pull=kl_pull)
+                    print(f"[Rewards]: {rewards}")
                     is_uniform_batch = torch.tanh(rewards.float()).std() < 1e-4
-                    # if (rewards > 0).all() and is_uniform_batch:
-                    #     consecutive_skips += 1
-                    #     print(f"[SKIP {consecutive_skips}] Skipping optimizer step: all rewards are positive and same")
-                    #     continue  # Skip optimizer step if all rewards are positive and same
-                    # if loss is None:
-                    #     consecutive_skips += 1
-                    #     print(f"[SKIP {consecutive_skips}] Skipping optimizer step: loss is None (all rewards were negative).")
-                    #     continue  # Skip this iteration if loss is None (all rewards were negative)
-                    # if is_uniform_batch:
-                    #     print(f"[SKIP {consecutive_skips}] KL-pull step fired after these skips")
-                    # else:
+                    if (rewards > 0).all() and is_uniform_batch:
+                        consecutive_skips += 1
+                        print(f"[SKIP {consecutive_skips}] Skipping optimizer step: all rewards are positive and same")
+                        continue  # Skip optimizer step if all rewards are positive and same
+                    if loss is None:
+                        consecutive_skips += 1
+                        print(f"[SKIP {consecutive_skips}] Skipping optimizer step: loss is None (all rewards were negative).")
+                        continue  # Skip this iteration if loss is None (all rewards were negative)
+                    if is_uniform_batch:
+                        print(f"[SKIP {consecutive_skips}] KL-pull step fired after these skips")
+                    else:
                     #     consecutive_skips = 0
-                    print("Rewards : ", rewards)
                     optimizer.zero_grad(set_to_none=True)
                     loss.backward()
                     if not torch.isfinite(loss):
