@@ -75,7 +75,7 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                     if is_uniform_batch:
                         print(f"[SKIP {consecutive_skips}] KL-pull step fired after these skips")
                     else:
-                    #     consecutive_skips = 0
+                        consecutive_skips = 0
                     optimizer.zero_grad(set_to_none=True)
                     loss.backward()
                     if not torch.isfinite(loss):
