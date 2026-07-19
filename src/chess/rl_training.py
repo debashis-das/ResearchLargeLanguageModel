@@ -54,7 +54,7 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                     input_ids = torch.tensor(row_replay['input_ids'], dtype=torch.long, device=device)
                     attention_mask = torch.tensor(row_replay['attention_mask'], dtype=dtype, device=device)
                     if training_timestep % 50 == 0 and training_timestep != 0:
-                        generation_ids = grpo_reward_model.generate(input_ids)
+                        generation_ids = grpo_reward_model.generate(input_ids.unsqueeze(0))
                         print(f"[TR {training_timestep}] Generated text: {grpo_reward_model.tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                     print(f"[TR {training_timestep}] Input from replay buffer")
                 else:
