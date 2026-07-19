@@ -36,7 +36,7 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                 del grpo_reward_model
                 grpo_reward_model = GRPORewardModel(tokenizer_path, model_path, grpo_batch=GRPO_BATCH_SIZE, 
                                             loRA_parameters_path=loRA_parameters_path)
-                print(f"Model recovered successfully after error at timestep: {training_timestep}")
+                print(f"[TR {training_timestep}] Model recovered successfully after error at timestep: {training_timestep}")
                 recover = False
             current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-rl.parquet"
@@ -55,30 +55,31 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                     attention_mask = torch.tensor(row_replay['attention_mask'], dtype=dtype, device=device)
                     if training_timestep % 50 == 0 and training_timestep != 0:
                         generation_ids = grpo_reward_model.generate(input_ids)
-                        print(f"Generated text: {grpo_reward_model.tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
+                        print(f"[TR {training_timestep}] Generated text: {grpo_reward_model.tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
+                    print(f"[TR {training_timestep}] Input from replay buffer")
                 else:
                     input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                     attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
                 try:
                     kl_pull = consecutive_skips >= SKIP_THRESHOLD
                     loss, rewards = grpo_reward_model(input_ids, attention_mask=attention_mask, kl_pull=kl_pull)
-                    print(f"[Rewards]: {rewards}")
+                    print(f"[TR {training_timestep}][Rewards]: {rewards}")
                     is_uniform_batch = torch.tanh(rewards.float()).std() < 1e-4
                     if (rewards > 0).all() and is_uniform_batch:
-                        print(f"[SKIP {consecutive_skips}] Skipping optimizer step: all rewards are positive and same")
+                        print(f"[TR {training_timestep}][SKIP {consecutive_skips}] Skipping optimizer step: all rewards are positive and same")
                         continue  # Skip optimizer step if all rewards are positive and same
                     if loss is None:
                         consecutive_skips += 1
-                        print(f"[SKIP {consecutive_skips}] Skipping optimizer step: loss is None (all rewards were negative).")
+                        print(f"[TR {training_timestep}][SKIP {consecutive_skips}] Skipping optimizer step: loss is None (all rewards were negative).")
                         continue  # Skip this iteration if loss is None (all rewards were negative)
                     if is_uniform_batch:
-                        print(f"[SKIP {consecutive_skips}] KL-pull step fired after these skips")
+                        print(f"[TR {training_timestep}][SKIP {consecutive_skips}] KL-pull step fired after these skips")
                     else:
                         consecutive_skips = 0
                     optimizer.zero_grad(set_to_none=True)
                     loss.backward()
                     if not torch.isfinite(loss):
-                        print(f"Skipping optimizer step: non-finite loss ({loss.item()})")
+                        print(f"[TR {training_timestep}] Skipping optimizer step: non-finite loss ({loss.item()})")
                         continue
                     non_finite_grads = [
                         (name, p.grad.isnan().sum().item(), p.grad.isinf().sum().item())
@@ -86,7 +87,7 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                         if p.requires_grad and p.grad is not None and not torch.isfinite(p.grad).all()
                     ]
                     if non_finite_grads:
-                        print(f"Non-finite GRADIENTS before clipping (name, nan_count, inf_count): {non_finite_grads}")
+                        print(f"[TR {training_timestep}] Non-finite GRADIENTS before clipping (name, nan_count, inf_count): {non_finite_grads}")
                     torch.nn.utils.clip_grad_norm_(
                         filter(lambda p: p.requires_grad, grpo_reward_model.parameters()), max_norm=1.0
                     )
@@ -96,25 +97,25 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                         if p.requires_grad and not torch.isfinite(p).all()
                     ]
                     if non_finite_weights:
-                        print(f"Non-finite trainable WEIGHTS after optimizer.step() (grads were clean): {non_finite_weights}")
+                        print(f"[TR {training_timestep}] Non-finite trainable WEIGHTS after optimizer.step() (grads were clean): {non_finite_weights}")
                     # if training_timestep % 1 == 0:
-                    print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
+                    print(f"[TR {training_timestep}] Training timestep: {training_timestep}, Loss: {loss.item()}")
                 except Exception as e:
-                    print(f"An error occurred during model training: {e}")
+                    print(f"[TR {training_timestep}] An error occurred during model training: {e}")
                     traceback.print_exc()
                     grpo_reward_model.model.save_lora_parameters("model/lora_parameters.pt")
                     torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, f"model/optimizer_with_timestep_state_dict.pt")
-                    print(f"Model training complete saved")
+                    print(f"[TR {training_timestep}] Model training complete saved")
                     recover = True
                 finally:
                     training_timestep += 1
                     for i in range(torch.cuda.device_count()):
-                        print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
+                        print(f"[TR {training_timestep}] [GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
                     if training_timestep % 500 == 0 and loss is not None:
                         grpo_reward_model.model.save_lora_parameters("model/lora_parameters.pt")
                         torch.save({'optimizer_state_dic': optimizer.state_dict(), 'epoch_per_parquet': training_timestep}, 
                                    f"model/optimizer_with_timestep_state_dict.pt")
-                        print(f"Model training complete saved")
+                        print(f"[TR {training_timestep}] Model training complete saved")
                     gc.collect()
                     torch.cuda.empty_cache()
                     del input_ids
