@@ -13,7 +13,7 @@ from lora.GRPORewardModel import GRPORewardModel
 GRPO_BATCH_SIZE = 30
 SKIP_THRESHOLD = 3
 
-def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dtype=None):
+def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
     try:
         grpo_reward_model = GRPORewardModel(tokenizer_path, model_path, grpo_batch=GRPO_BATCH_SIZE, 
                                             loRA_parameters_path=loRA_parameters_path)
@@ -26,7 +26,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
         replay_paraquet_path = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{replay_index:06d}-rl-replay-buffer.parquet"
         replay_df_shuffled = pd.read_parquet(replay_paraquet_path).sample(frac=1, ignore_index=True)
         replay_counter = 0
-        for i in range(4):
+        for i in range(6):
             if recover:
                 # Optimizer state recovery
                 optimizer_with_timestep_state = torch.load(f"model/optimizer_with_timestep_state_dict.pt", map_location=device)
@@ -43,7 +43,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
             df_input = pd.read_parquet(current_paraquet)
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
             for _, row in df_shuffled.iterrows():
-                if training_timestep % 10 == 0:
+                if training_timestep % 10 == 0 and training_timestep != 0:
                     if replay_counter >= len(replay_df_shuffled):
                         replay_counter = 0
                         replay_index = (replay_index + 1) % 4  # Cycle through the replay buffer parquet files
@@ -53,32 +53,26 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                     replay_counter += 1
                     input_ids = torch.tensor(row_replay['input_ids'], dtype=torch.long, device=device)
                     attention_mask = torch.tensor(row_replay['attention_mask'], dtype=dtype, device=device)
-                    print(f"Using replay buffer data at index {replay_counter-1}")
+                    if training_timestep % 50 == 0 and training_timestep != 0:
+                        generation_ids = grpo_reward_model.generate(input_ids)
+                        print(f"Generated text: {grpo_reward_model.tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                 else:
                     input_ids = torch.tensor(row['input_ids'], dtype=torch.long, device=device)
                     attention_mask = torch.tensor(row['attention_mask'], dtype=dtype, device=device)
-                if (training_timestep+1) % 50 == 0:
-                    current_rl_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/000003-rl.parquet"
-                    df_rl_input = pd.read_parquet(current_rl_paraquet)
-                    row_rl = df_rl_input.sample(n=1).iloc[0]
-                    input_ids_rl = torch.tensor(row_rl['input_ids'], dtype=torch.long, device=device).unsqueeze(0)
-                    attention_mask_rl = torch.tensor(row_rl['attention_mask'], dtype=dtype, device=device).unsqueeze(0)
-                    generation_ids = grpo_reward_model.generate(input_ids_rl)
-                    print(f"Generated text: {grpo_reward_model.tokenizer.decode(generation_ids[0], skip_special_tokens=True)}")  # Debugging line to check generated text
                 try:
                     kl_pull = consecutive_skips >= SKIP_THRESHOLD
                     loss, rewards = grpo_reward_model(input_ids, attention_mask=attention_mask, kl_pull=kl_pull)
-                    if (rewards > 0).all():
-                        print(f"Skipping optimizer step: all rewards are positive {rewards}. Consecutive skips: {consecutive_skips}")
-                        continue  # Skip optimizer step if all rewards are positive
+                    is_uniform_batch = torch.tanh(rewards.float()).std() < 1e-4
+                    if (rewards > 0).all() and is_uniform_batch:
+                        consecutive_skips += 1
+                        print(f"[SKIP {consecutive_skips}] Skipping optimizer step: all rewards are positive and same")
+                        continue  # Skip optimizer step if all rewards are positive and same
                     if loss is None:
                         consecutive_skips += 1
-                        print(f"Skipping optimizer step: loss is None (all rewards were negative) {rewards}. Consecutive skips: {consecutive_skips}")
+                        print(f"[SKIP {consecutive_skips}] Skipping optimizer step: loss is None (all rewards were negative).")
                         continue  # Skip this iteration if loss is None (all rewards were negative)
-                    is_uniform_batch = torch.tanh(rewards.float()).std() < 1e-4
                     if is_uniform_batch:
-                        print(f"KL-pull step fired after {consecutive_skips} consecutive skips")
-                        # leave consecutive_skips as-is so kl_pull keeps firing on the next uniform batch
+                        print(f"[SKIP {consecutive_skips}] KL-pull step fired after these skips")
                     else:
                         consecutive_skips = 0
                     print("Rewards : ", rewards)
@@ -104,7 +98,6 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                     ]
                     if non_finite_weights:
                         print(f"Non-finite trainable WEIGHTS after optimizer.step() (grads were clean): {non_finite_weights}")
-                    training_timestep += 1
                     # if training_timestep % 1 == 0:
                     print(f"Training timestep: {training_timestep}, Loss: {loss.item()}")
                 except Exception as e:
@@ -115,6 +108,7 @@ def rl_train(tokenizer_path=None, model_path=None, loRA_parameters_path=None, dt
                     print(f"Model training complete saved")
                     recover = True
                 finally:
+                    training_timestep += 1
                     for i in range(torch.cuda.device_count()):
                         print(f"[GPU {i}] Allocated: {torch.cuda.memory_allocated(i)/1024**2:.2f} MB, Max Allocated: {torch.cuda.max_memory_allocated(i)/1024**2:.2f} MB, Reserved: {torch.cuda.memory_reserved(i)/1024**2:.2f} MB, Max Reserved: {torch.cuda.max_memory_reserved(i)/1024**2:.2f} MB")
                     if training_timestep % 500 == 0 and loss is not None:
@@ -139,7 +133,3 @@ def rl_execute():
 
 if __name__ == "__main__":
     rl_execute()
-    # for replay_index in range(4):
-    #     current_paraquet = f"src\\chess\\paraquets\\{replay_index:06d}-rl-replay-buffer.parquet"
-    #     df_input = pd.read_parquet(current_paraquet)
-    #     print(f"DataFrame from {current_paraquet} has {len(df_input)} rows.")
