@@ -25,7 +25,7 @@ def sft_train():
         optimizer = torch.optim.AdamW(model_with_lora.parameters(), lr=1e-5)
         end = False
         for i in range(4):
-            current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl.parquet"
+            current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-sl-less-moves.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-sl.parquet"
             df_input = pd.read_parquet(current_paraquet)
             df_shuffled = df_input.sample(frac=1, ignore_index=True)

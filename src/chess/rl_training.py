@@ -23,7 +23,7 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
         recover = False
         consecutive_skips = 0
         replay_index = 0
-        replay_paraquet_path = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{replay_index:06d}-rl-replay-buffer.parquet"
+        replay_paraquet_path = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{replay_index:06d}-rl-less-moves-replay-buffer.parquet"
         replay_df_shuffled = pd.read_parquet(replay_paraquet_path).sample(frac=1, ignore_index=True)
         replay_counter = 0
         for i in range(6):
@@ -38,7 +38,7 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                                             loRA_parameters_path=loRA_parameters_path)
                 print(f"[TR {training_timestep}] Model recovered successfully after error at timestep: {training_timestep}")
                 recover = False
-            current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl.parquet"
+            current_paraquet = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{i:06d}-rl-less-moves.parquet"
             # current_paraquet = f"src\\chess\\paraquets\\{i:06d}-rl.parquet"
             df_input = pd.read_parquet(current_paraquet)
             df_shuffled = df_input.sample(frac=1, ignore_index=True)
@@ -47,7 +47,7 @@ def rl_train(tokenizer_path, model_path, loRA_parameters_path, dtype=None):
                     if replay_counter >= len(replay_df_shuffled):
                         replay_counter = 0
                         replay_index = (replay_index + 1) % 4  # Cycle through the replay buffer parquet files
-                        replay_paraquet_path = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{replay_index:06d}-rl-replay-buffer.parquet"
+                        replay_paraquet_path = f"/home/ResearchLargeLanguageModel/src/chess/paraquets/{replay_index:06d}-rl-less-moves-replay-buffer.parquet"
                         replay_df_shuffled = pd.read_parquet(replay_paraquet_path).sample(frac=1, ignore_index=True)
                     row_replay = replay_df_shuffled.iloc[replay_counter]
                     replay_counter += 1
